@@ -79,8 +79,8 @@ runs:
         DOCKER_TAG: ${{ inputs.docker-tag }}
         DOCKER_IMAGE_NAME: ${{ inputs.docker-image-name }}
         DOCKER_IMAGE_FULL_URI: ${{ inputs.docker-image-full-uri }}
-        TARGET_REGISTRY: ${{ inputs.docker-target-registry }}
-        TARGET_NAMESPACE: ${{ inputs.docker-target-namespace }}
+        DOCKER_TARGET_REGISTRY: ${{ inputs.docker-target-registry }}
+        DOCKER_TARGET_NAMESPACE: ${{ inputs.docker-target-namespace }}
         IS_RELEASE: ${{ inputs.is-release }}
         TOKEN_DELIMITER_STYLE: ${{ inputs.token-delimiter-style }}
         TOKEN_NAME_STYLE: ${{ inputs.token-name-style }}

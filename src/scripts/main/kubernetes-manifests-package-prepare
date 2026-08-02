@@ -73,10 +73,17 @@ source "${SCRIPT_DIR}/../defaults/output-sub-path.bash"
 # shellcheck source=src/scripts/defaults/manifests-sub-path.bash
 source "$(dirname "${BASH_SOURCE[0]}")/../defaults/manifests-sub-path.bash"
 
+# TARGET_REGISTRY and TARGET_NAMESPACE are the short names prepare-substitution-
+# tokens publishes as ${TargetRegistry} and ${TargetNamespace}. This file is the
+# one definition of that bridge from the resolved DOCKER_TARGET_* values, so
+# every platform and a local run take the same path to them. No docker artefact
+# is built here, so the target validation is skipped as documented.
+SKIP_DOCKER_TARGET_VALIDATION=true
+# shellcheck source=src/scripts/defaults/docker-build.bash
+source "${SCRIPT_DIR}/../defaults/docker-build.bash"
+
 # Pass-through vars (called scripts default their own; these just satisfy set -u)
 DOCKER_IMAGE_FULL_URI="${DOCKER_IMAGE_FULL_URI:-}"
-TARGET_REGISTRY="${TARGET_REGISTRY:-}"
-TARGET_NAMESPACE="${TARGET_NAMESPACE:-}"
 IS_RELEASE="${IS_RELEASE:-}"
 
 # Token substitution

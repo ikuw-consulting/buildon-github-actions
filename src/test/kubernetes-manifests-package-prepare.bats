@@ -717,3 +717,66 @@ stage_additional_manifest() {
   [ "$status" -ne 0 ]
   assert_output_contains "Unknown builtin token mode"
 }
+
+# ============================================================================
+# DOCKER_TARGET_* is the single source for the TargetRegistry/TargetNamespace
+# tokens. The short names are what prepare-substitution-tokens publishes, and
+# the bridge lives in defaults/docker-build.bash so every platform and a local
+# run reach them the same way - no CI wrapper renames them.
+# ============================================================================
+
+@test "TargetRegistry token resolves from DOCKER_TARGET_REGISTRY" {
+  set_required_env
+  export DOCKER_TARGET_REGISTRY="ghcr.io"
+  create_manifest "deployment.yaml"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$OUTPUT_SUB_PATH/manifests/config/TargetRegistry")" = "ghcr.io" ]
+}
+
+@test "TargetNamespace token resolves from DOCKER_TARGET_NAMESPACE" {
+  set_required_env
+  export DOCKER_TARGET_REGISTRY="ghcr.io"
+  export DOCKER_TARGET_NAMESPACE="kube-kaptain"
+  create_manifest "deployment.yaml"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$OUTPUT_SUB_PATH/manifests/config/TargetNamespace")" = "kube-kaptain" ]
+}
+
+@test "TargetNamespace is written empty rather than left as a token" {
+  set_required_env
+  export DOCKER_TARGET_REGISTRY="ghcr.io"
+  export DOCKER_TARGET_NAMESPACE=""
+  create_manifest "deployment.yaml"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -eq 0 ]
+  [ -f "$OUTPUT_SUB_PATH/manifests/config/TargetNamespace" ]
+  [ "$(cat "$OUTPUT_SUB_PATH/manifests/config/TargetNamespace")" = "" ]
+}
+
+@test "no registry means no TargetRegistry token rather than an empty one" {
+  set_required_env
+  unset DOCKER_TARGET_REGISTRY
+  create_manifest "deployment.yaml"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -eq 0 ]
+  [ ! -f "$OUTPUT_SUB_PATH/manifests/config/TargetRegistry" ]
+}
+
+@test "packaging does not require docker target validation" {
+  # Sourcing docker-build.bash must not drag its DOCKER_IMAGE_NAME/DOCKER_TAG
+  # validation into a flow that builds no image.
+  set_required_env
+  unset DOCKER_TARGET_REGISTRY
+  unset DOCKER_TARGET_NAMESPACE
+  create_manifest "deployment.yaml"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -eq 0 ]
+  assert_output_not_contains "is required"
+}
