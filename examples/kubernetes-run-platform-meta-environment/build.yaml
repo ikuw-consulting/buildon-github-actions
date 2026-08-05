@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: CC0-1.0
 # This example is released to the public domain. Use freely without attribution.
 #
-# Kubernetes App - Docker Retag
+# Kubernetes Run Platform Meta Environment
 #
-# Kubernetes application pipeline using an upstream image. Retags the source
-# image, generates Kubernetes manifests, packages as OCI artifacts. For
-# vendoring third-party images into your cluster.
+# Builds a deployable run platform (meta environment): a bone-stock
+# deploy-manifests set for bootstrap, plus the bespoke platform aggregate
+# with managed run-* children, deploy image, and run artifacts.
 #
 # All configuration is in KaptainPM.yaml - see docs for available fields.
 
-name: Kubernetes App - Docker Retag
+name: Kubernetes Run Platform Meta Environment
 
 on:
   push:
@@ -19,7 +19,7 @@ on:
 
 jobs:
   build:
-    uses: kube-kaptain/buildon-github-actions/.github/workflows/kubernetes-app-docker-retag.yaml@1.1.53
+    uses: kube-kaptain/buildon-github-actions/.github/workflows/kubernetes-run-platform-meta-environment.yaml@1.1.53
     permissions:
       contents: write
       packages: write

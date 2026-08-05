@@ -3,4 +3,4 @@
 
 # This is a minimum example with no overrides, extend as needed
 apiVersion: kaptain.org/1.28
-kind: layer-and-layerset-build
+kind: kubernetes-run-platform-meta-environment
