@@ -1255,6 +1255,87 @@ assert_round_trips() {
   [ "$status" -ne 0 ]
 }
 
+# =============================================================================
+# any_token_regex tests - grep-E regex for token-shaped content in ANY style
+# =============================================================================
+
+@test "any_token_regex: matches shell style" {
+  pattern=$(any_token_regex)
+  echo 'a: ${ProjectName}' | grep -Eq "$pattern"
+}
+
+@test "any_token_regex: matches mustache style" {
+  pattern=$(any_token_regex)
+  echo 'a: {{ ProjectName }}' | grep -Eq "$pattern"
+}
+
+@test "any_token_regex: matches helm style" {
+  pattern=$(any_token_regex)
+  echo 'a: {{ .Values.ProjectName }}' | grep -Eq "$pattern"
+}
+
+@test "any_token_regex: matches erb style" {
+  pattern=$(any_token_regex)
+  echo 'a: <%= ProjectName %>' | grep -Eq "$pattern"
+}
+
+@test "any_token_regex: matches github-actions style" {
+  pattern=$(any_token_regex)
+  echo 'a: ${{ ProjectName }}' | grep -Eq "$pattern"
+}
+
+@test "any_token_regex: matches blade style" {
+  pattern=$(any_token_regex)
+  echo 'a: {{ $ProjectName }}' | grep -Eq "$pattern"
+}
+
+@test "any_token_regex: matches stringtemplate style" {
+  pattern=$(any_token_regex)
+  echo 'a: $ProjectName$' | grep -Eq "$pattern"
+}
+
+@test "any_token_regex: matches ognl style" {
+  pattern=$(any_token_regex)
+  echo 'a: %{ProjectName}' | grep -Eq "$pattern"
+}
+
+@test "any_token_regex: matches t4 style" {
+  pattern=$(any_token_regex)
+  echo 'a: <#= ProjectName #>' | grep -Eq "$pattern"
+}
+
+@test "any_token_regex: matches swift style" {
+  pattern=$(any_token_regex)
+  echo 'a: \(ProjectName)' | grep -Eq "$pattern"
+}
+
+@test "any_token_regex: matches every supported name style in one delimiter" {
+  pattern=$(any_token_regex)
+  echo '${ProjectName}'  | grep -Eq "$pattern"
+  echo '${projectName}'  | grep -Eq "$pattern"
+  echo '${PROJECT_NAME}' | grep -Eq "$pattern"
+  echo '${project_name}' | grep -Eq "$pattern"
+  echo '${project-name}' | grep -Eq "$pattern"
+  echo '${PROJECT-NAME}' | grep -Eq "$pattern"
+  echo '${project.name}' | grep -Eq "$pattern"
+  echo '${PROJECT.NAME}' | grep -Eq "$pattern"
+}
+
+@test "any_token_regex: matches nested path tokens" {
+  pattern=$(any_token_regex)
+  echo '${VendorEnvoy/Replicas}' | grep -Eq "$pattern"
+}
+
+@test "any_token_regex: rejects plain text" {
+  pattern=$(any_token_regex)
+  ! echo 'replicas: 3' | grep -Eq "$pattern"
+}
+
+@test "any_token_regex: rejects an unclosed delimiter" {
+  pattern=$(any_token_regex)
+  ! echo 'a: ${ProjectName' | grep -Eq "$pattern"
+}
+
 teardown() {
   dump_bats_result
 }

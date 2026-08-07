@@ -16,6 +16,7 @@
 #   format_project_suffixed_token    - Combine project name + suffix into delimited token
 #   validate_token_styles            - Validate both styles and exit on error
 #   unresolved_token_regex           - grep-E regex matching unresolved tokens for a given style pair
+#   any_token_regex                  - grep-E regex matching token-shaped content in any supported style
 
 # Internal: lowercase a string (bash 3.2 compatible)
 lowercase() {
@@ -146,6 +147,35 @@ unresolved_token_regex() {
       return 1
       ;;
   esac
+}
+
+# Return a grep -E regex matching token-shaped content in ANY supported
+# delimiter style, with a permissive name segment spanning every supported name
+# style at once.
+#
+# This answers "is there a token here at all", not "is there a token in the
+# configured scheme". A child project may ship a token defensively in a foreign
+# format precisely so it survives to be converted later, and that is still
+# token-shaped content. Callers validating human-written markers against file
+# content want this; callers scanning for work to do want unresolved_token_regex.
+#
+# Usage: any_token_regex
+any_token_regex() {
+  local segment='[A-Za-z_][A-Za-z0-9_.-]*'
+  local name="${segment}(/${segment})*"
+
+  local parts
+  parts="\\$\\{${name}\\}"                            # shell
+  parts="${parts}|\\{\\{ ${name} \\}\\}"              # mustache
+  parts="${parts}|\\{\\{ \\.Values\\.${name} \\}\\}"  # helm
+  parts="${parts}|<%=.*%>"                            # erb
+  parts="${parts}|\\$\\{\\{ ${name} \\}\\}"           # github-actions
+  parts="${parts}|\\{\\{ \\\$${name} \\}\\}"          # blade
+  parts="${parts}|\\\$${name}\\$"                     # stringtemplate
+  parts="${parts}|%\\{${name}\\}"                     # ognl
+  parts="${parts}|<#=.*#>"                            # t4
+  parts="${parts}|\\\\\\(${name}\\)"                  # swift
+  printf '%s\n' "${parts}"
 }
 
 # Convert UPPER_SNAKE_CASE name to target style

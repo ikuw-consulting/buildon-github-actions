@@ -471,3 +471,396 @@ teardown() {
   [ "$status" -ne 0 ]
   assert_output_contains "must not contain"
 }
+
+# =============================================================================
+# DoNotConvert markers - protection
+# =============================================================================
+
+@test "convert-tokens-in-tree: bare DoNotConvert protects every token on its line" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+plain: ${One}
+both: ${SomeToken}-${OtherToken} # DoNotConvert
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q "plain: {{ One }}" "$TEST_DIR/d/file.yaml"
+  grep -q 'both: \${SomeToken}-\${OtherToken} # DoNotConvert' "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: DoNotConvert with a specifier protects only the named token" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+some: ${SomeToken}-${OtherToken} # DoNotConvert: ${OtherToken}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  # The named token survives in the payload AND in the marker text itself.
+  grep -q 'some: {{ SomeToken }}-\${OtherToken} # DoNotConvert: \${OtherToken}' "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: DoNotConvert with a comma-separated specifier protects each named token" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+a: ${One}-${Two}-${Three} # DoNotConvert: ${One},${Three}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q 'a: \${One}-{{ Two }}-\${Three} # DoNotConvert: \${One},\${Three}' "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: DoNotConvertAbove protects the line above and its own line" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+above: ${AboveTok}
+# DoNotConvertAbove
+after: ${AfterTok}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q 'above: \${AboveTok}' "$TEST_DIR/d/file.yaml"
+  grep -q "after: {{ AfterTok }}" "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: DoNotConvertAbove with a single specifier protects only that token" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+above: ${One}-${Two}
+# DoNotConvertAbove: ${One}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q 'above: \${One}-{{ Two }}' "$TEST_DIR/d/file.yaml"
+  grep -q '# DoNotConvertAbove: \${One}' "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: DoNotConvertAbove with a comma-separated specifier protects each named token" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+above: ${One}-${Two}-${Three}
+# DoNotConvertAbove: ${One},${Three}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q 'above: \${One}-{{ Two }}-\${Three}' "$TEST_DIR/d/file.yaml"
+  grep -q '# DoNotConvertAbove: \${One},\${Three}' "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: bare DoNotConvertBelow protects every token on the line below" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+# DoNotConvertBelow
+below: ${One}-${Two}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q 'below: \${One}-\${Two}' "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: DoNotConvertBelow with a specifier leaves the marker text intact" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+# DoNotConvertBelow: ${BelowTok}
+below: ${BelowTok}-${AlsoHere}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  # Marker lines are excluded from conversion wholesale so they keep pointing
+  # at what they were written to point at.
+  grep -q '# DoNotConvertBelow: \${BelowTok}' "$TEST_DIR/d/file.yaml"
+  grep -q 'below: \${BelowTok}-{{ AlsoHere }}' "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: DoNotConvertBelow with a comma-separated specifier protects each named token" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+# DoNotConvertBelow: ${One},${Three}
+below: ${One}-${Two}-${Three}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q 'below: \${One}-{{ Two }}-\${Three}' "$TEST_DIR/d/file.yaml"
+  grep -q '# DoNotConvertBelow: \${One},\${Three}' "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: specifier lists tolerate whitespace around entries" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+a: ${One}-${Two}-${Three} # DoNotConvert:  ${One} , ${Three}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q 'a: \${One}-{{ Two }}-\${Three}' "$TEST_DIR/d/file.yaml"
+}
+
+# --- DoNotConvertLines: every list shape ---
+
+@test "convert-tokens-in-tree: DoNotConvertLines with a single bare line number" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+# DoNotConvertLines: 2
+a: ${One}-${Two}
+b: ${Three}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q 'a: \${One}-\${Two}' "$TEST_DIR/d/file.yaml"
+  grep -q "b: {{ Three }}" "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: DoNotConvertLines with several bare line numbers" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+# DoNotConvertLines: 2,3
+a: ${One}
+b: ${Two}
+c: ${Three}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q 'a: \${One}' "$TEST_DIR/d/file.yaml"
+  grep -q 'b: \${Two}' "$TEST_DIR/d/file.yaml"
+  grep -q "c: {{ Three }}" "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: DoNotConvertLines with a single line:token entry" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+# DoNotConvertLines: 2:${One}
+a: ${One}-${Two}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q 'a: \${One}-{{ Two }}' "$TEST_DIR/d/file.yaml"
+  grep -q '# DoNotConvertLines: 2:\${One}' "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: DoNotConvertLines with several line:token entries" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+# DoNotConvertLines: 2:${One},3:${Three}
+a: ${One}-${Two}
+b: ${Three}-${Four}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q 'a: \${One}-{{ Two }}' "$TEST_DIR/d/file.yaml"
+  grep -q 'b: \${Three}-{{ Four }}' "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: DoNotConvertLines takes bare numbers and line:token entries" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+# DoNotConvertLines: 2,3:${Second}
+first: ${First}
+mixed: ${Second}-${Third}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q 'first: \${First}' "$TEST_DIR/d/file.yaml"
+  grep -q 'mixed: \${Second}-{{ Third }}' "$TEST_DIR/d/file.yaml"
+  grep -q '# DoNotConvertLines: 2,3:\${Second}' "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: DoNotConvertLines takes line:token before a bare number" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+# DoNotConvertLines: 2:${Second},3
+mixed: ${Second}-${Third}
+whole: ${Fourth}-${Fifth}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q 'mixed: \${Second}-{{ Third }}' "$TEST_DIR/d/file.yaml"
+  grep -q 'whole: \${Fourth}-\${Fifth}' "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: DoNotConvertLines tolerates whitespace around entries" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+# DoNotConvertLines:  2 , 3:${Third}
+a: ${One}-${Two}
+b: ${Third}-${Fourth}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q 'a: \${One}-\${Two}' "$TEST_DIR/d/file.yaml"
+  grep -q 'b: \${Third}-{{ Fourth }}' "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: a marker may point at a token in a foreign delimiter style" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+foreign: {{ ShippedAsMustache }}
+# DoNotConvertAbove
+ours: ${Ours}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase helm PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q "foreign: {{ ShippedAsMustache }}" "$TEST_DIR/d/file.yaml"
+  grep -q "ours: {{ .Values.Ours }}" "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: unmarked trees leave no do-not-convert audit file" {
+  mkdir -p "$TEST_DIR/d"
+  echo 'a: ${One}' > "$TEST_DIR/d/file.yaml"
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  local slug
+  slug=$(slug_for "d")
+  [ ! -f "${OUTPUT_SUB_PATH}/convert-tokens-in-tree/token-mappings/${slug}-0/do-not-convert.tsv" ]
+}
+
+@test "convert-tokens-in-tree: records every protection in the audit trail" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+a: ${One} # DoNotConvert
+b: ${Two}-${Three} # DoNotConvert: ${Two}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  local slug
+  slug=$(slug_for "d")
+  local excl="${OUTPUT_SUB_PATH}/convert-tokens-in-tree/token-mappings/${slug}-0/do-not-convert.tsv"
+  [ -f "${excl}" ]
+  awk -F'\t' '$1 == "file.yaml" && $2 == "1" && $3 == "*" { found = 1 } END { exit found ? 0 : 1 }' "${excl}"
+  awk -F'\t' '$1 == "file.yaml" && $2 == "2" && $3 == "${Two}" { found = 1 } END { exit found ? 0 : 1 }' "${excl}"
+  assert_output_contains "DoNotConvert markers found: 2 protections across 1 file"
+}
+
+# =============================================================================
+# DoNotConvert markers - stale markers fail the build
+# =============================================================================
+
+@test "convert-tokens-in-tree: fails on a line number that does not exist" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+# DoNotConvertLines: 99
+a: ${One}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -ne 0 ]
+  assert_output_contains "which does not exist"
+}
+
+@test "convert-tokens-in-tree: fails on a named token that is not on the target line" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+a: ${One} # DoNotConvert: ${Nope}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -ne 0 ]
+  assert_output_contains "is not present on"
+}
+
+@test "convert-tokens-in-tree: fails when the target line holds no token-shaped content" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+a: ${One}
+plain: value # DoNotConvert
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -ne 0 ]
+  assert_output_contains "holds no token-shaped content"
+}
+
+@test "convert-tokens-in-tree: fails on DoNotConvertAbove on the first line" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+# DoNotConvertAbove
+a: ${One}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -ne 0 ]
+  assert_output_contains "has no line above it"
+}
+
+@test "convert-tokens-in-tree: fails on DoNotConvertBelow on the last line" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+a: ${One}
+# DoNotConvertBelow
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -ne 0 ]
+  assert_output_contains "has no line below it"
+}
+
+@test "convert-tokens-in-tree: fails on a second DoNotConvertLines marker in one file" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+# DoNotConvertLines: 3
+# DoNotConvertLines: 3
+a: ${One}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -ne 0 ]
+  assert_output_contains "at most one is allowed"
+}
+
+@test "convert-tokens-in-tree: a token named after the marker is not a marker" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+a: ${DoNotConvertMe}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q "a: {{ DoNotConvertMe }}" "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: a real marker is still found alongside a token named after it" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+a: ${DoNotConvertMe}-${Other} # DoNotConvert: ${DoNotConvertMe}
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -eq 0 ]
+  grep -q 'a: \${DoNotConvertMe}-{{ Other }} # DoNotConvert: \${DoNotConvertMe}' "$TEST_DIR/d/file.yaml"
+}
+
+@test "convert-tokens-in-tree: fails on an unrecognised DoNotConvert marker" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+a: ${One} # DoNotConvertSomething
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -ne 0 ]
+  assert_output_contains "unrecognised DoNotConvert marker"
+}
+
+@test "convert-tokens-in-tree: fails on more than one marker on a line" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+a: ${One}
+b: ${Two} # DoNotConvert DoNotConvertAbove
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -ne 0 ]
+  assert_output_contains "more than one DoNotConvert marker"
+}
+
+@test "convert-tokens-in-tree: fails on a specifier that is not a token reference" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+a: ${One} # DoNotConvert: One
+EOF
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -ne 0 ]
+  assert_output_contains "is not a token reference"
+}
+
+@test "convert-tokens-in-tree: reports every stale marker in one run and converts nothing" {
+  mkdir -p "$TEST_DIR/d"
+  cat > "$TEST_DIR/d/file.yaml" << 'EOF'
+# DoNotConvertAbove
+a: ${One}
+b: ${Two} # DoNotConvert: ${Nope}
+EOF
+  before=$(cat "$TEST_DIR/d/file.yaml")
+  run "$CONVERT_SCRIPT" shell PascalCase mustache PascalCase "d"
+  [ "$status" -ne 0 ]
+  assert_output_contains "has no line above it"
+  assert_output_contains "is not present on"
+  assert_output_contains "Found 2 DoNotConvert marker problems"
+  [ "$before" = "$(cat "$TEST_DIR/d/file.yaml")" ]
+}

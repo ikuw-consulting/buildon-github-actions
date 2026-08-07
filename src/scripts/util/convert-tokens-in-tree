@@ -16,6 +16,35 @@
 # product or environment's chosen scheme before merging. Operates on a
 # single bundle's tree at a time, never on a merged staging tree.
 #
+# DoNotConvert markers
+#
+# A file may exempt selected tokens from conversion with an in-file marker.
+# Markers live in comments - usually YAML comments, but inside an embedded
+# block scalar the comment syntax of the embedded content is fine too; the
+# marker only has to be findable without corrupting the payload. Scope is the
+# file the marker sits in and nothing else.
+#
+#   DoNotConvert            on the line itself, protects that line
+#   DoNotConvertAbove       on the line BELOW the target, protects the line above
+#   DoNotConvertBelow       on the line ABOVE the target, protects the line below
+#   DoNotConvertLines: ...  anywhere in the file, protects the listed lines
+#
+# The three positional forms take an optional ': ${A},${B}' suffix. Bare means
+# every token on the target line; with a specifier only the named tokens are
+# protected and everything else on the line still converts. The Lines form
+# takes a comma-separated list whose entries are either a bare line number or
+# 'line:${Token}', and may appear at most once per file.
+#
+# Stale markers fail the build: a line number that does not exist, a named
+# token that is not present on the line it points at, a marker pointing at a
+# line with no token-shaped content, or an Above/Below marker with no line to
+# point at. Token-shaped content is matched against the union of every
+# supported delimiter style, not the configured one, because a child may ship
+# a token defensively in a foreign format precisely so it survives to here.
+#
+# Cost when unused - the overwhelmingly common case - is a single recursive
+# grep over the tree.
+#
 # Usage:
 #   convert-tokens-in-tree <from-delim> <from-name> <to-delim> <to-name> <directory>
 #
@@ -39,6 +68,8 @@ source "${SCRIPT_DIR}/../defaults/platform.bash"
 source "${SCRIPT_DIR}/../lib/log.bash"
 # shellcheck source=src/scripts/lib/token-format.bash
 source "${SCRIPT_DIR}/../lib/token-format.bash"
+# shellcheck source=src/scripts/lib/token-markers.bash
+source "${SCRIPT_DIR}/../lib/token-markers.bash"
 # shellcheck source=src/scripts/defaults/output-sub-path.bash
 source "${SCRIPT_DIR}/../defaults/output-sub-path.bash"
 
@@ -149,6 +180,46 @@ unique_plural="tokens"
 log "${BASE_INDENT}Converting from ${FROM_DELIM}-${FROM_NAME} to ${TO_DELIM}-${TO_NAME}"
 log "${BASE_INDENT}Converting ${mapping_count} unique ${unique_plural} in ${TARGET_DIR}"
 
+# ---------------------------------------------------------------------------
+# DoNotConvert markers - see the header for the marker forms and their rules.
+# The grammar, validation and diagnostics live in lib/token-markers.bash; this
+# script supplies the keyword and decides what a record means.
+# ---------------------------------------------------------------------------
+
+# One recursive grep decides whether any of the line-aware machinery runs. No
+# hits and conversion proceeds exactly as it did before markers existed.
+EXCLUSIONS_FILE=""
+MARKED_FILES=$(token_markers_files "DoNotConvert" "${TARGET_DIR}")
+
+if [[ -n "${MARKED_FILES}" ]]; then
+  EXCLUSIONS_FILE="${MAPPING_DIR}/do-not-convert.tsv"
+  : > "${EXCLUSIONS_FILE}"
+  token_markers_reset
+
+  marked_count=0
+  while IFS= read -r marked_file; do
+    if [[ -z "${marked_file}" ]]; then continue; fi
+    marked_count=$((marked_count + 1))
+    token_markers_collect "DoNotConvert" "${marked_file}" "${marked_file#"${TARGET_DIR}"/}" "${EXCLUSIONS_FILE}"
+  done <<< "${MARKED_FILES}"
+
+  # Always fatal, never softened by BUILD_MODE: a stale marker protects nothing
+  # today and silently protects the wrong thing once the lines around it move.
+  if [[ "${TOKEN_MARKERS_ERROR_COUNT}" -gt 0 ]]; then
+    problem_plural="problems"
+    [[ "${TOKEN_MARKERS_ERROR_COUNT}" -eq 1 ]] && problem_plural="problem"
+    log_error "Found ${TOKEN_MARKERS_ERROR_COUNT} DoNotConvert marker ${problem_plural} in ${TARGET_DIR}; fix the markers in the source project"
+    exit 1
+  fi
+
+  protection_count=$(wc -l < "${EXCLUSIONS_FILE}" | tr -d ' ')
+  marked_plural="files"
+  [[ "${marked_count}" -eq 1 ]] && marked_plural="file"
+  protection_plural="protections"
+  [[ "${protection_count}" -eq 1 ]] && protection_plural="protection"
+  log "${BASE_INDENT}DoNotConvert markers found: ${protection_count} ${protection_plural} across ${marked_count} ${marked_plural}"
+fi
+
 # Apply mappings to every regular file under the directory.
 # awk does literal substring substitution via index() so delimiter chars
 # never need escaping. Output goes to a sibling .converting temp file then
@@ -157,8 +228,10 @@ total_replacements=0
 while IFS= read -r -d '' file; do
   tmp="${file}.converting"
   stats="${file}.convert-stats"
+  relative="${file#"${TARGET_DIR}"/}"
 
-  awk -v map_path="${MAPPING_FILE}" -v stats="${stats}" '
+  awk -v map_path="${MAPPING_FILE}" -v stats="${stats}" \
+      -v excl_path="${EXCLUSIONS_FILE}" -v relative="${relative}" '
     BEGIN {
       n = 0
       while ((getline line < map_path) > 0) {
@@ -170,11 +243,32 @@ while IFS= read -r -d '' file; do
         }
       }
       close(map_path)
+      if (excl_path != "") {
+        while ((getline excl < excl_path) > 0) {
+          first = index(excl, "\t")
+          if (first == 0) continue
+          excl_file = substr(excl, 1, first - 1)
+          excl_rest = substr(excl, first + 1)
+          second = index(excl_rest, "\t")
+          if (second == 0) continue
+          excl_line = substr(excl_rest, 1, second - 1) + 0
+          excl_token = substr(excl_rest, second + 1)
+          if (excl_file != relative) continue
+          if (excl_token == "*") protect_all[excl_line] = 1
+          else protect_token[excl_line, excl_token] = 1
+        }
+        close(excl_path)
+      }
       replacements = 0
     }
     {
       line = $0
+      if (FNR in protect_all) {
+        print line
+        next
+      }
       for (i = 1; i <= n; i++) {
+        if ((FNR, from[i]) in protect_token) continue
         result = ""
         from_str = from[i]
         from_len = length(from_str)
@@ -212,7 +306,6 @@ while IFS= read -r -d '' file; do
     fi
     mv "${tmp}" "${file}"
     total_replacements=$((total_replacements + file_replacements))
-    relative="${file#"${TARGET_DIR}"/}"
     printf '%s\t%s\n' "${relative}" "${file_replacements}" >> "${REPLACEMENTS_BY_FILE}"
     plural="instances"
     [[ "${file_replacements}" -eq 1 ]] && plural="instance"
