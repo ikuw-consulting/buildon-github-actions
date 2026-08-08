@@ -99,3 +99,63 @@ create_substituted_manifest() {
   assert_var_equals "MANIFESTS_ZIP_SUB_PATH" "target/manifests/zip"
   assert_var_equals "MANIFESTS_ZIP_FILE_NAME" "my-project-1.2.3-manifests.zip"
 }
+
+# =============================================================================
+# Dotfiles are never captured; patch files are
+# =============================================================================
+
+@test "dotfiles are excluded from the zip" {
+  create_substituted_manifest "deployment.yaml"
+  create_substituted_manifest "sub/service.yaml"
+  printf 'junk' > "$OUTPUT_SUB_PATH/manifests/substituted/$PROJECT_NAME/.DS_Store"
+  printf 'junk' > "$OUTPUT_SUB_PATH/manifests/substituted/$PROJECT_NAME/sub/.DS_Store"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package"
+  [ "$status" -eq 0 ]
+  local listing
+  listing=$(unzip -Z1 "$OUTPUT_SUB_PATH/manifests/zip/my-project-1.2.3-manifests.zip")
+  [[ "$listing" == *"deployment.yaml"* ]] || return 1
+  [[ "$listing" == *"sub/service.yaml"* ]] || return 1
+  [[ "$listing" != *".DS_Store"* ]] || return 1
+}
+
+@test "a whole dot-directory is excluded from the zip" {
+  create_substituted_manifest "deployment.yaml"
+  mkdir -p "$OUTPUT_SUB_PATH/manifests/substituted/$PROJECT_NAME/.hidden"
+  printf 'junk' > "$OUTPUT_SUB_PATH/manifests/substituted/$PROJECT_NAME/.hidden/thing.yaml"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package"
+  [ "$status" -eq 0 ]
+  local listing
+  listing=$(unzip -Z1 "$OUTPUT_SUB_PATH/manifests/zip/my-project-1.2.3-manifests.zip")
+  [[ "$listing" != *".hidden"* ]] || return 1
+}
+
+@test "yq patch files are packaged alongside their manifests" {
+  create_substituted_manifest "deployment.yaml"
+  create_substituted_manifest "deployment.yaml.yq-merge-yaml-annotations" "metadata:"
+  create_substituted_manifest "deployment.yaml.yq-expression-list-scale" ".spec.replicas = 2"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package"
+  [ "$status" -eq 0 ]
+  local listing
+  listing=$(unzip -Z1 "$OUTPUT_SUB_PATH/manifests/zip/my-project-1.2.3-manifests.zip")
+  [[ "$listing" == *"deployment.yaml.yq-merge-yaml-annotations"* ]] || return 1
+  [[ "$listing" == *"deployment.yaml.yq-expression-list-scale"* ]] || return 1
+}
+
+@test "only the four packageable shapes reach the zip" {
+  # package-prepare fails the build on anything else, so this pins the zip's
+  # own guarantee independently of that check.
+  create_substituted_manifest "deployment.yaml"
+  create_substituted_manifest "deployment.yaml.yq-from-file-big" ".a = 1"
+  printf 'notes' > "$OUTPUT_SUB_PATH/manifests/substituted/$PROJECT_NAME/README.txt"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package"
+  [ "$status" -eq 0 ]
+  local listing
+  listing=$(unzip -Z1 "$OUTPUT_SUB_PATH/manifests/zip/my-project-1.2.3-manifests.zip")
+  [[ "$listing" == *"deployment.yaml"* ]] || return 1
+  [[ "$listing" == *"deployment.yaml.yq-from-file-big"* ]] || return 1
+  [[ "$listing" != *"README.txt"* ]] || return 1
+}

@@ -780,3 +780,207 @@ stage_additional_manifest() {
   [ "$status" -eq 0 ]
   assert_output_not_contains "is required"
 }
+
+# =============================================================================
+# Manifests tree allowlist: .yaml manifests and their yq patches, nothing else
+# =============================================================================
+
+@test "allowlist: dotfiles are ignored rather than rejected" {
+  set_required_env
+  create_manifest "deployment.yaml"
+  printf 'junk' > "$TEST_MANIFESTS/.DS_Store"
+  mkdir -p "$TEST_MANIFESTS/sub"
+  printf 'junk' > "$TEST_MANIFESTS/sub/.DS_Store"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -eq 0 ]
+  assert_output_contains "Found 1 manifest file(s) (.yaml)"
+}
+
+@test "allowlist: a tree of only dotfiles is empty, not packageable" {
+  set_required_env
+  printf 'junk' > "$TEST_MANIFESTS/.DS_Store"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -ne 0 ]
+  assert_output_contains "No manifests to package"
+}
+
+@test "allowlist: a non-yaml file fails the build" {
+  set_required_env
+  create_manifest "deployment.yaml"
+  printf 'notes' > "$TEST_MANIFESTS/README.txt"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -ne 0 ]
+  assert_output_contains "not a manifest (.yaml) or a yq patch"
+}
+
+@test "allowlist: all three patch types are accepted beside their target" {
+  set_required_env
+  create_manifest "deployment.yaml"
+  printf 'metadata:\n' > "$TEST_MANIFESTS/deployment.yaml.yq-merge-yaml-annotations"
+  printf '.spec.replicas = 2\n' > "$TEST_MANIFESTS/deployment.yaml.yq-expression-list-scale"
+  printf '.a = 1\n' > "$TEST_MANIFESTS/deployment.yaml.yq-from-file-big"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -eq 0 ]
+  assert_output_contains "Found 1 manifest file(s) (.yaml)"
+  assert_output_contains "Found 3 yq patch file(s)"
+}
+
+@test "allowlist: a patch with no target manifest fails" {
+  set_required_env
+  create_manifest "deployment.yaml"
+  printf 'metadata:\n' > "$TEST_MANIFESTS/service.yaml.yq-merge-yaml-annotations"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -ne 0 ]
+  assert_output_contains "no target manifest 'service.yaml' beside it"
+}
+
+@test "allowlist: a patch is matched against its own directory, not another" {
+  set_required_env
+  create_manifest "a/deployment.yaml"
+  create_manifest "b/service.yaml"
+  printf 'metadata:\n' > "$TEST_MANIFESTS/b/deployment.yaml.yq-merge-yaml-x"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -ne 0 ]
+  assert_output_contains "no target manifest 'deployment.yaml' beside it"
+}
+
+@test "allowlist: an unknown patch type fails" {
+  set_required_env
+  create_manifest "deployment.yaml"
+  printf 'x' > "$TEST_MANIFESTS/deployment.yaml.yq-sed-thing"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -ne 0 ]
+  assert_output_contains "unknown patch type"
+}
+
+@test "allowlist: a patch description must carry a letter or digit" {
+  set_required_env
+  create_manifest "deployment.yaml"
+  printf 'x' > "$TEST_MANIFESTS/deployment.yaml.yq-merge-yaml--"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -ne 0 ]
+  assert_output_contains "must contain at least one letter or digit"
+}
+
+@test "allowlist: a description ending in .yaml is rejected" {
+  # The charset rule earns its keep here: a dot would let the patch also match
+  # '*.yaml', which is what every walk in the build means by "manifest", so the
+  # file would be inventoried and deployed as a resource.
+  set_required_env
+  create_manifest "deployment.yaml"
+  printf 'metadata:\n' > "$TEST_MANIFESTS/deployment.yaml.yq-merge-yaml-like.yaml"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -ne 0 ]
+  assert_output_contains "may hold only lower-case letters, digits and hyphens"
+}
+
+@test "allowlist: an upper-case description is rejected" {
+  set_required_env
+  create_manifest "deployment.yaml"
+  printf 'metadata:\n' > "$TEST_MANIFESTS/deployment.yaml.yq-merge-yaml-Keelson"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -ne 0 ]
+  assert_output_contains "may hold only lower-case letters, digits and hyphens"
+}
+
+@test "allowlist: digits and hyphens are fine in a description" {
+  set_required_env
+  create_manifest "deployment.yaml"
+  printf 'metadata:\n' > "$TEST_MANIFESTS/deployment.yaml.yq-merge-yaml-10-keelson-2"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -eq 0 ]
+  assert_output_contains "Found 1 yq patch file(s)"
+}
+
+@test "allowlist: every offender is reported in one run" {
+  set_required_env
+  create_manifest "deployment.yaml"
+  printf 'notes' > "$TEST_MANIFESTS/README.txt"
+  printf 'x' > "$TEST_MANIFESTS/deployment.yaml.yq-sed-thing"
+  printf 'x' > "$TEST_MANIFESTS/service.yaml.yq-merge-yaml-x"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -ne 0 ]
+  assert_output_contains "README.txt"
+  assert_output_contains "unknown patch type"
+  assert_output_contains "no target manifest 'service.yaml'"
+}
+
+@test "allowlist: a stray file in additional-manifests fails the build" {
+  set_required_env
+  create_manifest "deployment.yaml"
+  stage_additional_manifest "notes.txt" "hello"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -ne 0 ]
+  assert_output_contains "additional-manifests"
+  assert_output_contains "notes.txt: not a manifest (.yaml) or a yq patch"
+}
+
+@test "allowlist: a patch in additional-manifests may target a manifest from src" {
+  # The reason contributor directories get shape checks only: the target lives
+  # in the other contributor's tree and only exists once combined/ is built.
+  set_required_env
+  create_manifest "deployment.yaml"
+  stage_additional_manifest "deployment.yaml.yq-merge-yaml-annotations" "metadata:"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -eq 0 ]
+  assert_output_contains "Found 1 yq patch file(s)"
+}
+
+@test "allowlist: strays in both contributor directories report in one run" {
+  set_required_env
+  create_manifest "deployment.yaml"
+  printf 'notes' > "$TEST_MANIFESTS/README.txt"
+  stage_additional_manifest "notes.txt" "hello"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -ne 0 ]
+  assert_output_contains "README.txt"
+  assert_output_contains "notes.txt"
+}
+
+@test "allowlist: the rules are explained once however many directories offend" {
+  set_required_env
+  create_manifest "deployment.yaml"
+  printf 'notes' > "$TEST_MANIFESTS/README.txt"
+  stage_additional_manifest "notes.txt" "hello"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -ne 0 ]
+  local explained
+  explained=$(printf '%s\n' "$output" | grep -c "A manifests tree may hold only")
+  [ "$explained" -eq 1 ]
+}
+
+@test "allowlist: an ordering-prefixed description like the house style is fine" {
+  set_required_env
+  create_manifest "deployment.yaml"
+  printf 'metadata:\n' > "$TEST_MANIFESTS/deployment.yaml.yq-merge-yaml-40-something-does-whatever"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -eq 0 ]
+  assert_output_contains "Found 1 yq patch file(s)"
+}
+
+@test "allowlist: an underscore in a description is rejected" {
+  set_required_env
+  create_manifest "deployment.yaml"
+  printf 'metadata:\n' > "$TEST_MANIFESTS/deployment.yaml.yq-merge-yaml-keel_son"
+
+  run "$SCRIPTS_DIR/kubernetes-manifests-package-prepare"
+  [ "$status" -ne 0 ]
+  assert_output_contains "may hold only lower-case letters, digits and hyphens"
+}

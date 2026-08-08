@@ -92,6 +92,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/../defaults/tokens.bash"
 
 # shellcheck source=src/scripts/lib/output-var.bash
 source "${SCRIPT_DIR}/../lib/output-var.bash"
+# shellcheck source=src/scripts/lib/manifest-file-kinds.bash
+source "${SCRIPT_DIR}/../lib/manifest-file-kinds.bash"
 
 main() {
   log "=== Kubernetes Manifest Package Prepare ==="
@@ -107,6 +109,11 @@ main() {
   log "Docker image: ${DOCKER_IMAGE_NAME}"
   log "============================================"
 
+  # Every contributor directory and the combined tree are all checked before
+  # anything exits, so one run tells the author everything that needs fixing
+  # rather than one problem per attempt.
+  local validation_failed=false
+
   # Create output directory structure (may already exist from pre-package hooks)
   mkdir -p "${MANIFESTS_COMBINED_SUB_PATH}"
   mkdir -p "${MANIFESTS_ZIP_SUB_PATH}"
@@ -114,13 +121,34 @@ main() {
   # Copy from source to combined if source exists and has files
   # (Hooks may have already contributed to combined/ - source files override)
   if [[ -d "${MANIFESTS_SUB_PATH}" ]]; then
+    # Reject what this directory must not contain before taking anything from
+    # it, so a stray file is named where the author put it rather than at some
+    # path under the build output.
+    #
+    # Shape only: a patch here may target a manifest that additional-manifests
+    # or a hook supplies, so its target cannot be looked for until combined/
+    # exists. manifest_tree_validate below does that once, on the merged tree.
+    if ! manifest_dir_reject_unpackageable "${MANIFESTS_SUB_PATH}"; then
+      validation_failed=true
+    fi
+
+    # Dotfiles do not count towards "has files": a directory holding nothing
+    # but a .DS_Store is empty as far as this build is concerned, and counting
+    # it would send us into a cp whose glob matches nothing.
     local source_file_count
-    source_file_count=$(find "${MANIFESTS_SUB_PATH}" -type f | wc -l | tr -d ' ')
+    source_file_count=$(manifest_files_find_packageable "${MANIFESTS_SUB_PATH}" | wc -l | tr -d ' ')
 
     if [[ "${source_file_count}" -gt 0 ]]; then
       log ""
       log "Copying ${source_file_count} file(s) from ${MANIFESTS_SUB_PATH}"
-      cp -R "${MANIFESTS_SUB_PATH}"/* "${MANIFESTS_COMBINED_SUB_PATH}/"
+      # Only the good stuff: anything unacceptable was named above, and
+      # copying it onward would report it a second time from combined/.
+      local src_file rel_src
+      while IFS= read -r src_file; do
+        rel_src="${src_file#"${MANIFESTS_SUB_PATH}"/}"
+        mkdir -p "$(dirname "${MANIFESTS_COMBINED_SUB_PATH}/${rel_src}")"
+        cp "${src_file}" "${MANIFESTS_COMBINED_SUB_PATH}/${rel_src}"
+      done < <(manifest_files_find_packageable "${MANIFESTS_SUB_PATH}")
     else
       log ""
       log "Source directory empty: ${MANIFESTS_SUB_PATH}"
@@ -130,20 +158,29 @@ main() {
     log "Source directory not found: ${MANIFESTS_SUB_PATH}"
   fi
 
+  # Reject strays here on the directory existing alone, never on it holding
+  # something wanted. Gating this behind "has packageable files" would let a
+  # directory containing nothing BUT a stray file skip the check entirely,
+  # which is the one case where the check matters most.
+  if [[ -d "${MANIFESTS_ADDITIONAL_SUB_PATH}" ]] \
+     && ! manifest_dir_reject_unpackageable "${MANIFESTS_ADDITIONAL_SUB_PATH}"; then
+    validation_failed=true
+  fi
+
   # Foreign-contributor layer: merge additional-manifests/ into combined/.
   # Strict policy: ALLOW_LOCAL_MANIFESTS_OVERRIDE=true => local wins on conflict (WARN).
   # When false, any path collision fails the build — even byte-identical (unlike
   # defaults, where duplicate paths between layers are expected by design).
   if [[ -d "${MANIFESTS_ADDITIONAL_SUB_PATH}" ]] \
-     && [[ -n "$(find "${MANIFESTS_ADDITIONAL_SUB_PATH}" -type f 2>/dev/null)" ]]; then
+     && [[ -n "$(manifest_files_find_packageable "${MANIFESTS_ADDITIONAL_SUB_PATH}" 2>/dev/null)" ]]; then
     local additional_manifests_count
-    additional_manifests_count=$(find "${MANIFESTS_ADDITIONAL_SUB_PATH}" -type f | wc -l | tr -d ' ')
+    additional_manifests_count=$(manifest_files_find_packageable "${MANIFESTS_ADDITIONAL_SUB_PATH}" | wc -l | tr -d ' ')
     log ""
     log "Merging ${additional_manifests_count} additional manifest(s) from ${MANIFESTS_ADDITIONAL_SUB_PATH}"
 
     local manifest_conflicts=()
     local extra_manifest rel_manifest target_manifest
-    while IFS= read -r -d '' extra_manifest; do
+    while IFS= read -r extra_manifest; do
       rel_manifest="${extra_manifest#"${MANIFESTS_ADDITIONAL_SUB_PATH}/"}"
       target_manifest="${MANIFESTS_COMBINED_SUB_PATH}/${rel_manifest}"
 
@@ -159,7 +196,7 @@ main() {
       fi
 
       manifest_conflicts+=("${rel_manifest}")
-    done < <(find "${MANIFESTS_ADDITIONAL_SUB_PATH}" -type f -print0)
+    done < <(manifest_files_find_packageable "${MANIFESTS_ADDITIONAL_SUB_PATH}")
 
     if [[ ${#manifest_conflicts[@]} -gt 0 ]]; then
       log_error "Manifest path collisions: files contributed via ${MANIFESTS_ADDITIONAL_SUB_PATH} already exist in the combined manifests (from ${MANIFESTS_SUB_PATH} or a pre-package-prepare hook):"
@@ -172,28 +209,32 @@ main() {
     fi
   fi
 
-  # Validate combined/ has files (from any source: hooks or src/kubernetes)
-  local yaml_count=0
-  local other_count=0
-  local total_files=0
+  # Validate combined/ has files (from any source: hooks or src/kubernetes),
+  # and that it holds nothing but .yaml manifests and their yq patch files.
+  # The grammar, the checks and the rejection messages all live in
+  # lib/manifest-file-kinds.bash so every level of the build agrees on what a
+  # patch file is and complains about it in the same words.
+  if ! manifest_tree_validate "${MANIFESTS_COMBINED_SUB_PATH}"; then
+    validation_failed=true
+  fi
 
-  while IFS= read -r file; do
-    total_files=$((total_files + 1))
-    case "${file}" in
-      *.yaml) yaml_count=$((yaml_count + 1)) ;;
-      *) other_count=$((other_count + 1)) ;;
-    esac
-  done < <(find "${MANIFESTS_COMBINED_SUB_PATH}" -type f)
+  # "Holds nothing" and "holds something it should not" are separate problems,
+  # so this is the caller's judgement on the counts rather than something the
+  # library decided. A tree with only a stray file reports both.
+  if [[ $((MANIFEST_TREE_MANIFEST_COUNT + MANIFEST_TREE_PATCH_COUNT)) -eq 0 ]]; then
+    log_error "No manifests to package (${MANIFESTS_COMBINED_SUB_PATH} holds nothing packageable)"
+    validation_failed=true
+  fi
 
-  if [[ "${total_files}" -eq 0 ]]; then
-    log_error "No manifests to package (${MANIFESTS_COMBINED_SUB_PATH} is empty)"
+  if ${validation_failed}; then
+    manifest_rules_explain
     exit 1
   fi
 
   log ""
-  log "Found ${yaml_count} manifest file(s) (.yaml)"
-  if [[ ${other_count} -gt 0 ]]; then
-    log "Found ${other_count} non-manifest file(s)"
+  log "Found ${MANIFEST_TREE_MANIFEST_COUNT} manifest file(s) (.yaml)"
+  if [[ "${MANIFEST_TREE_PATCH_COUNT}" -gt 0 ]]; then
+    log "Found ${MANIFEST_TREE_PATCH_COUNT} yq patch file(s)"
   fi
 
   # Compute the zip filename (used as a built-in token)
