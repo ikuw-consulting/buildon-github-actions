@@ -31,13 +31,18 @@ log "Build mode: ${BUILD_MODE}"
 log "============================="
 
 # Validate platform value
+#
+# linux/386 is single-platform only. It exists for legacy 32 bit toolchains that
+# were never packaged for anything else, and there is no manifest list pairing
+# for it, so it is deliberately absent from the comma separated combinations.
 case "${DOCKER_PLATFORM}" in
   linux/amd64) ;;
   linux/arm64) ;;
+  linux/386) ;;
   linux/amd64,linux/arm64) ;;
   linux/arm64,linux/amd64) ;;
   *)
-    log_error "Invalid DOCKER_PLATFORM value '${DOCKER_PLATFORM}' - must be: linux/amd64, linux/arm64, or both comma-separated"
+    log_error "Invalid DOCKER_PLATFORM value '${DOCKER_PLATFORM}' - must be: linux/amd64, linux/arm64, linux/386, or amd64 and arm64 comma-separated"
     exit 1
     ;;
 esac

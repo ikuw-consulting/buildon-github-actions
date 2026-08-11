@@ -7,7 +7,7 @@ description: 'Validates docker platform and installs QEMU on Linux CI'
 inputs:
   # Target platform for docker/podman operations
   docker-platform:
-    description: 'Target platform (linux/amd64, linux/arm64, or both comma-separated)'
+    description: 'Target platform (linux/amd64, linux/arm64, linux/386, or amd64 and arm64 comma-separated)'
     required: false
     default: 'linux/amd64'
   # Container runtime
