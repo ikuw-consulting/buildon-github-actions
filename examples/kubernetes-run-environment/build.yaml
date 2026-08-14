@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: CC0-1.0
+# This example is released to the public domain. Use freely without attribution.
+#
+# Kubernetes Run Environment
+#
+# Builds a deployable environment: a bone-stock deploy-manifests set for
+# the consuming parent or bootstrap, plus the bespoke workload aggregate,
+# deploy image, and run artifacts.
+#
+# All configuration is in KaptainPM.yaml - see docs for available fields.
+
+name: Kubernetes Run Environment
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    uses: kube-kaptain/buildon-github-actions/.github/workflows/kubernetes-run-environment.yaml@1.1.53
+    permissions:
+      contents: write
+      packages: write
+      checks: write
+    # Override the default runner if needed:
+    # with:
+    #   runner: ubuntu-latest

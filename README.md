@@ -46,6 +46,8 @@ See [`examples/`](examples/) for more usage patterns.
 | [`kubernetes-bundle-resources`](examples/kubernetes-bundle-resources/README.md) | Packages Kubernetes manifests for third-party stacks whose hard-coded refs |
 | [`kubernetes-bundle-vendor-helm-rendered`](examples/kubernetes-bundle-vendor-helm-rendered/README.md) | Renders a vendor Helm chart into individual manifests, processes and |
 | [`kubernetes-product-aggregate`](examples/kubernetes-product-aggregate/README.md) | Aggregates pre-built manifest bundles listed in spec |
+| [`kubernetes-run-environment`](examples/kubernetes-run-environment/README.md) | Builds a deployable environment: a bone-stock deploy-manifests set for |
+| [`kubernetes-run-platform-meta-environment`](examples/kubernetes-run-platform-meta-environment/README.md) | Builds a deployable run platform (meta environment): a bone-stock |
 | [`layer-and-layerset-build`](examples/layer-and-layerset-build/README.md) | Layer/layerset validation and OCI packaging - quality checks, versioning, |
 | [`spec-check-filter-release`](examples/spec-check-filter-release/README.md) | Validates and packages spec/schema files as OCI artifacts |
 

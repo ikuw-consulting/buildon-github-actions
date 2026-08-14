@@ -127,6 +127,39 @@ EOF
   assert_github_output "OUTPUT_SUB_PATH" "custom-out"
 }
 
+# The fallback comes from defaults/output-sub-path.bash, which is env
+# overridable by design, so a wrapper supplied value is honoured when the yaml
+# is silent - but never over an explicit yaml value.
+@test "OUTPUT_SUB_PATH honours incoming env when yaml absent" {
+  write_pm
+  export OUTPUT_SUB_PATH="wrapper-out"
+  run_script
+  [ "${status}" -eq 0 ]
+  assert_github_output "OUTPUT_SUB_PATH" "wrapper-out"
+}
+
+@test "OUTPUT_SUB_PATH from yaml wins over incoming env" {
+  cat > "${TEST_DIR}/kaptainpm/final/KaptainPM.yaml" << 'EOF'
+apiVersion: kaptain.org/1.10
+kind: test-build
+spec:
+  global:
+    outputSubPath: custom-out
+EOF
+  export OUTPUT_SUB_PATH="wrapper-out"
+  run_script
+  [ "${status}" -eq 0 ]
+  assert_github_output "OUTPUT_SUB_PATH" "custom-out"
+}
+
+@test "GITHUB_RELEASE_ENABLED honours incoming env when yaml absent" {
+  write_pm
+  export GITHUB_RELEASE_ENABLED="false"
+  run_script
+  [ "${status}" -eq 0 ]
+  assert_github_output "GITHUB_RELEASE_ENABLED" "false"
+}
+
 @test "GITHUB_RELEASE_ENABLED defaults to true when absent" {
   write_pm
   run_script
@@ -165,6 +198,43 @@ EOF
   run_script
   [ "${status}" -eq 0 ]
   assert_github_output "GITHUB_RELEASE_ENABLED" "true"
+}
+
+@test "CHANGE_SOURCE_NOTE_ENABLED defaults to true when absent" {
+  write_pm
+  run_script
+  [ "${status}" -eq 0 ]
+  assert_github_output "CHANGE_SOURCE_NOTE_ENABLED" "true"
+}
+
+@test "CHANGE_SOURCE_NOTE_ENABLED uses string value from yaml when present" {
+  cat > "${TEST_DIR}/kaptainpm/final/KaptainPM.yaml" << 'EOF'
+apiVersion: kaptain.org/1.10
+kind: test-build
+spec:
+  main:
+    changeSource:
+      noteEnabled: "false"
+EOF
+  run_script
+  [ "${status}" -eq 0 ]
+  assert_github_output "CHANGE_SOURCE_NOTE_ENABLED" "false"
+}
+
+# Read via kaptainpm_bool, not yq's // operator, so an explicit bare boolean
+# false survives instead of being clobbered by the default.
+@test "CHANGE_SOURCE_NOTE_ENABLED bare boolean false is preserved" {
+  cat > "${TEST_DIR}/kaptainpm/final/KaptainPM.yaml" << 'EOF'
+apiVersion: kaptain.org/1.10
+kind: test-build
+spec:
+  main:
+    changeSource:
+      noteEnabled: false
+EOF
+  run_script
+  [ "${status}" -eq 0 ]
+  assert_github_output "CHANGE_SOURCE_NOTE_ENABLED" "false"
 }
 
 @test "KUBERNETES_WORKLOAD_TYPE defaults to deployment when absent" {

@@ -130,9 +130,9 @@ jobs:
       # INJECT: github-check-end(name="Basic Quality Checks", id="check-basic-quality", if="github.event_name == 'pull_request'")
 
       # === Docker Registry Logins ===
-      # INJECT: github-check-start(name="Docker Registry Logins", id="check-docker-registry-logins")
+      # INJECT: github-check-start(name="Docker Registry Logins", id="check-docker-registry-logins", if="steps.kpm.outputs.DOCKER_TARGET_REGISTRY != ''")
       # INJECT: docker-registry-logins
-      # INJECT: github-check-end(name="Docker Registry Logins", id="check-docker-registry-logins")
+      # INJECT: github-check-end(name="Docker Registry Logins", id="check-docker-registry-logins", if="steps.kpm.outputs.DOCKER_TARGET_REGISTRY != ''")
 
       # === Docker Platform Setup ===
       # INJECT: github-check-start(name="Docker Platform Setup", id="check-docker-platform-setup")
@@ -155,9 +155,9 @@ jobs:
       # INJECT: github-check-end(name="Post-Versions-and-Naming", id="check-post-versions-and-naming", if="steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH != ''")
 
       # === Change Source Note ===
-      # INJECT: github-check-start(name="Change Source Note", id="check-change-source-note", if="steps.versions.outputs.is-release != 'true'")
+      # INJECT: github-check-start(name="Change Source Note", id="check-change-source-note", if="steps.versions.outputs.is-release != 'true' && steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED == 'true'")
       # INJECT: change-source-note-write
-      # INJECT: github-check-end(name="Change Source Note", id="check-change-source-note", if="steps.versions.outputs.is-release != 'true'")
+      # INJECT: github-check-end(name="Change Source Note", id="check-change-source-note", if="steps.versions.outputs.is-release != 'true' && steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED == 'true'")
 
       # === Release Change Data Generate ===
       # INJECT: github-check-start(name="Release Change Data Generate", id="check-release-change-data-generate")

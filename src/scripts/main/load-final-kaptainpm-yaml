@@ -37,6 +37,14 @@ source "${SCRIPT_DIR}/../lib/log.bash"
 source "${SCRIPT_DIR}/../lib/output-var.bash"
 # shellcheck source=src/scripts/defaults/docker-target.bash
 source "${SCRIPT_DIR}/../defaults/docker-target.bash"
+# shellcheck source=src/scripts/defaults/change-source.bash
+source "${SCRIPT_DIR}/../defaults/change-source.bash"
+# shellcheck source=src/scripts/defaults/output-sub-path.bash
+source "${SCRIPT_DIR}/../defaults/output-sub-path.bash"
+# shellcheck source=src/scripts/defaults/vendor-github-release.bash
+source "${SCRIPT_DIR}/../defaults/vendor-github-release.bash"
+# shellcheck source=src/scripts/defaults/tokens.bash
+source "${SCRIPT_DIR}/../defaults/tokens.bash"
 # shellcheck source=src/scripts/lib/kaptainpm-bool.bash
 source "${SCRIPT_DIR}/../lib/kaptainpm-bool.bash"
 
@@ -371,7 +379,7 @@ MAPPINGS=(
   "spec.main.manifests.templatesLayout:TEMPLATES_LAYOUT"
 
   # Change source
-  "spec.main.changeSource.noteEnabled:CHANGE_SOURCE_NOTE_ENABLED"
+  # Note: CHANGE_SOURCE_NOTE_ENABLED handled separately below (has default)
 
   # Vendor Helm Rendered
   "spec.main.vendorHelmRendered.repoUrl:VENDOR_HELM_RENDERED_REPO_URL"
@@ -430,7 +438,7 @@ log ""
 # --- Builtin token mode: only the kinds that package manifests for another
 # build to consume may defer their built-ins. The schema enforces this too;
 # this catches hand-rolled local invocations that never validated. ---
-if [[ "${TOKEN_BUILTIN_MODE:-standard}" == "template" ]]; then
+if [[ "${TOKEN_BUILTIN_MODE}" == "template" ]]; then
   case "${BUILD_KIND}" in
     kubernetes-app-manifests-only|kubernetes-bundle-resources|kubernetes-bundle-vendor-helm-rendered) ;;
     *)
@@ -581,7 +589,7 @@ fi
 # Fields used in workflow step inputs or if-conditions that need defaults when absent from yaml
 output_sub_path=$(yq -r '.spec.global.outputSubPath // ""' "${PM_FILE}")
 if [[ -z "${output_sub_path}" || "${output_sub_path}" == "null" ]]; then
-  output_sub_path="kaptain-out"
+  output_sub_path="${OUTPUT_SUB_PATH}"
   log "Field .spec.global.outputSubPath not set, defaulted to ${output_sub_path} to allow wrapper optimisations."
 else
   found_count=$((found_count + 1))
@@ -591,7 +599,7 @@ log "Field .spec.global.outputSubPath = \"${output_sub_path}\" exported as OUTPU
 
 github_release_enabled=$(yq -r '.spec.platform.githubActions.release.enabled // ""' "${PM_FILE}")
 if [[ -z "${github_release_enabled}" || "${github_release_enabled}" == "null" ]]; then
-  github_release_enabled="true"
+  github_release_enabled="${GITHUB_RELEASE_ENABLED}"
   log "Field .spec.platform.githubActions.release.enabled not set, defaulted to ${github_release_enabled} to allow wrapper optimisations."
 else
   found_count=$((found_count + 1))
@@ -628,5 +636,17 @@ else
 fi
 output_var "KUBERNETES_SECRET_TEMPLATE_SUB_PATH" "${secret_template_sub_path}" > /dev/null
 log "Field .spec.main.generators.secretTemplate.subPath = \"${secret_template_sub_path}\" exported as KUBERNETES_SECRET_TEMPLATE_SUB_PATH"
+
+# Read via kaptainpm_bool so an explicit bare boolean false survives, and fall
+# back to the shared default rather than a literal repeated here.
+change_source_note_enabled=$(kaptainpm_bool "${PM_FILE}" "spec.main.changeSource.noteEnabled" "")
+if [[ -z "${change_source_note_enabled}" ]]; then
+  change_source_note_enabled="${CHANGE_SOURCE_NOTE_ENABLED}"
+  log "Field .spec.main.changeSource.noteEnabled not set, defaulted to ${change_source_note_enabled} to allow wrapper optimisations."
+else
+  found_count=$((found_count + 1))
+fi
+output_var "CHANGE_SOURCE_NOTE_ENABLED" "${change_source_note_enabled}" > /dev/null
+log "Field .spec.main.changeSource.noteEnabled = \"${change_source_note_enabled}\" exported as CHANGE_SOURCE_NOTE_ENABLED"
 
 log "Loaded ${found_count} value(s) from KaptainPM.yaml"

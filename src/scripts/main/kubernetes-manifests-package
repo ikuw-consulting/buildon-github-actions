@@ -35,6 +35,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/../defaults/output-sub-path.bash"
 
 # shellcheck source=src/scripts/lib/output-var.bash
 source "${SCRIPT_DIR}/../lib/output-var.bash"
+# shellcheck source=src/scripts/lib/manifest-file-kinds.bash
+source "${SCRIPT_DIR}/../lib/manifest-file-kinds.bash"
 
 # shellcheck source=src/scripts/defaults/manifests-sub-path.bash
 source "$(dirname "${BASH_SOURCE[0]}")/../defaults/manifests-sub-path.bash"
@@ -62,9 +64,17 @@ main() {
   log ""
   log "Creating zip: ${MANIFESTS_ZIP_SUB_PATH}/${zip_name}"
 
+  # The zip is fed an explicit file list rather than walking the tree itself,
+  # so the four packageable shapes in lib/manifest-file-kinds.bash decide what
+  # goes in. package-prepare has already failed the build on anything else, so
+  # this is belt and braces rather than a filter doing the work; it also keeps
+  # the dotfile rule in one place instead of restating it in zip's own pattern
+  # language, where nothing would connect the two.
   local repo_root
   repo_root="$(pwd)"
-  (cd "${MANIFESTS_SUBSTITUTED_SUB_PATH}" && zip -rq "${repo_root}/${MANIFESTS_ZIP_SUB_PATH}/${zip_name}" "${PROJECT_NAME}")
+  (cd "${MANIFESTS_SUBSTITUTED_SUB_PATH}" \
+    && manifest_files_find_packageable "${PROJECT_NAME}" \
+       | zip -q -@ "${repo_root}/${MANIFESTS_ZIP_SUB_PATH}/${zip_name}")
 
   # Verify zip was created
   if [[ ! -f "${MANIFESTS_ZIP_SUB_PATH}/${zip_name}" ]]; then

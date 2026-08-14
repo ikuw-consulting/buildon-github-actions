@@ -527,6 +527,7 @@ jobs:
 
       # === Docker Registry Logins ===
       - name: Start check - Docker Registry Logins
+        if: steps.kpm.outputs.DOCKER_TARGET_REGISTRY != '' && success()
         id: check-docker-registry-logins
         continue-on-error: true
         uses: ./.github/buildon-github-actions/src/actions/github-check-run
@@ -545,14 +546,14 @@ jobs:
           output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
       - name: Pass check - Docker Registry Logins
-        if: success() && steps.check-docker-registry-logins.outputs.check-run-id != ''
+        if: steps.kpm.outputs.DOCKER_TARGET_REGISTRY != '' && success() && steps.check-docker-registry-logins.outputs.check-run-id != ''
         continue-on-error: true
         uses: ./.github/buildon-github-actions/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-docker-registry-logins.outputs.check-run-id }}
       - name: Fail check - Docker Registry Logins
-        if: failure() && steps.check-docker-registry-logins.outputs.check-run-id != ''
+        if: steps.kpm.outputs.DOCKER_TARGET_REGISTRY != '' && failure() && steps.check-docker-registry-logins.outputs.check-run-id != ''
         uses: ./.github/buildon-github-actions/src/actions/github-check-run
         with:
           action: fail
@@ -976,7 +977,7 @@ jobs:
 
       # === Change Source Note ===
       - name: Start check - Change Source Note
-        if: steps.versions.outputs.is-release != 'true' && success()
+        if: steps.versions.outputs.is-release != 'true' && steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED == 'true' && success()
         id: check-change-source-note
         continue-on-error: true
         uses: ./.github/buildon-github-actions/src/actions/github-check-run
@@ -988,14 +989,14 @@ jobs:
         if: steps.versions.outputs.is-release != 'true' && steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED == 'true' && success()
         uses: ./.github/buildon-github-actions/src/actions/change-source-note-write
       - name: Pass check - Change Source Note
-        if: steps.versions.outputs.is-release != 'true' && success() && steps.check-change-source-note.outputs.check-run-id != ''
+        if: steps.versions.outputs.is-release != 'true' && steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED == 'true' && success() && steps.check-change-source-note.outputs.check-run-id != ''
         continue-on-error: true
         uses: ./.github/buildon-github-actions/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-change-source-note.outputs.check-run-id }}
       - name: Fail check - Change Source Note
-        if: steps.versions.outputs.is-release != 'true' && failure() && steps.check-change-source-note.outputs.check-run-id != ''
+        if: steps.versions.outputs.is-release != 'true' && steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED == 'true' && failure() && steps.check-change-source-note.outputs.check-run-id != ''
         uses: ./.github/buildon-github-actions/src/actions/github-check-run
         with:
           action: fail

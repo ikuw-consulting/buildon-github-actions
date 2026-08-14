@@ -1,65 +1,26 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.25/spec-kaptainpm-schema-1.25.yaml",
+  "$id": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.28/spec-kaptainpm-schema-1.28.yaml",
   "name": "spec-kaptainpm-schema",
-  "version": "1.25",
+  "version": "1.28",
   "source": "https://github.com/kube-kaptain/spec-kaptainpm-schema",
   "latest": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/main/spec-kaptainpm-schema.yaml",
-  "tagged": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/1.25/spec-kaptainpm-schema.yaml",
-  "release": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.25/spec-kaptainpm-schema-1.25.yaml",
-  "validate-using": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.25/spec-kaptainpm-schema-1.25.json",
+  "tagged": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/1.28/spec-kaptainpm-schema.yaml",
+  "release": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.28/spec-kaptainpm-schema-1.28.yaml",
+  "validate-using": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.28/spec-kaptainpm-schema-1.28.json",
   "title": "KaptainPM",
-  "description": "Kaptain project manifest schema (version 1.25).\n",
+  "description": "Kaptain project manifest schema (version 1.28).\n",
   "type": "object",
   "required": [
     "apiVersion",
     "kind"
   ],
   "additionalProperties": false,
-  "allOf": [
-    {
-      "if": {
-        "required": [
-          "kind"
-        ],
-        "properties": {
-          "kind": {
-            "not": {
-              "enum": [
-                "kubernetes-app-manifests-only",
-                "kubernetes-bundle-resources",
-                "kubernetes-bundle-vendor-helm-rendered"
-              ]
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "spec": {
-            "properties": {
-              "global": {
-                "properties": {
-                  "tokens": {
-                    "properties": {
-                      "builtinMode": {
-                        "const": "standard"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  ],
   "properties": {
     "apiVersion": {
       "type": "string",
       "pattern": "^kaptain\\.org/[0-9]+(\\.[0-9]+)*$",
-      "description": "API version - must be kaptain.org/ followed by the schema version (e.g. kaptain.org/1.2). Set via 1.25 token substitution at build time.\n"
+      "description": "API version - must be kaptain.org/ followed by the schema version (e.g. kaptain.org/1.2). Set via 1.28 token substitution at build time.\n"
     },
     "kind": {
       "type": "string",
@@ -129,6 +90,147 @@
       }
     }
   },
+  "allOf": [
+    {
+      "$comment": "builtin-mode-guard",
+      "if": {
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "not": {
+              "enum": [
+                "kubernetes-app-manifests-only",
+                "kubernetes-bundle-resources",
+                "kubernetes-bundle-vendor-helm-rendered"
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "spec": {
+            "properties": {
+              "global": {
+                "properties": {
+                  "tokens": {
+                    "properties": {
+                      "builtinMode": {
+                        "const": "standard"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "const": "kubernetes-run-environment"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "spec": {
+            "properties": {
+              "main": {
+                "required": [
+                  "environment"
+                ],
+                "not": {
+                  "required": [
+                    "runPlatform"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "const": "kubernetes-run-platform-meta-environment"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "spec": {
+            "properties": {
+              "main": {
+                "required": [
+                  "runPlatform"
+                ],
+                "not": {
+                  "required": [
+                    "environment"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "kind"
+        ],
+        "not": {
+          "properties": {
+            "kind": {
+              "enum": [
+                "kubernetes-run-environment",
+                "kubernetes-run-platform-meta-environment"
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "spec": {
+            "properties": {
+              "main": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "environment"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "runPlatform"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "layerPayload": {
       "type": "array",
@@ -336,7 +438,7 @@
                 "standard",
                 "template"
               ],
-              "description": "standard substitutes built-in tokens with this build's own values. template leaves them unsubstituted for the consuming build and emits this build's values under a Template prefix instead, so ProjectName is the consumer's and TemplateProjectName is the producer's. Only valid for the kinds that package manifests for another build to consume (default: standard)\n"
+              "description": "standard substitutes built-in tokens with this build's own values. template leaves them unsubstituted for the consuming build and emits this build's values under an Original prefix instead, so ProjectName is the consumer's and OriginalProjectName is the producer's. Only valid for the kinds that package manifests for another build to consume (default: standard)\n"
             },
             "substitutionPasses": {
               "oneOf": [
@@ -1976,7 +2078,7 @@
                   "pattern": "^(true|false)$"
                 }
               ],
-              "description": "When true, manifests from the local src/kubernetes directory may override manifests contributed by foreign sources (referenced bundles in a product build, vendor renderers, pre-package-prepare hooks) staged under ${OUTPUT_SUB_PATH}/manifests/additional-manifests/, with a WARN log per override. When false (default), any path collision between local and foreign manifests fails the build. The reserved kaptain-{product,app,bundle,environment}-lineage-data.yaml filenames are checked separately and always fail on collision regardless of this flag.\n"
+              "description": "When true, manifests from the local src/kubernetes directory may override manifests contributed by foreign sources (referenced bundles in a product build, vendor renderers, pre-package-prepare hooks) staged under <OUTPUT_SUB_PATH>/manifests/additional-manifests/, with a WARN log per override. When false (default), any path collision between local and foreign manifests fails the build. The reserved kaptain-{product,app,bundle,environment}-lineage-data.yaml filenames are checked separately and always fail on collision regardless of this flag.\n"
             },
             "defaults": {
               "type": "object",
@@ -1996,7 +2098,7 @@
                       "pattern": "^(true|false)$"
                     }
                   ],
-                  "description": "When true, defaults from the local src/defaults directory may override defaults contributed by foreign sources staged under ${OUTPUT_SUB_PATH}/manifests/additional-defaults/, with a WARN log per override. When false (default), local defaults must be byte-identical to any foreign default of the same name or the build fails.\n"
+                  "description": "When true, defaults from the local src/defaults directory may override defaults contributed by foreign sources staged under <OUTPUT_SUB_PATH>/manifests/additional-defaults/, with a WARN log per override. When false (default), local defaults must be byte-identical to any foreign default of the same name or the build fails.\n"
                 }
               }
             },
@@ -2026,6 +2128,331 @@
               "description": "How spec.templates entries land in the manifest tree of an app or bundle build. flat (default) merges every template's manifests into the shared foreign-contributor drop dirs with file-level collision detection, and each template's lineage CM is folded into this project's lineage CM as a data key. hierarchy keeps each template in its own per-bundle subdir, like spec.contents in a product or environment build. Has no effect on product or environment builds, where contents always land per-bundle and templates do not apply.\n"
             }
           }
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Environment build configuration. Applies only to kubernetes-run-environment builds which aggregate apps, bundles, and products listed in spec.contents.\n",
+          "properties": {
+            "clusterScopedDelegation": {
+              "$ref": "#/$defs/runEnvClusterScopedDelegation"
+            },
+            "clusterScopedKindsFile": {
+              "$ref": "#/$defs/runEnvClusterScopedKindsFile"
+            },
+            "allowLocalManifestsOverride": {
+              "$ref": "#/$defs/runEnvAllowLocalManifestsOverride"
+            },
+            "failOnUnreferencedConfigOrSecrets": {
+              "$ref": "#/$defs/runEnvFailOnUnreferencedConfigOrSecrets"
+            },
+            "trustedContributorsOnly": {
+              "$ref": "#/$defs/runEnvTrustedContributorsOnly"
+            },
+            "imageAutoUpdateProvider": {
+              "$ref": "#/$defs/runEnvImageAutoUpdateProvider"
+            },
+            "imageAutoUpdatePolicy": {
+              "$ref": "#/$defs/runEnvImageAutoUpdatePolicy"
+            },
+            "imageAutoUpdateTrigger": {
+              "$ref": "#/$defs/runEnvImageAutoUpdateTrigger"
+            },
+            "imageAutoUpdatePollSchedule": {
+              "$ref": "#/$defs/runEnvImageAutoUpdatePollSchedule"
+            },
+            "imageAutoUpdateFieldManagerStrategy": {
+              "$ref": "#/$defs/runEnvImageAutoUpdateFieldManagerStrategy"
+            },
+            "deployMode": {
+              "$ref": "#/$defs/runEnvDeployMode"
+            },
+            "checksumSecretsTiming": {
+              "$ref": "#/$defs/runEnvChecksumSecretsTiming"
+            },
+            "checksumLength": {
+              "$ref": "#/$defs/runEnvChecksumLength"
+            },
+            "checksumOrderFile": {
+              "$ref": "#/$defs/runEnvChecksumOrderFile"
+            },
+            "signoffsSubPath": {
+              "$ref": "#/$defs/runEnvSignoffsSubPath"
+            },
+            "signoffsKindsFile": {
+              "$ref": "#/$defs/runEnvSignoffsKindsFile"
+            },
+            "environmentDeploySourceBasePath": {
+              "$ref": "#/$defs/runEnvEnvironmentDeploySourceBasePath"
+            },
+            "generateIdealEnvironmentDeployManifests": {
+              "$ref": "#/$defs/runEnvGenerateIdealEnvironmentDeployManifests"
+            },
+            "imageDeployManifestsApplyMode": {
+              "$ref": "#/$defs/runEnvImageDeployManifestsApplyMode"
+            },
+            "environmentDeployBaseImage": {
+              "$ref": "#/$defs/runEnvEnvironmentDeployBaseImage"
+            },
+            "cleanUp": {
+              "$ref": "#/$defs/runEnvCleanUp"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "required": [
+                  "deployMode"
+                ],
+                "properties": {
+                  "deployMode": {
+                    "const": "job"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "imageAutoUpdateProvider": {
+                    "enum": [
+                      "keelson",
+                      "none"
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "required": [
+                  "imageAutoUpdatePolicy"
+                ],
+                "properties": {
+                  "imageAutoUpdatePolicy": {
+                    "const": "force"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "imageAutoUpdateProvider"
+                ],
+                "properties": {
+                  "imageAutoUpdateProvider": {
+                    "const": "keel"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "required": [
+                  "generateIdealEnvironmentDeployManifests"
+                ],
+                "properties": {
+                  "generateIdealEnvironmentDeployManifests": {
+                    "enum": [
+                      false,
+                      "false"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "deployMode"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "imageAutoUpdateProvider"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "imageAutoUpdatePolicy"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "imageAutoUpdateTrigger"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "imageAutoUpdatePollSchedule"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "imageAutoUpdateFieldManagerStrategy"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "runPlatform": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Run-platform build configuration. Applies only to kubernetes-run-platform-meta-environment builds which aggregate apps, bundles, and products listed in spec.contents and seed managed run-* child projects.\n",
+          "properties": {
+            "allowLocalManifestsOverride": {
+              "$ref": "#/$defs/runEnvAllowLocalManifestsOverride"
+            },
+            "failOnUnreferencedConfigOrSecrets": {
+              "$ref": "#/$defs/runEnvFailOnUnreferencedConfigOrSecrets"
+            },
+            "trustedContributorsOnly": {
+              "$ref": "#/$defs/runEnvTrustedContributorsOnly"
+            },
+            "imageAutoUpdateProvider": {
+              "$ref": "#/$defs/runEnvImageAutoUpdateProvider"
+            },
+            "imageAutoUpdatePolicy": {
+              "$ref": "#/$defs/runEnvImageAutoUpdatePolicy"
+            },
+            "imageAutoUpdateTrigger": {
+              "$ref": "#/$defs/runEnvImageAutoUpdateTrigger"
+            },
+            "imageAutoUpdatePollSchedule": {
+              "$ref": "#/$defs/runEnvImageAutoUpdatePollSchedule"
+            },
+            "imageAutoUpdateFieldManagerStrategy": {
+              "$ref": "#/$defs/runEnvImageAutoUpdateFieldManagerStrategy"
+            },
+            "deployMode": {
+              "$ref": "#/$defs/runEnvDeployMode"
+            },
+            "checksumSecretsTiming": {
+              "$ref": "#/$defs/runEnvChecksumSecretsTiming"
+            },
+            "checksumLength": {
+              "$ref": "#/$defs/runEnvChecksumLength"
+            },
+            "checksumOrderFile": {
+              "$ref": "#/$defs/runEnvChecksumOrderFile"
+            },
+            "signoffsSubPath": {
+              "$ref": "#/$defs/runEnvSignoffsSubPath"
+            },
+            "signoffsKindsFile": {
+              "$ref": "#/$defs/runEnvSignoffsKindsFile"
+            },
+            "environmentDeploySourceBasePath": {
+              "$ref": "#/$defs/runEnvEnvironmentDeploySourceBasePath"
+            },
+            "generateIdealEnvironmentDeployManifests": {
+              "$ref": "#/$defs/runEnvGenerateIdealEnvironmentDeployManifests"
+            },
+            "environmentDeployBaseImage": {
+              "$ref": "#/$defs/runEnvEnvironmentDeployBaseImage"
+            },
+            "cleanUp": {
+              "$ref": "#/$defs/runPlatformCleanUp"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "required": [
+                  "deployMode"
+                ],
+                "properties": {
+                  "deployMode": {
+                    "const": "job"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "imageAutoUpdateProvider": {
+                    "enum": [
+                      "keelson",
+                      "none"
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "required": [
+                  "imageAutoUpdatePolicy"
+                ],
+                "properties": {
+                  "imageAutoUpdatePolicy": {
+                    "const": "force"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "imageAutoUpdateProvider"
+                ],
+                "properties": {
+                  "imageAutoUpdateProvider": {
+                    "const": "keel"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "required": [
+                  "generateIdealEnvironmentDeployManifests"
+                ],
+                "properties": {
+                  "generateIdealEnvironmentDeployManifests": {
+                    "enum": [
+                      false,
+                      "false"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "deployMode"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "imageAutoUpdateProvider"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "imageAutoUpdatePolicy"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "imageAutoUpdateTrigger"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "imageAutoUpdatePollSchedule"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "imageAutoUpdateFieldManagerStrategy"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
         },
         "changeSource": {
           "type": "object",
@@ -2287,6 +2714,516 @@
           }
         }
       }
+    },
+    "runEnvAllowLocalManifestsOverride": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string",
+          "pattern": "^(true|false)$"
+        }
+      ],
+      "description": "When true, manifests from the local src/kubernetes directory may override manifests contributed by referenced children (matched by file path), with a WARN log per override. When false (default), a local manifest at the same file path as any child-contributed manifest fails the build. The reserved lineage filename kaptain-environment-lineage-data.yaml (used by both env and run-platform builds) is checked separately and always fails on collision regardless of this flag.\n"
+    },
+    "runEnvFailOnUnreferencedConfigOrSecrets": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string",
+          "pattern": "^(true|false)$"
+        }
+      ],
+      "description": "When true (default), a value file under src/config or src/secrets that is not referenced by any token in the assembled manifest tree fails the build. When false, unreferenced values are tolerated and logged at WARN. Defaults are exempt - an unused default is a permitted fallback.\n"
+    },
+    "runEnvTrustedContributorsOnly": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string",
+          "pattern": "^(true|false)$"
+        }
+      ],
+      "description": "Master disable for the sensitive-resource sign-off check. When false (default) every sensitive resource (Ingress, RBAC, webhooks, routes, NetworkPolicy, ...) in the assembled tree must carry a checked-in sign-off or the build fails. When true the whole check is skipped - only appropriate when every contributor to every aggregated bundle is trusted. The skip is logged loudly as a master disable.\n"
+    },
+    "runEnvImageAutoUpdateProvider": {
+      "type": "string",
+      "enum": [
+        "keel",
+        "keelson",
+        "none"
+      ],
+      "description": "In-cluster controller that watches workload container images for new versions and applies updates. The selected provider's annotation scheme is injected onto the environment's own workload manifest. 'keelson' (default) uses Keelson. 'keel' uses Keel (deployment-mode only). 'none' opts out: no annotations are injected (with deployMode 'job' this is the manually triggered special cronjob).\nConstraint: when deployMode is 'job', this field, if set, must be 'keelson' or 'none' (Keel does not support job-mode deploys). When this field is absent, the build's default-fill stage supplies 'keelson' regardless of deployMode, so a project that wants job-mode can simply omit the provider.\n"
+    },
+    "runEnvImageAutoUpdatePolicy": {
+      "type": "string",
+      "enum": [
+        "patch",
+        "minor",
+        "major",
+        "all",
+        "force"
+      ],
+      "description": "Version-bump policy for the auto-update annotations injected onto the environment's own workload manifest. 'patch' (default) only auto-applies patch-level bumps. 'force' redeploys on every poll regardless of tag and is Keel-only (Keelson rejects it): the schema requires an explicitly selected imageAutoUpdateProvider of 'keel' to use it, and the build re-checks at generation time, belt and braces. Ignored when the provider is 'none'.\n"
+    },
+    "runEnvImageAutoUpdateTrigger": {
+      "type": "string",
+      "enum": [
+        "poll",
+        "default"
+      ],
+      "description": "How the auto-update provider notices new tags. 'poll' (default) polls the registry on the poll schedule. 'default' is the provider's event-driven mode (registry webhooks); Keelson currently treats it as poll. Ignored when the provider is 'none'.\n"
+    },
+    "runEnvImageAutoUpdatePollSchedule": {
+      "type": "string",
+      "pattern": "^[0-9]+[smh]$",
+      "description": "Poll cadence for the auto-update annotations as a plain duration (e.g. '1m', '300s', '1h'). Default '1m'. Stored normalized and rendered per provider at generation time: Keel takes '@every <duration>', Keelson takes a cron expression. Ignored when the provider is 'none'.\n"
+    },
+    "runEnvImageAutoUpdateFieldManagerStrategy": {
+      "type": "string",
+      "enum": [
+        "mimic",
+        "patch",
+        "claim"
+      ],
+      "description": "Keelson field-manager strategy annotation (keelson.pro/field-manager-strategy) stamped on the environment's workload manifest when the provider is 'keelson'. Default 'mimic' (SSA attributed to the detected Apply-op owner: no ownership churn). 'patch' and 'claim' attribute the write to keelson itself. Applies only to keelson; ignored for keel (no keel.sh equivalent exists) and for 'none'.\n"
+    },
+    "runEnvClusterScopedKindsFile": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "default": "default-1.1.txt",
+      "description": "File NAME (with version) of the cluster-scoped Kind list driving the clusterScopedDelegation=parent carve-out. Documents of these Kinds are moved out of the env deploy image's applyable manifests into the separate on-behalf dir for the run-platform parent. The name is resolved in the toolkit's fixed data directory src/data/cluster-scoped-kinds/ - the path is not configurable, so extensions of the toolkit can ship additional versioned lists there and projects select one by name. Data files are immutable once published: changes land as a new version, bad versions are removed, never edited. The selected file replaces the default list entirely (no merge). Ignored when clusterScopedDelegation=self.\n"
+    },
+    "runEnvClusterScopedDelegation": {
+      "type": "string",
+      "enum": [
+        "self",
+        "parent"
+      ],
+      "description": "Who applies the environment's cluster-scoped resources. This is also the deploy permission model - the two are one choice. 'self' (default): the env deploy holds cluster-admin (generated RBAC is a ClusterRoleBinding to cluster-admin) and applies everything itself, including cluster-scoped resources. 'parent': the env deploy holds namespace-admin only (generated RBAC is a RoleBinding to the built-in 'admin' ClusterRole in the env namespace) and its cluster-scoped resources are packaged into the separate on-behalf dir in the env image for the run-platform parent to apply, with field ownership as if the env applied them itself. When RBAC manifests are supplied rather than generated, the build validates the supplied role scope matches this setting (cluster-admin present means 'parent' is pointless and rejected; namespace-only roles mean cluster-scoped content requires 'parent').\n"
+    },
+    "runEnvDeployMode": {
+      "type": "string",
+      "enum": [
+        "deployment",
+        "job"
+      ],
+      "description": "Workload kind for the env's deploy image: 'deployment' (default, always-running reconciler) or 'job' (one-shot apply on schedule). Maps to the DEPLOY_MODE env var consumed by the deploy image at runtime.\nConstraint: 'job' requires imageAutoUpdateProvider 'keelson' or 'none' (manually triggered special cronjob). Keel does not support job-mode deploys. The schema rejects deployMode=job paired with an explicit provider of 'keel'; an absent provider is allowed and the build's default-fill stage supplies 'keelson'.\n'job' mode also generates a zero-scale Deployment of the same image alongside the suspended CronJob, so an operator can scale it to 1 to debug/explore/fix on the rare occasions that's needed.\n"
+    },
+    "runEnvChecksumSecretsTiming": {
+      "type": "string",
+      "enum": [
+        "build",
+        "deploy"
+      ],
+      "default": "build",
+      "description": "When the checksum suffix on Secret resource names is resolved. Both timings use the same leaf-to-workload-and-above ordering machinery and yield the same correctness; they trade off what triggers a rolling restart and when the manifest set's secret resource names are final.\n'build' (default) - the build hashes the combination of the encrypted-on-disk secret blobs and template content and substitutes the final name into the manifest set at build time. All resource names are final in the published environment definition image and environment manifest zip. Rotating the encryption key (re-encrypting the same plaintext with a new key) changes the encrypted bytes, so the secret name changes, so workloads referencing it get new names too and do rolling restarts. This is the safer default - the published manifest set is fully self-describing - at the cost of a rolling restart on key rotation even when the plaintext secret values are unchanged.\n'deploy' - the build leaves the checksum-suffix placeholder in the secret templates within the manifest set and the deploy image runs the same hashing and name-replacement pass at apply time, hashing the whole final secret manifest after all secret tokens have been replaced by their associated decrypted plaintext values. Key rotation no longer triggers a rolling restart (same plaintext = same hash). The cost is that the published manifest set has secrets with unresolved placeholder names - meaning the only place to know the final name of a given secret is to look in the cluster itself which contradicts the transparency ethos of the Kaptain project.\nApplies only to Secret resources. ConfigMaps, Jobs, RBAC resources, and any other checksum-suffixed types always hash at build time - Secrets are unique in having an encryption layer that the timing choice defers past.\n"
+    },
+    "runEnvChecksumLength": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 52,
+      "default": 5,
+      "description": "Length in Base32 characters of the checksum suffix that replaces the '-<kind>-checksum' marker on opted-in resource names. The suffix is a truncated Base32-encoded SHA-256 hash, so 52 is the hard upper bound (256 bits = 52 Base32 characters). The build warns below 4 (collision risk rises sharply) and above 12 (long suffixes hurt readability and push some names over the length limit). Applies to every checksummed kind, Secrets included.\nChanging this setting on a running full system changes every checksummed resource name, so the next deploy triggers a round of rolling updates across every workload that references a checksum-named resource.\n"
+    },
+    "runEnvChecksumOrderFile": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "default": "default-1.1.txt",
+      "description": "File NAME (with version) of the ordered-kinds list driving the resource-checksum pass. The name is resolved in the toolkit's fixed data directory src/data/resource-order/ - the path is not configurable, so extensions of the toolkit can ship additional versioned lists there and projects select one by name. Data files are immutable once published: changes land as a new version, bad versions are removed, never edited. The selected file replaces the default list entirely (no merge).\n"
+    },
+    "runEnvSignoffsSubPath": {
+      "type": "string",
+      "pattern": "^[^/].*[^/]$|^[^/]$",
+      "default": "src/signoffs",
+      "description": "Base path under the repo root holding the sensitive-resource signoff files. Each signoff mirrors its manifest's path within the assembled tree. See the sensitive-resource signoff gate in the finalise step.\n"
+    },
+    "runEnvSignoffsKindsFile": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "default": "default-1.1.txt",
+      "description": "File NAME (with version) of the sensitive-Kind list enforced by the signoff gate. The name is resolved in the toolkit's fixed data directory src/data/signoff-kinds/ - the path is not configurable, so extensions of the toolkit can ship additional versioned lists there and projects select one by name. Data files are immutable once published: changes land as a new version, bad versions are removed, never edited. The selected file replaces the default list entirely (no merge).\n"
+    },
+    "runEnvEnvironmentDeploySourceBasePath": {
+      "type": "string",
+      "pattern": "^[^/].*[^/]$|^[^/]$",
+      "default": "src/environment",
+      "description": "Base path under the repo root that holds the source tree for the env deploy image build - the manifests, config, defaults, configmap sources, and secret templates that produce the env's own deploy image (separate from the workload aggregate manifest set assembled from spec.contents).\nDefault 'src/environment'. Children resolve relative to this base: '<base>/kubernetes', '<base>/config', '<base>/defaults', '<base>/configmap', '<base>/secret.template'. Overriding this setting shifts the entire subtree in one move - individual child paths are not separately configurable.\nNo leading or trailing slash. Repo-root-relative only.\n"
+    },
+    "runEnvGenerateIdealEnvironmentDeployManifests": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string",
+          "pattern": "^(true|false)$"
+        }
+      ],
+      "default": true,
+      "description": "When true (default), the build generates the env deploy manifest set from the configured deployMode and imageAutoUpdateProvider using standard internal templates. When false, the user supplies the manifest set under <environmentDeploySourceBasePath>/kubernetes (or, in future, via a template-set selection). In that mode deployMode and imageAutoUpdateProvider MUST NOT be set since they only drive generation; the schema enforces this.\nenvironmentDeployBaseImage is unaffected and may still be set independently - it drives the Dockerfile FROM line of the env deploy image build, not the manifests.\n"
+    },
+    "runEnvImageDeployManifestsApplyMode": {
+      "type": "string",
+      "enum": [
+        "seed-and-compare",
+        "enforce-state-normally"
+      ],
+      "default": "seed-and-compare",
+      "description": "How a run-platform applies this environment's deploy-manifests set - the manifests that install and run this environment's deploy image.\n'seed-and-compare' (default) - the run-platform applies the set when it is absent. Thereafter it compares the manifests against what is in the cluster and changes things only when the config, secrets or other structural values differ; when it does, the image version tag used is the later of the manifests version and the in-cluster version, so an environment already upgraded past what was seeded is never rolled backwards. Suits an environment that will be upgraded directly after seeding, whether by its own image auto-update provider or by a deliberate out-of-band change.\n'enforce-state-normally' - the run-platform applies the set every run like any other resource, so the environment's deployer is continuously reconciled to what was shipped.\nEnvironment-only setting since run-platforms deploy themselves. When set to seed-and-compare the environment deploy manifest set is marked so the run-platform deployment can identify them for special treatment.\n"
+    },
+    "runEnvEnvironmentDeployBaseImage": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Components of the base OCI image used as FROM in the Dockerfile that builds the env deploy image. Composed at build time as '<registry>/[<namespace>/]image/image-environment-deploy-<family>:<version>'. The middle segment 'image/image-environment-deploy-' is fixed. Used only as the Dockerfile FROM line - never injected into any manifest, and unaffected by generateIdealEnvironmentDeployManifests.\nNamespace handling mirrors spec.main.docker's targetNamespace / targetIncludeNamespace pair: includeNamespace is the explicit registry-discriminator flag, defaulting true to match the namespace default having a value, and the two must always be resolvable together in one file.\nAll sub-fields are optional; the build's default-fill stage supplies any not set here.\n",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "includeNamespace": {
+                "const": false
+              }
+            },
+            "required": [
+              "includeNamespace"
+            ]
+          },
+          "then": {
+            "properties": {
+              "namespace": {
+                "const": ""
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "registry": {
+          "type": "string",
+          "description": "OCI registry host (and optional port). Default ships with the Kaptain release.\n"
+        },
+        "includeNamespace": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string",
+              "pattern": "^(true|false)$"
+            }
+          ],
+          "description": "Include the namespace segment in the composed base image reference. Default true. Set false for flat registry layouts: build-injected namespace defaults are disregarded, and a non-empty namespace alongside false is rejected by schema - in every variant, so a layer-contributed namespace must be overridden with an explicit namespace \"\" in the project file.\n"
+        },
+        "namespace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/registryNamespace"
+            },
+            {
+              "const": ""
+            }
+          ],
+          "description": "Namespace path segment. Supports nested paths, but no leading/trailing slashes. Empty string is treated as not configured.\n"
+        },
+        "family": {
+          "type": "string",
+          "description": "The '<family>' suffix that follows the fixed 'image-environment-deploy-' segment (for example 'trixie-slim'). Default ships with the Kaptain release.\n"
+        },
+        "version": {
+          "type": "string",
+          "description": "Tag of the base image. Default ships with the Kaptain release and is pinned to a known-good combination with this Kaptain version.\n"
+        }
+      }
+    },
+    "runEnvCleanUpPolicy": {
+      "type": "string",
+      "enum": [
+        "dryrun",
+        "enabled"
+      ],
+      "default": "dryrun",
+      "description": "Cleanup policy. Used as the master gate at cleanUp.policy, as the default for overseen namespaces at cleanUp.additionalNamespaces.defaultPolicy, as a per-namespace override, and for namespaces nobody declared at cleanUp.undeclaredNamespacePolicy.\n'dryrun' (default) - compute the candidate set, log every intended action with full detail (kind, name, why), exit 0, delete nothing. 'enabled' - the logged deletes happen.\nThe master gate is an absolute no-delete when dryrun: no setting beneath it can escalate past it, only match it or be more conservative.\nCandidate scope for the master gate: - Namespaced resources in the env's own ns (or the RP's managed\n\n  nses) - the namespace is ours, so undeclared resources within\n  are candidates.\n- Cluster-scoped resources (excluding Namespace itself) - require\n\n  ownership proof identifying THIS env, since a single cluster\n  can host multiple envs. Any one of: name prefix of environment\n  name, name suffix of environment name, environment-identifying\n  label (e.g. kaptain.org/environment carrying the env name),\n  environment-identifying annotation (same), or a\n  metadata.managedFields entry naming our field-manager. Any\n  single match is sufficient.\n- Namespace resources: only the RP creates and cleans them; an env\n\n  never touches them. Governed by undeclaredNamespacePolicy and\n  the per-namespace policies rather than by this gate alone.\n\nMatches in cleanUp.additionalResources are excluded from candidates regardless of mode.\n"
+    },
+    "runEnvResourceMatcher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "description": "Matches resources by kind plus either a name (exact or glob) or a label selector, exclusively one or the other.\nOne definition, used in three places: cleanUp.additionalResources (tolerated in namespaces we own), and the allowedResources / deniedResources lists of an overseen namespace. The rule is the same everywhere - authorised equals declared plus allowed - and an overseen namespace simply has an empty declared half.\nPick name for stable named infra (Services, ConfigMaps with known names). Pick labelSelector for controller-managed dynamics (kube-system Pods, operator-emitted resources, cert-manager and mesh-injected content) where names carry random suffixes but labels are stable.\n",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "not": {
+            "const": "Namespace"
+          },
+          "description": "K8s resource Kind (PascalCase, e.g. Pod, Service, ConfigMap).\nNamespace is rejected wherever this matcher is used. In additionalResources it would exempt something that was never a candidate, and inside an overseen namespace the Namespace object itself is never a candidate either. Namespaces are governed by undeclaredNamespacePolicy and by appearing in additionalNamespaces - never by a resource matcher.\n"
+        },
+        "name": {
+          "type": "string",
+          "description": "K8s resource name (DNS-1123) or glob pattern with * and ? wildcards. Examples: 'envoy-gateway-cert' (exact), 'cert-manager-*' (prefix), 'bootstrap-token-??????' (fixed width). Every resource of the kind is written as the match-all glob \"*\", which MUST be quoted - a bare * is a YAML alias indicator. There is no kind-only form: a matcher always states how it matches. Mutually exclusive with labelSelector.\n"
+        },
+        "labelSelector": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "matchLabels"
+          ],
+          "description": "K8s-style label match (matchLabels only - matchExpressions intentionally omitted). Mutually exclusive with name.\n",
+          "properties": {
+            "matchLabels": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Map of label key to required value. A resource must carry every key with the matching value to qualify - the listed labels AND together. Example: {k8s-app: kube-dns}.\n"
+            }
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "name"
+          ],
+          "not": {
+            "required": [
+              "labelSelector"
+            ]
+          }
+        },
+        {
+          "required": [
+            "labelSelector"
+          ],
+          "not": {
+            "required": [
+              "name"
+            ]
+          }
+        }
+      ]
+    },
+    "runEnvAccumulatingClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "description": "Retention rule for one accumulating resource class. The parameter field is required by exactly its own type and forbidden otherwise, so a stale threshold cannot be left behind after switching type.\n",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "none",
+            "all",
+            "age",
+            "count"
+          ],
+          "default": "none",
+          "description": "'none' (default) - no cleanup for this class; the build emits\n\n  no cleanup intent.\n'all' - clean every matching resource regardless of age.\n\n  Intended for dev clusters and CI fixture teardown; never\n  appropriate for production.\n'age' - clean resources older than the 'age' threshold. 'count' - keep only the N most recent (by creationTimestamp)\n\n  per series, where a series is the resources sharing a\n  kaptain.org/cleanup-series annotation value. Resources\n  without the annotation are not candidates under this type.\n"
+        },
+        "age": {
+          "type": "string",
+          "pattern": "^[0-9]+[smhdw]$",
+          "description": "Age threshold, required when type is 'age'. K8s-style single-unit duration: an integer followed by s, m, h, d or w. Examples: '30d', '6h', '90s'. Compound durations like '1h30m' are not supported - pick the largest meaningful unit.\n"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Per-series retention count, required when type is 'count'. Keep the N most recent by creationTimestamp within each series and delete the rest. Minimum 1 - to delete every resource in the series use type 'all'.\n"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "age"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "age"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "age"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "count"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "count"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "count"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "runEnvAccumulatingResources": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Retention rules for the resource classes that ACCUMULATE over time, which is why only these three are individually controlled: Jobs pile up per run, ConfigMaps and Secrets version up under checksum-suffixed names. Solid singular things - workloads, Services, namespaces - do not accumulate, so age and count are meaningless for them and they are governed by the master policy and the matcher lists instead.\nEvery class defaults to 'none', so omitting the block entirely means no per-class retention cleanup.\n",
+      "properties": {
+        "jobs": {
+          "$ref": "#/$defs/runEnvAccumulatingClass"
+        },
+        "configmaps": {
+          "$ref": "#/$defs/runEnvAccumulatingClass"
+        },
+        "secrets": {
+          "$ref": "#/$defs/runEnvAccumulatingClass"
+        }
+      }
+    },
+    "runEnvCleanUp": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Cleanup configuration for an environment build. One block so every setting inside sheds the prefix the block supplies.\n",
+      "properties": {
+        "policy": {
+          "$ref": "#/$defs/runEnvCleanUpPolicy"
+        },
+        "additionalResources": {
+          "type": "array",
+          "description": "Resources in our managed namespace(s) that we did not declare but expect to exist; preserved from cleanup. Typical sources: operator-injected sidecars (Envoy gateway proxy), controller-managed CMs and Secrets (cert-manager), sidecar/mesh injectors.\nLayer-composable: a layer can contribute entries that deep-merge with the project's own list. One layer per upstream tool is a sensible organisation pattern (e.g. layer-envoy-cleanup-exempts).\n",
+          "items": {
+            "$ref": "#/$defs/runEnvResourceMatcher"
+          }
+        },
+        "accumulatingResources": {
+          "$ref": "#/$defs/runEnvAccumulatingResources"
+        }
+      }
+    },
+    "runPlatformCleanUp": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Cleanup configuration for a run-platform build: the environment block plus namespace oversight, which is RP-only because only the RP creates and cleans namespaces.\n",
+      "properties": {
+        "policy": {
+          "$ref": "#/$defs/runEnvCleanUpPolicy"
+        },
+        "additionalResources": {
+          "type": "array",
+          "description": "As per the environment block - resources in our managed namespace(s) we did not declare but expect to exist.\n",
+          "items": {
+            "$ref": "#/$defs/runEnvResourceMatcher"
+          }
+        },
+        "accumulatingResources": {
+          "$ref": "#/$defs/runEnvAccumulatingResources"
+        },
+        "undeclaredNamespacePolicy": {
+          "$ref": "#/$defs/runEnvCleanUpPolicy"
+        },
+        "additionalNamespaces": {
+          "$ref": "#/$defs/runPlatformAdditionalNamespaces"
+        }
+      }
+    },
+    "runPlatformAdditionalNamespaces": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "namespaces"
+      ],
+      "description": "Namespaces this RP does not own or manage but oversees. Typical use case: keeping kube-system and similar factory or cloud-vendor namespaces under control by declaring what may live in them.\nDeliberately distinct from undeclaredNamespacePolicy, which sits alongside this block rather than inside it: 'declared' means shipped as a manifest in the image, so everything here is undeclared too, and that setting's scope is wider than this list.\nThe Namespace resource itself is never a candidate for any namespace named here - the RP oversees content, not existence. Listing a namespace with an empty deniedResources is therefore the way to protect a namespace while policing nothing inside it.\n",
+      "properties": {
+        "defaultPolicy": {
+          "$ref": "#/$defs/runEnvCleanUpPolicy"
+        },
+        "namespaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/runPlatformAdditionalNamespace"
+          }
+        }
+      }
+    },
+    "runPlatformAdditionalNamespace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "description": "One overseen namespace. Exactly one of allowedResources or deniedResources must be present - the entry states its posture, so a bare name (which would read as harmless registration while meaning 'delete everything in here') is not expressible.\nallowedResources is allow-list posture: only listed resources are authorised, anything else is a candidate. Suits a namespace whose inventory you intend to keep known.\ndeniedResources is deny-list posture: only listed resources are candidates, anything else is left alone. Suits a namespace whose inventory is somebody else's business and where you care about specific things that should not be there. An empty list means watch this namespace and police nothing in it.\n",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+          "description": "Exact K8s namespace name (DNS-1123). No glob patterns - additional namespaces are known, named entities (kube-system, default, etc.); listing them by pattern would be brittle.\n"
+        },
+        "policy": {
+          "$ref": "#/$defs/runEnvCleanUpPolicy"
+        },
+        "allowedResources": {
+          "type": "array",
+          "description": "Allow-list posture. Resources in this namespace not matched by any entry are unauthorised and become candidates under the effective policy. An empty list means the namespace must be strictly empty.\n",
+          "items": {
+            "$ref": "#/$defs/runEnvResourceMatcher"
+          }
+        },
+        "deniedResources": {
+          "type": "array",
+          "description": "Deny-list posture. Only resources matched by an entry are candidates; everything else is tolerated. An empty list means nothing here is a candidate.\n",
+          "items": {
+            "$ref": "#/$defs/runEnvResourceMatcher"
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "allowedResources"
+          ],
+          "not": {
+            "required": [
+              "deniedResources"
+            ]
+          }
+        },
+        {
+          "required": [
+            "deniedResources"
+          ],
+          "not": {
+            "required": [
+              "allowedResources"
+            ]
+          }
+        }
+      ]
     },
     "registryDomain": {
       "type": "string",

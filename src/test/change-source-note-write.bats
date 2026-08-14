@@ -74,6 +74,30 @@ create_note_test_repo() {
   [[ "$note" == *"merge-candidate-branch: updated-branch"* ]] || return 1
 }
 
+@test "skips when CHANGE_SOURCE_NOTE_ENABLED is false" {
+  create_note_test_repo
+  export CHANGE_SOURCE_NOTE_ENABLED="false"
+
+  run "$SCRIPTS_DIR/change-source-note-write"
+  [ "$status" -eq 0 ]
+  assert_output_contains "Change source notes disabled"
+
+  run git notes --ref=kaptain-change-source show HEAD
+  [ "$status" -ne 0 ]
+}
+
+@test "writes note when CHANGE_SOURCE_NOTE_ENABLED is true" {
+  create_note_test_repo
+  export CHANGE_SOURCE_NOTE_ENABLED="true"
+
+  run "$SCRIPTS_DIR/change-source-note-write"
+  [ "$status" -eq 0 ]
+
+  local note
+  note=$(git notes --ref=kaptain-change-source show HEAD)
+  [[ "$note" == *"merge-candidate-branch: feature-test-branch"* ]] || return 1
+}
+
 @test "succeeds when push fails" {
   create_note_test_repo
 

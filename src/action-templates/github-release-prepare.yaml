@@ -82,23 +82,29 @@ runs:
         CONFIG_VALUE_TRAILING_NEWLINE: ${{ inputs.config-value-trailing-newline }}
         TOKEN_SUBSTITUTION_PASSES: ${{ inputs.token-substitution-passes }}
         DOCKER_IMAGE_FULL_URI: ${{ inputs.docker-image-full-uri }}
-        TARGET_REGISTRY: ${{ inputs.docker-target-registry }}
-        TARGET_NAMESPACE: ${{ inputs.docker-target-namespace }}
+        DOCKER_TARGET_REGISTRY: ${{ inputs.docker-target-registry }}
+        DOCKER_TARGET_NAMESPACE: ${{ inputs.docker-target-namespace }}
         MANIFESTS_ZIP_FILE_NAME: ${{ inputs.manifests-zip-file-name }}
         UTIL_DIR: ${{ github.action_path }}/../../scripts/util
+        LIB_DIR: ${{ github.action_path }}/../../scripts/lib
+        DEFAULTS_DIR: ${{ github.action_path }}/../../scripts/defaults
       run: |
         set -euo pipefail
 
+        # Source the shared defaults rather than restating them here: the token
+        # settings and the DOCKER_TARGET_* to TARGET_* bridge are defined once,
+        # in the scripts every platform runs. No docker artefact is built here,
+        # so the target validation is skipped as documented.
+        # shellcheck source=src/scripts/lib/log.bash
+        source "${LIB_DIR}/log.bash"
+        # shellcheck source=src/scripts/defaults/tokens.bash
+        source "${DEFAULTS_DIR}/tokens.bash"
+        SKIP_DOCKER_TARGET_VALIDATION=true
+        # shellcheck source=src/scripts/defaults/docker-build.bash
+        source "${DEFAULTS_DIR}/docker-build.bash"
+
         # Apply defaults for inputs used directly in this script
         ADD_VERSION_TO_FILENAMES="${ADD_VERSION_TO_FILENAMES:-true}"
-
-        # Pass-through vars (called scripts default their own; these just satisfy set -u)
-        TOKEN_DELIMITER_STYLE="${TOKEN_DELIMITER_STYLE:-}"
-        TOKEN_NAME_STYLE="${TOKEN_NAME_STYLE:-}"
-        TOKEN_NAME_VALIDATION="${TOKEN_NAME_VALIDATION:-}"
-        CONFIG_SUB_PATH="${CONFIG_SUB_PATH:-}"
-        CONFIG_VALUE_TRAILING_NEWLINE="${CONFIG_VALUE_TRAILING_NEWLINE:-}"
-        TOKEN_SUBSTITUTION_PASSES="${TOKEN_SUBSTITUTION_PASSES:-}"
 
         # Fixed output subdirectory (shared knowledge with github-release action)
         RELEASE_OUTPUT_DIR="${OUTPUT_SUB_PATH}/github-release"
@@ -216,8 +222,8 @@ runs:
           DOCKER_TAG="${DOCKER_TAG}" \
           DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME}" \
           DOCKER_IMAGE_FULL_URI="${DOCKER_IMAGE_FULL_URI:-}" \
-          TARGET_REGISTRY="${TARGET_REGISTRY:-}" \
-          TARGET_NAMESPACE="${TARGET_NAMESPACE:-}" \
+          TARGET_REGISTRY="${TARGET_REGISTRY}" \
+          TARGET_NAMESPACE="${TARGET_NAMESPACE}" \
           MANIFESTS_ZIP_FILE_NAME="${MANIFESTS_ZIP_FILE_NAME:-}" \
             "${UTIL_DIR}/prepare-substitution-tokens"
         fi

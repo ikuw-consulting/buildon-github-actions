@@ -36,6 +36,22 @@ teardown() {
   assert_output_contains "Platform validated: linux/arm64"
 }
 
+@test "accepts linux/386" {
+  export DOCKER_PLATFORM="linux/386"
+
+  run "$SCRIPTS_DIR/docker-platform-setup"
+  [ "$status" -eq 0 ]
+  assert_output_contains "Platform validated: linux/386"
+}
+
+@test "rejects linux/386 combined with another platform" {
+  export DOCKER_PLATFORM="linux/386,linux/amd64"
+
+  run "$SCRIPTS_DIR/docker-platform-setup"
+  [ "$status" -ne 0 ]
+  assert_output_contains "Invalid DOCKER_PLATFORM value 'linux/386,linux/amd64'"
+}
+
 @test "accepts linux/amd64,linux/arm64" {
   export DOCKER_PLATFORM="linux/amd64,linux/arm64"
 
