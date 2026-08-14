@@ -11,8 +11,9 @@
 # Non-fatal: if the push fails (permissions, forks, etc.), warns and continues.
 #
 # Inputs (environment variables):
-#   CURRENT_BRANCH           - The branch being built
-#   MERGE_CANDIDATE_CREATOR  - Who created the merge candidate (optional)
+#   CURRENT_BRANCH              - The branch being built
+#   MERGE_CANDIDATE_CREATOR     - Who created the merge candidate (optional)
+#   CHANGE_SOURCE_NOTE_ENABLED  - Skip entirely when not true (default true)
 #
 set -euo pipefail
 
@@ -22,6 +23,8 @@ SCRIPT_DIR="$(dirname "${0}")"
 source "${SCRIPT_DIR}/../defaults/platform.bash"
 # shellcheck source=src/scripts/lib/log.bash
 source "${SCRIPT_DIR}/../lib/log.bash"
+# shellcheck source=src/scripts/defaults/change-source.bash
+source "${SCRIPT_DIR}/../defaults/change-source.bash"
 
 CURRENT_BRANCH="${CURRENT_BRANCH:?CURRENT_BRANCH is required}"
 MERGE_CANDIDATE_CREATOR="${MERGE_CANDIDATE_CREATOR:-}"
@@ -29,6 +32,11 @@ MERGE_CANDIDATE_CREATOR="${MERGE_CANDIDATE_CREATOR:-}"
 NOTES_REF="kaptain-change-source"
 
 main() {
+  if [[ "${CHANGE_SOURCE_NOTE_ENABLED}" != "true" ]]; then
+    log "Change source notes disabled"
+    return 0
+  fi
+
   log "=== Change Source Note Write ==="
   log "Branch: ${CURRENT_BRANCH}"
   log "Creator: ${MERGE_CANDIDATE_CREATOR:-<not set>}"

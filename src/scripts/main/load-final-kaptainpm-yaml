@@ -37,6 +37,8 @@ source "${SCRIPT_DIR}/../lib/log.bash"
 source "${SCRIPT_DIR}/../lib/output-var.bash"
 # shellcheck source=src/scripts/defaults/docker-target.bash
 source "${SCRIPT_DIR}/../defaults/docker-target.bash"
+# shellcheck source=src/scripts/defaults/change-source.bash
+source "${SCRIPT_DIR}/../defaults/change-source.bash"
 # shellcheck source=src/scripts/lib/kaptainpm-bool.bash
 source "${SCRIPT_DIR}/../lib/kaptainpm-bool.bash"
 
@@ -371,7 +373,7 @@ MAPPINGS=(
   "spec.main.manifests.templatesLayout:TEMPLATES_LAYOUT"
 
   # Change source
-  "spec.main.changeSource.noteEnabled:CHANGE_SOURCE_NOTE_ENABLED"
+  # Note: CHANGE_SOURCE_NOTE_ENABLED handled separately below (has default)
 
   # Vendor Helm Rendered
   "spec.main.vendorHelmRendered.repoUrl:VENDOR_HELM_RENDERED_REPO_URL"
@@ -628,5 +630,17 @@ else
 fi
 output_var "KUBERNETES_SECRET_TEMPLATE_SUB_PATH" "${secret_template_sub_path}" > /dev/null
 log "Field .spec.main.generators.secretTemplate.subPath = \"${secret_template_sub_path}\" exported as KUBERNETES_SECRET_TEMPLATE_SUB_PATH"
+
+# Read via kaptainpm_bool so an explicit bare boolean false survives, and fall
+# back to the shared default rather than a literal repeated here.
+change_source_note_enabled=$(kaptainpm_bool "${PM_FILE}" "spec.main.changeSource.noteEnabled" "")
+if [[ -z "${change_source_note_enabled}" ]]; then
+  change_source_note_enabled="${CHANGE_SOURCE_NOTE_ENABLED}"
+  log "Field .spec.main.changeSource.noteEnabled not set, defaulted to ${change_source_note_enabled} to allow wrapper optimisations."
+else
+  found_count=$((found_count + 1))
+fi
+output_var "CHANGE_SOURCE_NOTE_ENABLED" "${change_source_note_enabled}" > /dev/null
+log "Field .spec.main.changeSource.noteEnabled = \"${change_source_note_enabled}\" exported as CHANGE_SOURCE_NOTE_ENABLED"
 
 log "Loaded ${found_count} value(s) from KaptainPM.yaml"

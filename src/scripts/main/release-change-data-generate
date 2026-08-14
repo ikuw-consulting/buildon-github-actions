@@ -31,6 +31,8 @@ source "${SCRIPT_DIR}/../lib/log.bash"
 source "${SCRIPT_DIR}/../defaults/output-sub-path.bash"
 # shellcheck source=src/scripts/defaults/release-change-data.bash
 source "${SCRIPT_DIR}/../defaults/release-change-data.bash"
+# shellcheck source=src/scripts/defaults/change-source.bash
+source "${SCRIPT_DIR}/../defaults/change-source.bash"
 
 # shellcheck source=src/scripts/lib/output-var.bash
 source "${SCRIPT_DIR}/../lib/output-var.bash"
@@ -190,7 +192,7 @@ read_change_source_note() {
   CHANGE_SOURCE_NOTE_BRANCH=""
   CHANGE_SOURCE_NOTE_CREATOR=""
 
-  if [[ "${CHANGE_SOURCE_NOTE_ENABLED:-true}" == "false" ]]; then
+  if [[ "${CHANGE_SOURCE_NOTE_ENABLED}" != "true" ]]; then
     log "Change source notes disabled"
     return
   fi
