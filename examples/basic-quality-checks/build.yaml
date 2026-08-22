@@ -11,8 +11,6 @@
 name: Basic Quality Checks
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
 
@@ -20,6 +18,7 @@ jobs:
   build:
     uses: kube-kaptain/buildon-github-actions/.github/workflows/basic-quality-checks.yaml@1.1.53
     permissions:
+      contents: read
       checks: write
     # Override the default runner if needed:
     # with:
