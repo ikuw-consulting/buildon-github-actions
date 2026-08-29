@@ -1,26 +1,25 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.28/spec-kaptainpm-schema-final-1.28.yaml",
-  "name": "spec-kaptainpm-schema-final",
-  "version": "1.28",
+  "$id": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.29/spec-kaptainpm-schema-layerset-1.29.yaml",
+  "name": "spec-kaptainpm-schema",
+  "version": "1.29",
   "source": "https://github.com/kube-kaptain/spec-kaptainpm-schema",
   "latest": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/main/spec-kaptainpm-schema.yaml",
-  "tagged": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/1.28/spec-kaptainpm-schema.yaml",
-  "release": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.28/spec-kaptainpm-schema-final-1.28.yaml",
-  "validate-using": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.28/spec-kaptainpm-schema-final-1.28.json",
+  "tagged": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/1.29/spec-kaptainpm-schema.yaml",
+  "release": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.29/spec-kaptainpm-schema-layerset-1.29.yaml",
+  "validate-using": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.29/spec-kaptainpm-schema-layerset-1.29.json",
   "title": "KaptainPM",
-  "description": "Kaptain project manifest schema (version 1.28).\n",
+  "description": "Kaptain project manifest schema (version 1.29).\n",
   "type": "object",
   "required": [
-    "apiVersion",
-    "kind"
+    "apiVersion"
   ],
   "additionalProperties": false,
   "properties": {
     "apiVersion": {
       "type": "string",
       "pattern": "^kaptain\\.org/[0-9]+(\\.[0-9]+)*$",
-      "description": "API version - must be kaptain.org/ followed by the schema version (e.g. kaptain.org/1.2). Set via 1.28 token substitution at build time.\n"
+      "description": "API version - must be kaptain.org/ followed by the schema version (e.g. kaptain.org/1.2). Set via 1.29 token substitution at build time.\n"
     },
     "kind": {
       "type": "string",
@@ -29,7 +28,7 @@
     "metadata": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Project metadata including build traceability labels and annotations. When present, label and annotation values must be strings.\n",
+      "description": "Project metadata with required build traceability fields.",
       "properties": {
         "description": {
           "type": "string",
@@ -41,11 +40,11 @@
             "type": "string"
           },
           "description": "Queryable build metadata labels. All values must be strings.",
-          "properties": {
-            "kaptain.org/version": false,
-            "kaptain.org/project-name": false,
-            "kaptain.org/owner": false
-          }
+          "required": [
+            "kaptain.org/version",
+            "kaptain.org/project-name",
+            "kaptain.org/owner"
+          ]
         },
         "annotations": {
           "type": "object",
@@ -53,194 +52,33 @@
             "type": "string"
           },
           "description": "Informational build metadata annotations. All values must be strings.",
-          "properties": {
-            "kaptain.org/built-by": false,
-            "kaptain.org/source-repository": false,
-            "kaptain.org/image-uri": false
-          }
+          "required": [
+            "kaptain.org/built-by",
+            "kaptain.org/source-repository",
+            "kaptain.org/image-uri"
+          ]
         }
-      }
-    },
-    "user-data": {
-      "type": "object",
-      "description": "Free-form custom data for layer-provided tools. No enforced schema. Deep merged like any other map field - layers provide defaults, local overrides win.\n"
+      },
+      "required": [
+        "labels",
+        "annotations"
+      ]
     },
     "spec": {
       "type": "object",
       "additionalProperties": false,
       "description": "Build configuration",
       "properties": {
-        "credentials": {
-          "$ref": "#/$defs/credentials"
-        },
         "layers": {
-          "$ref": "#/$defs/artifactReferenceList",
+          "$ref": "#/$defs/artifactReferenceFixedList",
           "description": "Configuration layers applied before this project's settings. Deep-merged in order; local settings always win. Bootstrap registry logins must be in the project root file (needed before layer resolution). Additional logins declared in layers are applied in a second login phase post-merge.\n"
-        },
-        "templates": {
-          "$ref": "#/$defs/artifactReferenceList",
-          "description": "Manifest template sets pulled in and token-substituted to become this project's own manifest output. Replaces generators or hand-written manifests.\n"
-        },
-        "contents": {
-          "$ref": "#/$defs/artifactReferenceList",
-          "description": "Finished manifest artifacts from other projects bundled into this deliverable. Front and centre in product/environment builds.\n"
-        },
-        "data": {
-          "$ref": "#/$defs/specData"
-        },
-        "global": {
-          "$ref": "#/$defs/specGlobal"
-        },
-        "main": {
-          "$ref": "#/$defs/specMain"
-        },
-        "platform": {
-          "$ref": "#/$defs/specPlatform"
         }
-      }
+      },
+      "required": [
+        "layers"
+      ]
     }
   },
-  "allOf": [
-    {
-      "$comment": "builtin-mode-guard",
-      "if": {
-        "required": [
-          "kind"
-        ],
-        "properties": {
-          "kind": {
-            "not": {
-              "enum": [
-                "kubernetes-app-manifests-only",
-                "kubernetes-bundle-resources",
-                "kubernetes-bundle-vendor-helm-rendered"
-              ]
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "spec": {
-            "properties": {
-              "global": {
-                "properties": {
-                  "tokens": {
-                    "properties": {
-                      "builtinMode": {
-                        "const": "standard"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "required": [
-          "kind"
-        ],
-        "properties": {
-          "kind": {
-            "const": "kubernetes-run-environment"
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "spec": {
-            "properties": {
-              "main": {
-                "required": [
-                  "environment"
-                ],
-                "not": {
-                  "required": [
-                    "runPlatform"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "required": [
-          "kind"
-        ],
-        "properties": {
-          "kind": {
-            "const": "kubernetes-run-platform-meta-environment"
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "spec": {
-            "properties": {
-              "main": {
-                "required": [
-                  "runPlatform"
-                ],
-                "not": {
-                  "required": [
-                    "environment"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "required": [
-          "kind"
-        ],
-        "not": {
-          "properties": {
-            "kind": {
-              "enum": [
-                "kubernetes-run-environment",
-                "kubernetes-run-platform-meta-environment"
-              ]
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "spec": {
-            "properties": {
-              "main": {
-                "not": {
-                  "anyOf": [
-                    {
-                      "required": [
-                        "environment"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "runPlatform"
-                      ]
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  ],
   "$defs": {
     "layerPayload": {
       "type": "array",
@@ -658,6 +496,16 @@
                 "verbatimFiles": {
                   "type": "string",
                   "description": "Comma-separated files to attach to the release as-is"
+                },
+                "consumerReferenceForms": {
+                  "type": "string",
+                  "enum": [
+                    "short-only",
+                    "short-first",
+                    "full-first",
+                    "full-only"
+                  ],
+                  "description": "Which references the \"How to Consume\" section of the release notes shows, and in which order. Four values:\n\n  short-only   org-local reference alone (default)\n  short-first  both, org-local reference first\n  full-first   both, fully qualified reference first\n  full-only    fully qualified reference alone\nThe short form resolves against the consumer's own registry and namespace defaults, so it only reaches this org. The full form carries registry, namespace, prefix and name, and works from any org, registry or platform. Private in-house projects want the default; open source projects want full-first; vendor packages consumed only from other orgs want full-only.\n"
                 }
               }
             }
@@ -1173,11 +1021,13 @@
                     },
                     "tolerations": {
                       "type": "string",
-                      "description": "Pod tolerations (scripts read KaptainPM.yaml directly for complex values)"
+                      "pattern": "^\\[.*\\]$",
+                      "description": "Pod tolerations as a JSON array, e.g. [{\"operator\":\"Exists\"}]"
                     },
                     "nodeSelector": {
                       "type": "string",
-                      "description": "Node selector (scripts read KaptainPM.yaml directly for complex values)"
+                      "pattern": "^[^=,]+=[^,]*(,[^=,]+=[^,]*)*$",
+                      "description": "Node selector as comma-separated key=value pairs, e.g. disktype=ssd,zone=us-east-1a"
                     },
                     "dnsPolicy": {
                       "type": "string",
@@ -1441,11 +1291,13 @@
                 },
                 "tolerations": {
                   "type": "string",
-                  "description": "Pod tolerations"
+                  "pattern": "^\\[.*\\]$",
+                  "description": "Pod tolerations as a JSON array, e.g. [{\"operator\":\"Exists\"}]"
                 },
                 "nodeSelector": {
                   "type": "string",
-                  "description": "Node selector"
+                  "pattern": "^[^=,]+=[^,]*(,[^=,]+=[^,]*)*$",
+                  "description": "Node selector as comma-separated key=value pairs, e.g. disktype=ssd,zone=us-east-1a"
                 }
               }
             },
