@@ -71,14 +71,24 @@ mode="${1:-}"
 
 case "${mode}" in
   consume)
-    [[ $# -eq 5 ]] || usage_error "consume requires exactly 4 arguments after the mode, got $(($# - 1))"
+    [[ $# -eq 5 || $# -eq 6 ]] || usage_error "consume requires 4 or 5 arguments after the mode, got $(($# - 1))"
     project_name="$2"
     version="$3"
     registry="$4"
     namespace="$5"
+    forms="${6:-}"
     [[ -n "${project_name}" ]] || usage_error "consume: project-name is required"
     [[ -n "${version}" ]] || usage_error "consume: version is required"
     [[ -n "${registry}" ]] || usage_error "consume: registry is required"
+
+    # Empty means the project never declared consumerReferenceForms, so the
+    # schema default applies. Kept here rather than in the mapping so the
+    # default lives in exactly one place.
+    forms="${forms:-short-only}"
+    case "${forms}" in
+      short-only|short-first|full-first|full-only) ;;
+      *) usage_error "consume: unknown forms value '${forms}' - must be short-only, short-first, full-first or full-only" ;;
+    esac
 
     # Expand through the resolver's own code so what we advertise is exactly
     # what a consumer's reference resolves to, prefix path segment included.
@@ -86,15 +96,50 @@ case "${mode}" in
     DOCKER_TARGET_REGISTRY="${registry}"
     DOCKER_TARGET_NAMESPACE="${namespace}"
     docker_ref_expand "${project_name}:[${version}]" || exit 1
-    long_form="${DOCKER_REF_FULL_NAME}"
+
+    short_reference="${project_name}:[${version}]"
+    full_reference="${DOCKER_REF_FULL_NAME}:[${version}]"
+
+    # Short form resolves against the consumer's own target pair.
+    short_label="From any project using \`${registry}${namespace:+/${namespace}}\`"
+    full_label="From any org, registry or platform"
+
+    # Range example. The lower bound is this exact version because the bracket
+    # is inclusive; the upper is the next major with the same part count, so
+    # 1.0.7 -> [1.0.7,2.0.0), 2.4 -> [2.4,3.0), 5 -> [5,6).
+    range_version="${version#v}"
+    range_version="${range_version%%-*}"
+    range_numeric=true
+    IFS='.' read -ra range_parts <<< "${range_version}"
+    for range_part in "${range_parts[@]}"; do
+      [[ "${range_part}" =~ ^[0-9]+$ ]] || range_numeric=false
+    done
+    if [[ "${range_numeric}" == "true" ]]; then
+      range_upper=$((range_parts[0] + 1))
+      for ((range_index = 1; range_index < ${#range_parts[@]}; range_index++)); do
+        range_upper="${range_upper}.0"
+      done
+      range_example="[${range_version},${range_upper})"
+    else
+      range_example="[1.0,2.0)"
+    fi
 
     echo ""
     echo "### How to Consume"
+    case "${forms}" in
+      short-only) emit_reference "" "${short_reference}" ;;
+      full-only)  emit_reference "" "${full_reference}" ;;
+      short-first)
+        emit_reference "${short_label}" "${short_reference}"
+        emit_reference "${full_label}" "${full_reference}"
+        ;;
+      full-first)
+        emit_reference "${full_label}" "${full_reference}"
+        emit_reference "${short_label}" "${short_reference}"
+        ;;
+    esac
     echo ""
-    echo "* \`${project_name}:[${version}]\` - same org, registry, and namespace"
-    echo "* \`${long_form}:[${version}]\` - from a different org or overridden namespace or registry"
-    echo ""
-    echo "Optionally use a range instead of the locked version above."
+    echo "The brackets pin that exact version. A range such as \`${range_example}\` works in the same place but results in a slower and less secure build."
     ;;
 
   list)

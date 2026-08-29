@@ -2191,6 +2191,7 @@ jobs:
           OUTPUT_SUB_PATH: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
           TARGET_REGISTRY: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
           TARGET_NAMESPACE: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+          CONSUMER_REFERENCE_FORMS: ${{ steps.kpm.outputs.GITHUB_RELEASE_CONSUMER_REFERENCE_FORMS }}
           TEMPLATES_LIST_FILE: ${{ steps.templates-import.outputs.templates-list-file }}
           CONTENTS_LIST_FILE: ${{ steps.product-aggregate.outputs.product-contents-file }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
@@ -2215,7 +2216,7 @@ jobs:
             {
               echo "notes<<NOTES_EOF"
               echo "Automatic Kube Manifests release for version ${VERSION} of ${PROJECT_NAME} by Kaptain build script. This release page has the manifest zip attached as well as the manifests docker image with the same zip inside for automatic consumption."
-              ./.github/buildon-github-actions/src/scripts/util/format-release-sections consume "${PROJECT_NAME}" "${VERSION}" "${TARGET_REGISTRY}" "${TARGET_NAMESPACE}"
+              ./.github/buildon-github-actions/src/scripts/util/format-release-sections consume "${PROJECT_NAME}" "${VERSION}" "${TARGET_REGISTRY}" "${TARGET_NAMESPACE}" "${CONSUMER_REFERENCE_FORMS}"
               ./.github/buildon-github-actions/src/scripts/util/format-release-sections list "Templates that contributed" "${TEMPLATES_LIST_FILE}"
               ./.github/buildon-github-actions/src/scripts/util/format-release-sections list "Contents" "${CONTENTS_LIST_FILE}"
               echo ""

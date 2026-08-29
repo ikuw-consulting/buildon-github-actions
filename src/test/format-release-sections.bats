@@ -23,49 +23,156 @@ teardown() {
 # consume
 # =============================================================================
 
-@test "consume: emits short and long forms with descriptions and range note" {
-  run "$FRS" consume "keelson" "1.8.4" "ghcr.io" "keelson-pro"
+@test "consume: short-first emits both references, org-local first" {
+  run "$FRS" consume "keelson" "1.8.4" "ghcr.io" "keelson-pro" short-first
   [ "$status" -eq 0 ]
 
   expected='
 ### How to Consume
 
-* `keelson:[1.8.4]` - same org, registry, and namespace
-* `ghcr.io/keelson-pro/keelson/keelson:[1.8.4]` - from a different org or overridden namespace or registry
+**From any project using `ghcr.io/keelson-pro`**
 
-Optionally use a range instead of the locked version above.'
+```
+keelson:[1.8.4]
+```
+
+**From any org, registry or platform**
+
+```
+ghcr.io/keelson-pro/keelson/keelson:[1.8.4]
+```
+
+The brackets pin that exact version. A range such as `[1.8.4,2.0.0)` works in the same place but results in a slower and less secure build.'
   [ "$output" = "$expected" ]
 }
 
-@test "consume: empty namespace collapses to registry/prefix/name" {
-  run "$FRS" consume "layer-foo" "1.3.2" "ghcr.io" ""
+@test "consume: full-first emits both references, fully qualified first" {
+  run "$FRS" consume "keelson" "1.8.4" "ghcr.io" "keelson-pro" full-first
   [ "$status" -eq 0 ]
-  [[ "$output" == *'`ghcr.io/layer/layer-foo:[1.3.2]`'* ]]
+
+  expected='
+### How to Consume
+
+**From any org, registry or platform**
+
+```
+ghcr.io/keelson-pro/keelson/keelson:[1.8.4]
+```
+
+**From any project using `ghcr.io/keelson-pro`**
+
+```
+keelson:[1.8.4]
+```
+
+The brackets pin that exact version. A range such as `[1.8.4,2.0.0)` works in the same place but results in a slower and less secure build.'
+  [ "$output" = "$expected" ]
 }
 
-@test "consume: long form validates as a full reference" {
-  run "$FRS" consume "quality-strict" "1.0.7" "ghcr.io" "kube-kaptain"
+@test "consume: short-only emits one unlabelled reference" {
+  run "$FRS" consume "keelson" "1.8.4" "ghcr.io" "keelson-pro" short-only
   [ "$status" -eq 0 ]
 
-  # Pull the long form back out of the notes and feed it to the resolver's
+  expected='
+### How to Consume
+
+```
+keelson:[1.8.4]
+```
+
+The brackets pin that exact version. A range such as `[1.8.4,2.0.0)` works in the same place but results in a slower and less secure build.'
+  [ "$output" = "$expected" ]
+}
+
+@test "consume: full-only emits one unlabelled reference" {
+  run "$FRS" consume "keelson" "1.8.4" "ghcr.io" "keelson-pro" full-only
+  [ "$status" -eq 0 ]
+
+  expected='
+### How to Consume
+
+```
+ghcr.io/keelson-pro/keelson/keelson:[1.8.4]
+```
+
+The brackets pin that exact version. A range such as `[1.8.4,2.0.0)` works in the same place but results in a slower and less secure build.'
+  [ "$output" = "$expected" ]
+}
+
+@test "consume: forms defaults to short-only when omitted" {
+  run "$FRS" consume "keelson" "1.8.4" "ghcr.io" "keelson-pro"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'keelson:[1.8.4]'* ]]
+  [[ "$output" != *"ghcr.io"* ]]
+  [[ "$output" != *"**"* ]]
+}
+
+@test "consume: forms defaults to short-only when passed empty" {
+  run "$FRS" consume "keelson" "1.8.4" "ghcr.io" "keelson-pro" ""
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"ghcr.io"* ]]
+}
+
+@test "consume: empty namespace drops the slash from the label" {
+  run "$FRS" consume "layer-foo" "1.3.2" "ghcr.io" "" short-first
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'**From any project using `ghcr.io`**'* ]]
+  [[ "$output" != *'`ghcr.io/`'* ]]
+  [[ "$output" == *'ghcr.io/layer/layer-foo:[1.3.2]'* ]]
+}
+
+@test "consume: range upper bound is next major with the same part count" {
+  run "$FRS" consume "keelson" "5" "ghcr.io" "keelson-pro"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'`[5,6)`'* ]]
+
+  run "$FRS" consume "keelson" "2.4" "ghcr.io" "keelson-pro"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'`[2.4,3.0)`'* ]]
+
+  run "$FRS" consume "keelson" "1.2.3.4" "ghcr.io" "keelson-pro"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'`[1.2.3.4,2.0.0.0)`'* ]]
+
+  run "$FRS" consume "keelson" "10.9.9" "ghcr.io" "keelson-pro"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'`[10.9.9,11.0.0)`'* ]]
+}
+
+@test "consume: full reference validates as a full reference" {
+  run "$FRS" consume "quality-strict" "1.0.7" "ghcr.io" "kube-kaptain" full-only
+  [ "$status" -eq 0 ]
+
+  # Pull the reference back out of the notes and feed it to the resolver's
   # parser as a consumer would. The pre-fix output dropped the prefix path
   # segment and failed this validation outright.
-  long_form=$(echo "$output" | sed -n 's/^\* `\(ghcr\.io[^`]*\)`.*/\1/p')
-  [ "$long_form" = 'ghcr.io/kube-kaptain/quality/quality-strict:[1.0.7]' ]
+  full_reference=$(echo "$output" | grep '^ghcr\.io')
+  [ "$full_reference" = 'ghcr.io/kube-kaptain/quality/quality-strict:[1.0.7]' ]
 
   run bash -c "
     source '$PROJECT_ROOT/src/scripts/defaults/platform.bash'
     source '$LIB_DIR/log.bash'
     source '$LIB_DIR/docker-ref-expand.bash'
-    docker_ref_expand '${long_form%:*}:1.0.7'
+    docker_ref_expand '${full_reference%:*}:1.0.7'
     echo \"\${DOCKER_REF_FORM} \${DOCKER_REF_FULL_NAME}\"
   "
   [ "$status" -eq 0 ]
   [[ "$output" == *'full ghcr.io/kube-kaptain/quality/quality-strict'* ]]
 }
 
+@test "consume: fails on unknown forms value" {
+  run "$FRS" consume "keelson" "1.8.4" "ghcr.io" "keelson-pro" both
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"unknown forms value 'both'"* ]]
+}
+
 @test "consume: fails on missing arguments" {
   run "$FRS" consume "keelson" "1.8.4" "ghcr.io"
+  [ "$status" -ne 0 ]
+}
+
+@test "consume: fails on too many arguments" {
+  run "$FRS" consume "keelson" "1.8.4" "ghcr.io" "keelson-pro" short-first extra
   [ "$status" -ne 0 ]
 }
 

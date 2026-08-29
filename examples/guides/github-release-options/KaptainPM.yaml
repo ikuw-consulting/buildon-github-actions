@@ -13,3 +13,8 @@ spec:
         verbatimFiles: CHANGELOG.md,LICENSE
         notes: ''
         addVersionToFilenames: true
+        # Which references the "How to Consume" section shows, and in what
+        # order. Defaults to short-only, which suits private in-house work.
+        # Open source projects want full-first; vendor packages consumed only
+        # from other orgs want full-only.
+        consumerReferenceForms: full-first

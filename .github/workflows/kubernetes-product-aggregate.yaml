@@ -1936,6 +1936,7 @@ jobs:
           OUTPUT_SUB_PATH: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
           TARGET_REGISTRY: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
           TARGET_NAMESPACE: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+          CONSUMER_REFERENCE_FORMS: ${{ steps.kpm.outputs.GITHUB_RELEASE_CONSUMER_REFERENCE_FORMS }}
           PRODUCT_CONTENTS_FILE: ${{ steps.product-aggregate.outputs.product-contents-file }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -1959,7 +1960,7 @@ jobs:
             {
               echo "notes<<NOTES_EOF"
               echo "Automatic Kube Product release for version ${VERSION} of ${PROJECT_NAME} by Kaptain build script. This release page has the manifests zip (with every bundle's manifests nested under the product) and the contract zip attached, alongside the manifests docker image with both inside for automatic consumption."
-              ./.github/buildon-github-actions/src/scripts/util/format-release-sections consume "${PROJECT_NAME}" "${VERSION}" "${TARGET_REGISTRY}" "${TARGET_NAMESPACE}"
+              ./.github/buildon-github-actions/src/scripts/util/format-release-sections consume "${PROJECT_NAME}" "${VERSION}" "${TARGET_REGISTRY}" "${TARGET_NAMESPACE}" "${CONSUMER_REFERENCE_FORMS}"
               ./.github/buildon-github-actions/src/scripts/util/format-release-sections list "Contents" "${PRODUCT_CONTENTS_FILE}"
               echo ""
               echo "### Release Assets"
