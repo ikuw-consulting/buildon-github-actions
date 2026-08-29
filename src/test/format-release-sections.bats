@@ -24,7 +24,7 @@ teardown() {
 # =============================================================================
 
 @test "consume: emits short and long forms with descriptions and range note" {
-  run "$FRS" consume "keelson" "1.8.4" "ghcr.io" "keelson-pro/keelson"
+  run "$FRS" consume "keelson" "1.8.4" "ghcr.io" "keelson-pro"
   [ "$status" -eq 0 ]
 
   expected='
@@ -37,10 +37,31 @@ Optionally use a range instead of the locked version above.'
   [ "$output" = "$expected" ]
 }
 
-@test "consume: empty namespace collapses to registry/name" {
+@test "consume: empty namespace collapses to registry/prefix/name" {
   run "$FRS" consume "layer-foo" "1.3.2" "ghcr.io" ""
   [ "$status" -eq 0 ]
-  [[ "$output" == *'`ghcr.io/layer-foo:[1.3.2]`'* ]]
+  [[ "$output" == *'`ghcr.io/layer/layer-foo:[1.3.2]`'* ]]
+}
+
+@test "consume: long form validates as a full reference" {
+  run "$FRS" consume "quality-strict" "1.0.7" "ghcr.io" "kube-kaptain"
+  [ "$status" -eq 0 ]
+
+  # Pull the long form back out of the notes and feed it to the resolver's
+  # parser as a consumer would. The pre-fix output dropped the prefix path
+  # segment and failed this validation outright.
+  long_form=$(echo "$output" | sed -n 's/^\* `\(ghcr\.io[^`]*\)`.*/\1/p')
+  [ "$long_form" = 'ghcr.io/kube-kaptain/quality/quality-strict:[1.0.7]' ]
+
+  run bash -c "
+    source '$PROJECT_ROOT/src/scripts/defaults/platform.bash'
+    source '$LIB_DIR/log.bash'
+    source '$LIB_DIR/docker-ref-expand.bash'
+    docker_ref_expand '${long_form%:*}:1.0.7'
+    echo \"\${DOCKER_REF_FORM} \${DOCKER_REF_FULL_NAME}\"
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'full ghcr.io/kube-kaptain/quality/quality-strict'* ]]
 }
 
 @test "consume: fails on missing arguments" {

@@ -13,8 +13,8 @@
 # Usage:
 #   format-release-sections consume <project-name> <version> <registry> <namespace>
 #     Emits the "How to Consume" section: exact-pinned short form (same org,
-#     registry and namespace) and fully-qualified long form, one per line with
-#     the description after each entry.
+#     registry and namespace) and the fully qualified long form including the
+#     prefix path segment, one per line with the description after each entry.
 #
 #   format-release-sections list <heading> <list-file>
 #     Emits "### <heading>" followed by the file's contents (already-formatted
@@ -33,6 +33,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../defaults/platform.bash"
 # shellcheck source=src/scripts/lib/log.bash
 source "${SCRIPT_DIR}/../lib/log.bash"
+# shellcheck source=src/scripts/lib/docker-ref-expand.bash
+source "${SCRIPT_DIR}/../lib/docker-ref-expand.bash"
 
 usage_error() {
   log_error "$1"
@@ -54,8 +56,13 @@ case "${mode}" in
     [[ -n "${version}" ]] || usage_error "consume: version is required"
     [[ -n "${registry}" ]] || usage_error "consume: registry is required"
 
+    # Expand through the resolver's own code so what we advertise is exactly
+    # what a consumer's reference resolves to, prefix path segment included.
     # Namespace may legitimately be empty (registry-root images).
-    long_form="${registry}/${namespace:+${namespace}/}${project_name}"
+    DOCKER_TARGET_REGISTRY="${registry}"
+    DOCKER_TARGET_NAMESPACE="${namespace}"
+    docker_ref_expand "${project_name}:[${version}]" || exit 1
+    long_form="${DOCKER_REF_FULL_NAME}"
 
     echo ""
     echo "### How to Consume"
