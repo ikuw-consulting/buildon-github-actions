@@ -412,6 +412,9 @@ MAPPINGS=(
   "spec.platform.githubActions.release.notesFile:GITHUB_RELEASE_NOTES_FILE"
   "spec.platform.githubActions.release.substitutedFiles:GITHUB_RELEASE_SUBSTITUTED_FILES"
   "spec.platform.githubActions.release.verbatimFiles:GITHUB_RELEASE_VERBATIM_FILES"
+  # Absent means empty here; format-release-sections owns the short-only default
+  # so it lives in exactly one place.
+  "spec.platform.githubActions.release.consumerReferenceForms:GITHUB_RELEASE_CONSUMER_REFERENCE_FORMS"
 )
 
 log ""

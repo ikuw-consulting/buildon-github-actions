@@ -1,15 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.28/spec-kaptainpm-schema-layer-1.28.yaml",
+  "$id": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.29/spec-kaptainpm-schema-layer-source-1.29.yaml",
   "name": "spec-kaptainpm-schema",
-  "version": "1.28",
+  "version": "1.29",
   "source": "https://github.com/kube-kaptain/spec-kaptainpm-schema",
   "latest": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/main/spec-kaptainpm-schema.yaml",
-  "tagged": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/1.28/spec-kaptainpm-schema.yaml",
-  "release": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.28/spec-kaptainpm-schema-layer-1.28.yaml",
-  "validate-using": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.28/spec-kaptainpm-schema-layer-1.28.json",
+  "tagged": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/1.29/spec-kaptainpm-schema.yaml",
+  "release": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.29/spec-kaptainpm-schema-layer-source-1.29.yaml",
+  "validate-using": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.29/spec-kaptainpm-schema-layer-source-1.29.json",
   "title": "KaptainPM",
-  "description": "Kaptain project manifest schema (version 1.28).\n",
+  "description": "Kaptain project manifest schema (version 1.29).\n",
   "type": "object",
   "required": [
     "apiVersion"
@@ -19,7 +19,7 @@
     "apiVersion": {
       "type": "string",
       "pattern": "^kaptain\\.org/[0-9]+(\\.[0-9]+)*$",
-      "description": "API version - must be kaptain.org/ followed by the schema version (e.g. kaptain.org/1.2). Set via 1.28 token substitution at build time.\n"
+      "description": "API version - must be kaptain.org/ followed by the schema version (e.g. kaptain.org/1.2). Set via 1.29 token substitution at build time.\n"
     },
     "kind": {
       "type": "string",
@@ -28,7 +28,7 @@
     "metadata": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Project metadata with required build traceability fields.",
+      "description": "Project metadata including build traceability labels and annotations. When present, label and annotation values must be strings.\n",
       "properties": {
         "description": {
           "type": "string",
@@ -39,30 +39,16 @@
           "additionalProperties": {
             "type": "string"
           },
-          "description": "Queryable build metadata labels. All values must be strings.",
-          "required": [
-            "kaptain.org/version",
-            "kaptain.org/project-name",
-            "kaptain.org/owner"
-          ]
+          "description": "Queryable build metadata labels. All values must be strings."
         },
         "annotations": {
           "type": "object",
           "additionalProperties": {
             "type": "string"
           },
-          "description": "Informational build metadata annotations. All values must be strings.",
-          "required": [
-            "kaptain.org/built-by",
-            "kaptain.org/source-repository",
-            "kaptain.org/image-uri"
-          ]
+          "description": "Informational build metadata annotations. All values must be strings."
         }
-      },
-      "required": [
-        "labels",
-        "annotations"
-      ]
+      }
     },
     "user-data": {
       "type": "object",
@@ -575,6 +561,16 @@
                 "verbatimFiles": {
                   "type": "string",
                   "description": "Comma-separated files to attach to the release as-is"
+                },
+                "consumerReferenceForms": {
+                  "type": "string",
+                  "enum": [
+                    "short-only",
+                    "short-first",
+                    "full-first",
+                    "full-only"
+                  ],
+                  "description": "Which references the \"How to Consume\" section of the release notes shows, and in which order. Four values:\n\n  short-only   org-local reference alone (default)\n  short-first  both, org-local reference first\n  full-first   both, fully qualified reference first\n  full-only    fully qualified reference alone\nThe short form resolves against the consumer's own registry and namespace defaults, so it only reaches this org. The full form carries registry, namespace, prefix and name, and works from any org, registry or platform. Private in-house projects want the default; open source projects want full-first; vendor packages consumed only from other orgs want full-only.\n"
                 }
               }
             }
@@ -1090,11 +1086,13 @@
                     },
                     "tolerations": {
                       "type": "string",
-                      "description": "Pod tolerations (scripts read KaptainPM.yaml directly for complex values)"
+                      "pattern": "^\\[.*\\]$",
+                      "description": "Pod tolerations as a JSON array, e.g. [{\"operator\":\"Exists\"}]"
                     },
                     "nodeSelector": {
                       "type": "string",
-                      "description": "Node selector (scripts read KaptainPM.yaml directly for complex values)"
+                      "pattern": "^[^=,]+=[^,]*(,[^=,]+=[^,]*)*$",
+                      "description": "Node selector as comma-separated key=value pairs, e.g. disktype=ssd,zone=us-east-1a"
                     },
                     "dnsPolicy": {
                       "type": "string",
@@ -1358,11 +1356,13 @@
                 },
                 "tolerations": {
                   "type": "string",
-                  "description": "Pod tolerations"
+                  "pattern": "^\\[.*\\]$",
+                  "description": "Pod tolerations as a JSON array, e.g. [{\"operator\":\"Exists\"}]"
                 },
                 "nodeSelector": {
                   "type": "string",
-                  "description": "Node selector"
+                  "pattern": "^[^=,]+=[^,]*(,[^=,]+=[^,]*)*$",
+                  "description": "Node selector as comma-separated key=value pairs, e.g. disktype=ssd,zone=us-east-1a"
                 }
               }
             },

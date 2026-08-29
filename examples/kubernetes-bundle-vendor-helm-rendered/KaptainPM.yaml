@@ -2,7 +2,7 @@
 # This example is released to the public domain. Use freely without attribution.
 
 # This is a minimum example with no overrides, extend as needed
-apiVersion: kaptain.org/1.28
+apiVersion: kaptain.org/1.29
 kind: kubernetes-bundle-vendor-helm-rendered
 spec:
   main:
