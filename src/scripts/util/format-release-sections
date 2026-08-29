@@ -11,10 +11,18 @@
 # then their Release Assets section.
 #
 # Usage:
-#   format-release-sections consume <project-name> <version> <registry> <namespace>
-#     Emits the "How to Consume" section: exact-pinned short form (same org,
-#     registry and namespace) and the fully qualified long form including the
-#     prefix path segment, one per line with the description after each entry.
+#   format-release-sections consume <project-name> <version> <registry> <namespace> [forms]
+#     Emits the "How to Consume" section. Each reference gets a fenced block of
+#     its own so the URI never competes for width with prose and is trivial to
+#     copy. [forms] carries spec.platform.githubActions.release
+#     .consumerReferenceForms and selects which references appear, in which
+#     order:
+#       short-only  org-local reference alone (default, in-house work)
+#       short-first both, org-local reference first
+#       full-first  both, fully qualified reference first (open source)
+#       full-only   fully qualified reference alone (vendor packages)
+#     The two-form modes label each block; the single-form modes emit the one
+#     block bare, since there is nothing to contrast it with.
 #
 #   format-release-sections list <heading> <list-file>
 #     Emits "### <heading>" followed by the file's contents (already-formatted
@@ -38,9 +46,25 @@ source "${SCRIPT_DIR}/../lib/docker-ref-expand.bash"
 
 usage_error() {
   log_error "$1"
-  log_error "Usage: format-release-sections consume <project-name> <version> <registry> <namespace>"
+  log_error "Usage: format-release-sections consume <project-name> <version> <registry> <namespace> [forms]"
   log_error "       format-release-sections list <heading> <list-file>"
   exit 1
+}
+
+# One reference, in its own fenced block. Label is omitted in the single-form
+# modes, where there is no second entry to tell it apart from.
+emit_reference() {
+  local label="$1"
+  local reference="$2"
+
+  if [[ -n "${label}" ]]; then
+    echo ""
+    echo "**${label}**"
+  fi
+  echo ""
+  echo '```'
+  echo "${reference}"
+  echo '```'
 }
 
 mode="${1:-}"
