@@ -646,6 +646,155 @@ EOF
   assert_github_output "TOKEN_BUILTIN_MODE" "standard"
 }
 
+# =============================================================================
+# Deferred builtin token replay
+# =============================================================================
+
+# append_scalar <NAME> <VALUE> [output-sub-path]
+append_scalar() {
+  local out="${3:-kaptain-out}"
+  mkdir -p "${TEST_DIR}/${out}"
+  printf 'scalar\0%s\0%s\0' "$1" "$2" >> "${TEST_DIR}/${out}/builtin-tokens-pending"
+}
+
+# append_entry <entry> <version> <subdir> <manifests-docker-tag>
+append_entry() {
+  mkdir -p "${TEST_DIR}/kaptain-out"
+  printf 'entry\0%s\0%s\0%s\0%s\0' "$1" "$2" "$3" "$4" \
+    >> "${TEST_DIR}/kaptain-out/builtin-tokens-pending"
+}
+
+# token_file <subdir/name> [output-sub-path]
+token_file() {
+  echo "${TEST_DIR}/${2:-kaptain-out}/builtin-resolved-tokens/${1}"
+}
+
+@test "deferred scalars replay in UPPER_SNAKE when the style resolves to it" {
+  cat > "${TEST_DIR}/kaptainpm/final/KaptainPM.yaml" << 'EOF'
+apiVersion: kaptain.org/1.10
+kind: test-build
+spec:
+  global:
+    tokens:
+      nameStyle: UPPER_SNAKE
+EOF
+  append_scalar BUILD_TIMESTAMP "2026-06-17T14:32:15Z"
+  append_scalar GIT_BRANCH      "main"
+
+  run_script
+  [ "${status}" -eq 0 ]
+  [ "$(cat "$(token_file build/BUILD_TIMESTAMP)")" = "2026-06-17T14:32:15Z" ]
+  [ "$(cat "$(token_file git/GIT_BRANCH)")" = "main" ]
+}
+
+@test "deferred scalars replay in PascalCase when the style is defaulted" {
+  write_pm
+  append_scalar BUILD_TIMESTAMP     "2026-06-17T14:32:15Z"
+  append_scalar IMAGE_BUILD_COMMAND "docker"
+
+  run_script
+  [ "${status}" -eq 0 ]
+  [ "$(cat "$(token_file build/BuildTimestamp)")" = "2026-06-17T14:32:15Z" ]
+  [ "$(cat "$(token_file image/ImageBuildCommand)")" = "docker" ]
+  [ ! -f "$(token_file build/BUILD_TIMESTAMP)" ]
+}
+
+@test "pending file is removed once replayed" {
+  write_pm
+  append_scalar BUILD_MODE "build_server"
+
+  run_script
+  [ "${status}" -eq 0 ]
+  [ ! -f "${TEST_DIR}/kaptain-out/builtin-tokens-pending" ]
+}
+
+@test "replay preserves values verbatim, including multi-line and no trailing newline" {
+  write_pm
+  append_scalar KAPTAINPM_METADATA_DESCRIPTION "first line
+second line"
+  append_scalar BUILD_MODE "local"
+
+  run_script
+  [ "${status}" -eq 0 ]
+  [ "$(cat "$(token_file kaptainpm/KaptainpmMetadataDescription)")" = "first line
+second line" ]
+  [ "$(wc -c < "$(token_file build/BuildMode)" | tr -d ' ')" = "5" ]
+}
+
+@test "deferred layer entry replays into the full four-file set" {
+  write_pm
+  append_entry "ghcr.io/kube-kaptain/layer-github-flow-strict:1.2.3" "1.2.3" layers "1.2.3"
+
+  run_script
+  [ "${status}" -eq 0 ]
+  local base="layers/LayerGhcrIoKubeKaptainLayerGithubFlowStrict"
+  [ "$(cat "$(token_file "${base}Ref")")" = "ghcr.io/kube-kaptain/layer-github-flow-strict:1.2.3" ]
+  [ "$(cat "$(token_file "${base}VersionSpec")")" = "1.2.3" ]
+  [ "$(cat "$(token_file "${base}Version")")" = "1.2.3" ]
+  [ "$(cat "$(token_file "${base}ManifestsDockerTag")")" = "1.2.3" ]
+}
+
+@test "deferred layer entry honours the resolved name style" {
+  cat > "${TEST_DIR}/kaptainpm/final/KaptainPM.yaml" << 'EOF'
+apiVersion: kaptain.org/1.10
+kind: test-build
+spec:
+  global:
+    tokens:
+      nameStyle: UPPER_SNAKE
+EOF
+  append_entry "layer-github-flow-strict:1.2.3" "1.2.3" layers "1.2.3"
+
+  run_script
+  [ "${status}" -eq 0 ]
+  [ "$(cat "$(token_file layers/LAYER_LAYER_GITHUB_FLOW_STRICT_REF)")" = "layer-github-flow-strict:1.2.3" ]
+}
+
+@test "replay merges into an existing builtin-resolved-tokens dir" {
+  write_pm
+  mkdir -p "${TEST_DIR}/kaptain-out/builtin-resolved-tokens/repository"
+  printf '%s' "my-repo" > "${TEST_DIR}/kaptain-out/builtin-resolved-tokens/repository/RepositoryName"
+  append_scalar BUILD_MODE "build_server"
+
+  run_script
+  [ "${status}" -eq 0 ]
+  [ "$(cat "$(token_file repository/RepositoryName)")" = "my-repo" ]
+  [ "$(cat "$(token_file build/BuildMode)")" = "build_server" ]
+}
+
+@test "replay follows OUTPUT_SUB_PATH from the yaml" {
+  cat > "${TEST_DIR}/kaptainpm/final/KaptainPM.yaml" << 'EOF'
+apiVersion: kaptain.org/1.10
+kind: test-build
+spec:
+  global:
+    outputSubPath: custom-out
+EOF
+  append_scalar BUILD_MODE "build_server" custom-out
+
+  run_script
+  [ "${status}" -eq 0 ]
+  [ "$(cat "$(token_file build/BuildMode custom-out)")" = "build_server" ]
+}
+
+@test "no pending file is a silent no-op" {
+  write_pm
+
+  run_script
+  [ "${status}" -eq 0 ]
+  [ ! -d "${TEST_DIR}/kaptain-out/builtin-resolved-tokens" ]
+}
+
+@test "unknown record type fails the build" {
+  write_pm
+  mkdir -p "${TEST_DIR}/kaptain-out"
+  printf 'bogus\0X\0Y\0' > "${TEST_DIR}/kaptain-out/builtin-tokens-pending"
+
+  run_script
+  [ "${status}" -ne 0 ]
+  [[ "$output" == *"Unknown deferred builtin token record type"* ]]
+}
+
 teardown() {
   dump_bats_result
 }

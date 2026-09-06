@@ -64,6 +64,36 @@ inputs:
     description: 'Use the exact version found in source file(s) without incrementing (file-based strategies only)'
     required: false
     default: 'false'
+  # Token substitution
+  token-delimiter-style:
+    description: 'Token delimiter syntax for variables (shell, mustache, helm, erb, github-actions, blade, stringtemplate, ognl, t4, swift)'
+    required: false
+    default: 'shell'
+  token-name-style:
+    description: 'Case style for token names (UPPER_SNAKE, lower_snake, lower-kebab, UPPER-KEBAB, camelCase, PascalCase, lower.dot, UPPER.DOT)'
+    required: false
+    default: 'PascalCase'
+  token-name-validation:
+    description: 'How to validate user token names (MATCH = must match token-name-style, ALL = accept any valid name)'
+    required: false
+    default: 'MATCH'
+  config-sub-path:
+    description: 'Directory containing user-defined token files (relative)'
+    required: false
+    default: 'src/config'
+  config-value-trailing-newline:
+    description: 'How to handle trailing newlines in config values (strip-for-single-line, preserve-all, always-strip-one-newline)'
+    required: false
+    default: 'strip-for-single-line'
+  token-substitution-passes:
+    description: 'Number of times to run the token substitution pass (for nested token references)'
+    required: false
+    default: '1'
+  # Build output
+  output-sub-path:
+    description: 'Build output directory (relative)'
+    required: false
+    default: 'kaptain-out'
 
   # Project name
   strip-repository-name-prefix:
@@ -143,6 +173,10 @@ runs:
         BUILD_MODE: build_server
         BUILD_PLATFORM: github-actions
         BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        # Names the REPOSITORY_*/GIT_REPOSITORY_* builtin token files this step emits.
+        TOKEN_NAME_STYLE: ${{ inputs.token-name-style }}
+        # Where those tokens and the tag-version plugin's VERSION file land.
+        OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
         STRIP_REPOSITORY_NAME_PREFIX: ${{ inputs.strip-repository-name-prefix }}
         REPOSITORY_NAME: ${{ github.event.repository.name }}
         REPOSITORY_OWNER: ${{ github.repository_owner }}

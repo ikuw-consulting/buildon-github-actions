@@ -1,26 +1,25 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.29/spec-kaptainpm-schema-1.29.yaml",
+  "$id": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.30/spec-kaptainpm-schema-layer-source-1.30.yaml",
   "name": "spec-kaptainpm-schema",
-  "version": "1.29",
+  "version": "1.30",
   "source": "https://github.com/kube-kaptain/spec-kaptainpm-schema",
   "latest": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/main/spec-kaptainpm-schema.yaml",
-  "tagged": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/1.29/spec-kaptainpm-schema.yaml",
-  "release": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.29/spec-kaptainpm-schema-1.29.yaml",
-  "validate-using": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.29/spec-kaptainpm-schema-1.29.json",
+  "tagged": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/1.30/spec-kaptainpm-schema.yaml",
+  "release": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.30/spec-kaptainpm-schema-layer-source-1.30.yaml",
+  "validate-using": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.30/spec-kaptainpm-schema-layer-source-1.30.json",
   "title": "KaptainPM",
-  "description": "Kaptain project manifest schema (version 1.29).\n",
+  "description": "Kaptain project manifest schema (version 1.30).\n",
   "type": "object",
   "required": [
-    "apiVersion",
-    "kind"
+    "apiVersion"
   ],
   "additionalProperties": false,
   "properties": {
     "apiVersion": {
       "type": "string",
       "pattern": "^kaptain\\.org/[0-9]+(\\.[0-9]+)*$",
-      "description": "API version - must be kaptain.org/ followed by the schema version (e.g. kaptain.org/1.2). Set via 1.29 token substitution at build time.\n"
+      "description": "API version - must be kaptain.org/ followed by the schema version (e.g. kaptain.org/1.2). Set via 1.30 token substitution at build time.\n"
     },
     "kind": {
       "type": "string",
@@ -63,10 +62,6 @@
         "credentials": {
           "$ref": "#/$defs/credentials"
         },
-        "layers": {
-          "$ref": "#/$defs/artifactReferenceList",
-          "description": "Configuration layers applied before this project's settings. Deep-merged in order; local settings always win. Bootstrap registry logins must be in the project root file (needed before layer resolution). Additional logins declared in layers are applied in a second login phase post-merge.\n"
-        },
         "templates": {
           "$ref": "#/$defs/artifactReferenceList",
           "description": "Manifest template sets pulled in and token-substituted to become this project's own manifest output. Replaces generators or hand-written manifests.\n"
@@ -88,6 +83,9 @@
           "$ref": "#/$defs/specPlatform"
         }
       }
+    },
+    "layer-payload": {
+      "$ref": "#/$defs/layerPayload"
     }
   },
   "allOf": [
@@ -130,100 +128,15 @@
       }
     },
     {
-      "if": {
-        "required": [
-          "kind"
-        ],
-        "properties": {
-          "kind": {
-            "const": "kubernetes-run-environment"
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "spec": {
-            "properties": {
-              "main": {
-                "required": [
-                  "environment"
-                ],
-                "not": {
-                  "required": [
-                    "runPlatform"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "required": [
-          "kind"
-        ],
-        "properties": {
-          "kind": {
-            "const": "kubernetes-run-platform-meta-environment"
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "spec": {
-            "properties": {
-              "main": {
-                "required": [
-                  "runPlatform"
-                ],
-                "not": {
-                  "required": [
-                    "environment"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "required": [
-          "kind"
-        ],
-        "not": {
+      "properties": {
+        "spec": {
           "properties": {
-            "kind": {
-              "enum": [
-                "kubernetes-run-environment",
-                "kubernetes-run-platform-meta-environment"
-              ]
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "spec": {
-            "properties": {
-              "main": {
-                "not": {
-                  "anyOf": [
-                    {
-                      "required": [
-                        "environment"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "runPlatform"
-                      ]
-                    }
-                  ]
-                }
+            "main": {
+              "not": {
+                "required": [
+                  "environment",
+                  "runPlatform"
+                ]
               }
             }
           }
@@ -394,12 +307,6 @@
                 "shell",
                 "mustache",
                 "helm",
-                "double-curly",
-                "at-sign",
-                "dollar-sign",
-                "percent",
-                "hash",
-                "xml",
                 "erb",
                 "github-actions",
                 "blade",

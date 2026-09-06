@@ -57,8 +57,6 @@ source "${SCRIPT_DIR}/../lib/layer-merge.bash"
 source "${SCRIPT_DIR}/../lib/validate-exact-file-exists.bash"
 # shellcheck source=src/scripts/lib/validate-layer-payload.bash
 source "${SCRIPT_DIR}/../lib/validate-layer-payload.bash"
-# shellcheck source=src/scripts/lib/builtin-tokens-from-entry.bash
-source "${SCRIPT_DIR}/../lib/builtin-tokens-from-entry.bash"
 # shellcheck source=src/scripts/defaults/docker-target.bash
 source "${SCRIPT_DIR}/../defaults/docker-target.bash"
 # shellcheck source=src/scripts/lib/kaptainpm-bool.bash
@@ -69,19 +67,38 @@ source "${SCRIPT_DIR}/../lib/kaptainpm-bool.bash"
 # of truth as defaults/docker-common.bash.
 IMAGE_BUILD_COMMAND="${IMAGE_BUILD_COMMAND:?IMAGE_BUILD_COMMAND is required - run validate-tooling first}"
 
-# Builtin scalars pinned at build start. Written here, immediately after all
-# sources, so downstream prepare-substitution-tokens scans the build/ image/
-# git/ kaptainpm/ subdirs alongside contents/templates/layers and exposes these
-# as builtin tokens. Filenames land in the consumer's TOKEN_NAME_STYLE (the
-# scalar emitter handles the conversion) and carry no trailing newline so they
-# round-trip cleanly into mid-string substitutions.
+# The layers resolved below may set spec.global.tokens.nameStyle, so the token
+# name style is not known here and nothing can be named yet. Record the emitter
+# arguments instead; load-final-kaptainpm-yaml replays them once it resolves.
+#
+# NUL-delimited fields, so values containing newlines (metadata.description)
+# survive verbatim. Record shapes:
+#   scalar\0<name>\0<value>\0
+#   entry\0<entry>\0<version>\0<subdir>\0<manifests-docker-tag>\0
+BUILTIN_TOKENS_PENDING_FILE="${OUTPUT_SUB_PATH}/builtin-tokens-pending"
+mkdir -p "${OUTPUT_SUB_PATH}"
+: > "${BUILTIN_TOKENS_PENDING_FILE}"
+
+record_builtin_token_scalar() {
+  printf 'scalar\0%s\0%s\0' "$1" "$2" >> "${BUILTIN_TOKENS_PENDING_FILE}"
+  log "  builtin token recorded: $1 = $2"
+}
+
+record_builtin_tokens_for_entry() {
+  printf 'entry\0%s\0%s\0%s\0%s\0' "$1" "$2" "$3" "$4" >> "${BUILTIN_TOKENS_PENDING_FILE}"
+  log "  builtin tokens recorded: $3 entry $1"
+}
+
+# Builtin scalars pinned at build start, recorded immediately after all sources
+# so downstream prepare-substitution-tokens sees build/ image/ git/ kaptainpm/
+# alongside contents/templates/layers.
 log "Auto-builtin tokens for build:"
-emit_builtin_token_scalar BUILD_TIMESTAMP "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-emit_builtin_token_scalar BUILD_MODE      "${BUILD_MODE}"
-emit_builtin_token_scalar BUILD_PLATFORM  "${BUILD_PLATFORM}"
+record_builtin_token_scalar BUILD_TIMESTAMP "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+record_builtin_token_scalar BUILD_MODE      "${BUILD_MODE}"
+record_builtin_token_scalar BUILD_PLATFORM  "${BUILD_PLATFORM}"
 
 log "Auto-builtin tokens for image:"
-emit_builtin_token_scalar IMAGE_BUILD_COMMAND "${IMAGE_BUILD_COMMAND}"
+record_builtin_token_scalar IMAGE_BUILD_COMMAND "${IMAGE_BUILD_COMMAND}"
 
 # Git tokens hard-fail on git failure: kaptain is git-centric and basic-checks
 # runs before this, so HEAD is always present in real pipelines. The `|| { ... }`
@@ -91,17 +108,17 @@ git_hash_full=$(git rev-parse HEAD) || { log_error "git rev-parse HEAD failed"; 
 git_hash_short=$(git rev-parse --short=7 HEAD) || { log_error "git rev-parse --short=7 HEAD failed"; exit 1; }
 git_branch=$(git rev-parse --abbrev-ref HEAD) || { log_error "git rev-parse --abbrev-ref HEAD failed"; exit 1; }
 log "Auto-builtin tokens for git:"
-emit_builtin_token_scalar GIT_HASH_FULL  "${git_hash_full}"
-emit_builtin_token_scalar GIT_HASH_SHORT "${git_hash_short}"
-emit_builtin_token_scalar GIT_BRANCH     "${git_branch}"
+record_builtin_token_scalar GIT_HASH_FULL  "${git_hash_full}"
+record_builtin_token_scalar GIT_HASH_SHORT "${git_hash_short}"
+record_builtin_token_scalar GIT_BRANCH     "${git_branch}"
 
 # Helper for KAPTAINPM_* tokens (deferred to each exit path, since the final
 # yaml is produced at three different points).
 write_kaptainpm_builtin_tokens() {
   local final_file="$1"
   log "Auto-builtin tokens for kaptainpm:"
-  emit_builtin_token_scalar KAPTAINPM_KIND "$(yq eval '.kind // ""' "${final_file}")"
-  emit_builtin_token_scalar KAPTAINPM_METADATA_DESCRIPTION "$(yq eval '.metadata.description // ""' "${final_file}")"
+  record_builtin_token_scalar KAPTAINPM_KIND "$(yq eval '.kind // ""' "${final_file}")"
+  record_builtin_token_scalar KAPTAINPM_METADATA_DESCRIPTION "$(yq eval '.metadata.description // ""' "${final_file}")"
 }
 
 UTIL_DIR="${SCRIPT_DIR}/../util"
@@ -280,7 +297,7 @@ resolve_layer() {
   # Slug is derived from the entry as written, so short and long ref forms
   # produce distinct slugs as authored.
   log "${indent}Auto-builtin tokens for layers:"
-  emit_builtin_tokens_for_entry "${ref}" "${resolved_version}" "layers" "${resolved_version}"
+  record_builtin_tokens_for_entry "${ref}" "${resolved_version}" "layers" "${resolved_version}"
 
   # Determine layer storage path (registry/path/name without version)
   # Strip provider prefix if present for the filesystem path
