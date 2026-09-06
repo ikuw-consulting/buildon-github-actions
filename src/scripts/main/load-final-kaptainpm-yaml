@@ -47,6 +47,8 @@ source "${SCRIPT_DIR}/../defaults/vendor-github-release.bash"
 source "${SCRIPT_DIR}/../defaults/tokens.bash"
 # shellcheck source=src/scripts/lib/kaptainpm-bool.bash
 source "${SCRIPT_DIR}/../lib/kaptainpm-bool.bash"
+# shellcheck source=src/scripts/lib/builtin-tokens-from-entry.bash
+source "${SCRIPT_DIR}/../lib/builtin-tokens-from-entry.bash"
 
 # Build scripts repo root - absolute path to the buildon checkout this script
 # is part of. Hooks need this so user hook scripts can locate the build's
@@ -653,3 +655,35 @@ output_var "CHANGE_SOURCE_NOTE_ENABLED" "${change_source_note_enabled}" > /dev/n
 log "Field .spec.main.changeSource.noteEnabled = \"${change_source_note_enabled}\" exported as CHANGE_SOURCE_NOTE_ENABLED"
 
 log "Loaded ${found_count} value(s) from KaptainPM.yaml"
+
+# kaptain-init could not name its builtin tokens: it resolves the layers that
+# may set the name style. It recorded the emitter arguments instead; replay
+# them now, with TOKEN_NAME_STYLE resolved, so they land exactly as they would
+# have if the style had been known earlier. See kaptain-init for the format.
+pending_file="${output_sub_path}/builtin-tokens-pending"
+if [[ -f "${pending_file}" ]]; then
+  log ""
+  log "Replaying deferred builtin tokens as ${TOKEN_NAME_STYLE}..."
+  while IFS= read -r -d '' record_type; do
+    case "${record_type}" in
+      scalar)
+        IFS= read -r -d '' name
+        IFS= read -r -d '' value
+        emit_builtin_token_scalar "${name}" "${value}"
+        ;;
+      entry)
+        IFS= read -r -d '' entry
+        IFS= read -r -d '' resolved_version
+        IFS= read -r -d '' subdir
+        IFS= read -r -d '' manifests_docker_tag
+        emit_builtin_tokens_for_entry "${entry}" "${resolved_version}" "${subdir}" "${manifests_docker_tag}"
+        ;;
+      *)
+        log_error "Unknown deferred builtin token record type: '${record_type}'"
+        log_error "File: ${pending_file}"
+        exit 1
+        ;;
+    esac
+  done < "${pending_file}"
+  rm -f "${pending_file}"
+fi

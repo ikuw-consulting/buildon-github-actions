@@ -172,11 +172,33 @@ add_mock_layer_file() {
   cat > "${full}"
 }
 
+
+# Value recorded for a scalar builtin token in the NUL-delimited pending file.
+recorded_value() {
+  local want="$1" record_type name value entry version subdir tag
+  while IFS= read -r -d '' record_type; do
+    case "${record_type}" in
+      scalar)
+        IFS= read -r -d '' name
+        IFS= read -r -d '' value
+        [[ "${name}" == "${want}" ]] && { printf '%s' "${value}"; return 0; }
+        ;;
+      entry)
+        IFS= read -r -d '' entry
+        IFS= read -r -d '' version
+        IFS= read -r -d '' subdir
+        IFS= read -r -d '' tag
+        ;;
+    esac
+  done < "${REPO_DIR}/kaptain-out/builtin-tokens-pending"
+  return 1
+}
+
 # =============================================================================
 # No layers - passthrough
 # =============================================================================
 
-@test "builtin scalar: writes BuildTimestamp under builtin-resolved-tokens/build/" {
+@test "builtin scalar: records BUILD_TIMESTAMP" {
   cat > "${REPO_DIR}/KaptainPM.yaml" << 'EOF'
 apiVersion: kaptain.org/1.2
 kind: kubernetes-app-docker-dockerfile
@@ -189,18 +211,13 @@ EOF
   run "$SCRIPT"
   [[ "$status" -eq 0 ]] || return 1
 
-  local ts_file="${REPO_DIR}/kaptain-out/builtin-resolved-tokens/build/BuildTimestamp"
-  [[ -f "${ts_file}" ]] || return 1
-
-  # ISO 8601 UTC shape: YYYY-MM-DDTHH:MM:SSZ, exactly 20 chars, no trailing newline.
-  local ts_size ts_value
-  ts_size=$(wc -c < "${ts_file}" | tr -d ' ')
-  [[ "${ts_size}" -eq 20 ]] || return 1
-  ts_value=$(cat "${ts_file}")
+  # ISO 8601 UTC shape: YYYY-MM-DDTHH:MM:SSZ.
+  local ts_value
+  ts_value=$(recorded_value BUILD_TIMESTAMP) || return 1
   [[ "${ts_value}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || return 1
 }
 
-@test "builtin scalars: writes BuildMode and BuildPlatform under build/" {
+@test "builtin scalars: writes BUILD_MODE and BUILD_PLATFORM under build/" {
   cat > "${REPO_DIR}/KaptainPM.yaml" << 'EOF'
 apiVersion: kaptain.org/1.2
 kind: kubernetes-app-docker-dockerfile
@@ -213,14 +230,11 @@ EOF
   run "$SCRIPT"
   [[ "$status" -eq 0 ]] || return 1
 
-  local build_dir="${REPO_DIR}/kaptain-out/builtin-resolved-tokens/build"
-  [[ -f "${build_dir}/BuildMode" ]] || return 1
-  [[ "$(cat "${build_dir}/BuildMode")" == "build_server" ]] || return 1
-  [[ -f "${build_dir}/BuildPlatform" ]] || return 1
-  [[ "$(cat "${build_dir}/BuildPlatform")" == "test" ]] || return 1
+  [[ "$(recorded_value BUILD_MODE)" == "build_server" ]] || return 1
+  [[ "$(recorded_value BUILD_PLATFORM)" == "test" ]] || return 1
 }
 
-@test "builtin scalar: writes ImageBuildCommand under image/" {
+@test "builtin scalar: writes IMAGE_BUILD_COMMAND under image/" {
   cat > "${REPO_DIR}/KaptainPM.yaml" << 'EOF'
 apiVersion: kaptain.org/1.2
 kind: kubernetes-app-docker-dockerfile
@@ -233,9 +247,7 @@ EOF
   run "$SCRIPT"
   [[ "$status" -eq 0 ]] || return 1
 
-  local image_file="${REPO_DIR}/kaptain-out/builtin-resolved-tokens/image/ImageBuildCommand"
-  [[ -f "${image_file}" ]] || return 1
-  [[ "$(cat "${image_file}")" == "docker" ]] || return 1
+  [[ "$(recorded_value IMAGE_BUILD_COMMAND)" == "docker" ]] || return 1
 }
 
 @test "builtin scalars: writes git HashFull/HashShort/Branch under git/" {
@@ -251,27 +263,13 @@ EOF
   run "$SCRIPT"
   [[ "$status" -eq 0 ]] || return 1
 
-  local git_dir="${REPO_DIR}/kaptain-out/builtin-resolved-tokens/git"
-
-  # Full hash is 40 hex chars with no trailing newline.
-  local full_size full_value
-  full_size=$(wc -c < "${git_dir}/GitHashFull" | tr -d ' ')
-  [[ "${full_size}" -eq 40 ]] || return 1
-  full_value=$(cat "${git_dir}/GitHashFull")
-  [[ "${full_value}" =~ ^[0-9a-f]{40}$ ]] || return 1
-
-  # Short hash is 7 hex chars.
-  local short_size short_value
-  short_size=$(wc -c < "${git_dir}/GitHashShort" | tr -d ' ')
-  [[ "${short_size}" -eq 7 ]] || return 1
-  short_value=$(cat "${git_dir}/GitHashShort")
-  [[ "${short_value}" =~ ^[0-9a-f]{7}$ ]] || return 1
-
+  [[ "$(recorded_value GIT_HASH_FULL)" =~ ^[0-9a-f]{40}$ ]] || return 1
+  [[ "$(recorded_value GIT_HASH_SHORT)" =~ ^[0-9a-f]{7}$ ]] || return 1
   # Branch was initialised to main in setup.
-  [[ "$(cat "${git_dir}/GitBranch")" == "main" ]] || return 1
+  [[ "$(recorded_value GIT_BRANCH)" == "main" ]] || return 1
 }
 
-@test "builtin scalars: writes KaptainpmKind and KaptainpmMetadataDescription on no-layer path" {
+@test "builtin scalars: writes KAPTAINPM_KIND and KAPTAINPM_METADATA_DESCRIPTION on no-layer path" {
   cat > "${REPO_DIR}/KaptainPM.yaml" << 'EOF'
 apiVersion: kaptain.org/1.2
 kind: kubernetes-app-docker-dockerfile
@@ -286,12 +284,11 @@ EOF
   run "$SCRIPT"
   [[ "$status" -eq 0 ]] || return 1
 
-  local kpm_dir="${REPO_DIR}/kaptain-out/builtin-resolved-tokens/kaptainpm"
-  [[ "$(cat "${kpm_dir}/KaptainpmKind")" == "kubernetes-app-docker-dockerfile" ]] || return 1
-  [[ "$(cat "${kpm_dir}/KaptainpmMetadataDescription")" == "A sample project" ]] || return 1
+  [[ "$(recorded_value KAPTAINPM_KIND)" == "kubernetes-app-docker-dockerfile" ]] || return 1
+  [[ "$(recorded_value KAPTAINPM_METADATA_DESCRIPTION)" == "A sample project" ]] || return 1
 }
 
-@test "builtin scalar: KaptainpmMetadataDescription is empty when field absent" {
+@test "builtin scalar: KAPTAINPM_METADATA_DESCRIPTION is empty when field absent" {
   cat > "${REPO_DIR}/KaptainPM.yaml" << 'EOF'
 apiVersion: kaptain.org/1.2
 kind: kubernetes-app-docker-dockerfile
@@ -304,14 +301,10 @@ EOF
   run "$SCRIPT"
   [[ "$status" -eq 0 ]] || return 1
 
-  local desc_file="${REPO_DIR}/kaptain-out/builtin-resolved-tokens/kaptainpm/KaptainpmMetadataDescription"
-  [[ -f "${desc_file}" ]] || return 1
-  local size
-  size=$(wc -c < "${desc_file}" | tr -d ' ')
-  [[ "${size}" -eq 0 ]] || return 1
+  [[ -z "$(recorded_value KAPTAINPM_METADATA_DESCRIPTION)" ]] || return 1
 }
 
-@test "builtin scalars: writes KaptainpmKind on merged-layer path" {
+@test "builtin scalars: writes KAPTAINPM_KIND on merged-layer path" {
   create_mock_layer "ghcr.io/kube-kaptain/quality/quality-strict" << 'EOF'
 apiVersion: kaptain.org/1.2
 spec:
@@ -331,8 +324,7 @@ EOF
   run "$SCRIPT"
   [[ "$status" -eq 0 ]] || return 1
 
-  local kpm_dir="${REPO_DIR}/kaptain-out/builtin-resolved-tokens/kaptainpm"
-  [[ "$(cat "${kpm_dir}/KaptainpmKind")" == "kubernetes-app-docker-dockerfile" ]] || return 1
+  [[ "$(recorded_value KAPTAINPM_KIND)" == "kubernetes-app-docker-dockerfile" ]] || return 1
 }
 
 @test "no layers: copies project root to final unchanged" {
