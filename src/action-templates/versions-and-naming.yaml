@@ -7,6 +7,8 @@ description: 'Generates version numbers, tags, and naming for releases'
 inputs:
   # INJECT-INPUT: release-branches
   # INJECT-INPUT: tag-version
+  # INJECT-INPUT: token-substitution
+  # INJECT-INPUT: output-sub-path
 
   # Project name
   strip-repository-name-prefix:
@@ -86,6 +88,10 @@ runs:
         BUILD_MODE: build_server
         BUILD_PLATFORM: github-actions
         BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        # Names the REPOSITORY_*/GIT_REPOSITORY_* builtin token files this step emits.
+        TOKEN_NAME_STYLE: ${{ inputs.token-name-style }}
+        # Where those tokens and the tag-version plugin's VERSION file land.
+        OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
         STRIP_REPOSITORY_NAME_PREFIX: ${{ inputs.strip-repository-name-prefix }}
         REPOSITORY_NAME: ${{ github.event.repository.name }}
         REPOSITORY_OWNER: ${{ github.repository_owner }}

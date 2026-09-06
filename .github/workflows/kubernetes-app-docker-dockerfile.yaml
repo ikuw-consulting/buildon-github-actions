@@ -776,6 +776,8 @@ jobs:
         id: versions
         uses: ./.github/buildon-github-actions/src/actions/versions-and-naming
         with:
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
           strip-repository-name-prefix: ${{ steps.kpm.outputs.STRIP_REPOSITORY_NAME_PREFIX }}
           release-branch: ${{ steps.kpm.outputs.RELEASE_BRANCH }}
           additional-release-branches: ${{ steps.kpm.outputs.ADDITIONAL_RELEASE_BRANCHES }}
