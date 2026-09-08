@@ -4,9 +4,10 @@
 #
 # change-source-note-write - Writes a git note with merge candidate metadata
 #
-# Records the source branch and creator as a git note on HEAD.
-# Pushes to refs/notes/kaptain-change-source for later retrieval by
-# release-change-data-generate during release builds.
+# Records the source branch and creator as a git note on HEAD. On a build
+# server it also pushes refs/notes/kaptain-change-source for later retrieval by
+# release-change-data-generate during release builds; local builds write the
+# note only.
 #
 # Non-fatal: if the push fails (permissions, forks, etc.), warns and continues.
 #
@@ -14,6 +15,7 @@
 #   CURRENT_BRANCH              - The branch being built
 #   MERGE_CANDIDATE_CREATOR     - Who created the merge candidate (optional)
 #   CHANGE_SOURCE_NOTE_ENABLED  - Skip entirely when not true (default true)
+#   BUILD_MODE                  - Only build_server pushes the note
 #
 set -euo pipefail
 
@@ -25,6 +27,8 @@ source "${SCRIPT_DIR}/../defaults/platform.bash"
 source "${SCRIPT_DIR}/../lib/log.bash"
 # shellcheck source=src/scripts/defaults/change-source.bash
 source "${SCRIPT_DIR}/../defaults/change-source.bash"
+# shellcheck source=src/scripts/defaults/build-mode.bash
+source "${SCRIPT_DIR}/../defaults/build-mode.bash"
 
 CURRENT_BRANCH="${CURRENT_BRANCH:?CURRENT_BRANCH is required}"
 MERGE_CANDIDATE_CREATOR="${MERGE_CANDIDATE_CREATOR:-}"
@@ -60,6 +64,13 @@ merge-candidate-creator: ${MERGE_CANDIDATE_CREATOR}"
     return 0
   fi
   log "Note written to ${head_sha}"
+
+  # A local build has no business pushing to origin, and an anonymous HTTPS
+  # clone would block on a credential prompt rather than fail.
+  if [[ "${BUILD_MODE}" != "build_server" ]]; then
+    log "Skipping note push (BUILD_MODE=${BUILD_MODE})"
+    return 0
+  fi
 
   # Push the note (non-fatal)
   if git push origin "refs/notes/${NOTES_REF}" 2>&1; then

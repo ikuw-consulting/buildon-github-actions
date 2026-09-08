@@ -37,7 +37,7 @@ runs:
         CHECK_NAME: ${{ inputs.check-name }}
         CHECK_RUN_ID: ${{ inputs.check-run-id }}
         CHECK_SUMMARY: ${{ inputs.summary }}
-        GITHUB_TOKEN: ${{ github.token }}
+        GH_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       run: |

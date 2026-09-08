@@ -62,6 +62,9 @@ runs:
         BUILD_KIND: ${{ inputs.build-kind }}
         BUILD_PLATFORM: github-actions
         BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        # Hooks are user code: gh reads GH_TOKEN, most other tooling reads GITHUB_TOKEN.
+        GH_TOKEN: ${{ github.token }}
+        GITHUB_TOKEN: ${{ github.token }}
         IMAGE_BUILD_COMMAND: ${{ inputs.image-build-command }}
         BUILD_SCRIPTS_REPO_ROOT: ${{ inputs.build-scripts-repo-root }}
         # GitHub context - needed for PROJECT_NAME and IS_RELEASE calculation
