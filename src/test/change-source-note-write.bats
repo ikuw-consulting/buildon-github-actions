@@ -98,6 +98,20 @@ create_note_test_repo() {
   [[ "$note" == *"merge-candidate-branch: feature-test-branch"* ]] || return 1
 }
 
+@test "writes the note but skips the push on a local build" {
+  create_note_test_repo
+  export BUILD_MODE="local"
+
+  run "$SCRIPTS_DIR/change-source-note-write"
+  [ "$status" -eq 0 ]
+  assert_output_contains "Note written to"
+  assert_output_contains "Skipping note push (BUILD_MODE=local)"
+
+  local note
+  note=$(git notes --ref=kaptain-change-source show HEAD)
+  [[ "$note" == *"merge-candidate-branch: feature-test-branch"* ]] || return 1
+}
+
 @test "succeeds when push fails" {
   create_note_test_repo
 
