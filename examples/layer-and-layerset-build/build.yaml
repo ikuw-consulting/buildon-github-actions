@@ -18,7 +18,7 @@ on:
 
 jobs:
   build:
-    uses: kube-kaptain/buildon-github-actions/.github/workflows/layer-and-layerset-build.yaml@1.1.56
+    uses: kube-kaptain/buildon-github-actions/.github/workflows/layer-and-layerset-build.yaml@1.1.57
     permissions:
       contents: write
       packages: write
