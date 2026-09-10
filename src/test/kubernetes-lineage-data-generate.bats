@@ -336,6 +336,97 @@ EOF
 }
 
 # =============================================================================
+# resources.yaml: manifests yq cannot parse
+#
+# Bundles ship partially substituted manifests. A token inside a YAML flow
+# sequence or flow mapping makes the file unparseable, which must not lose the
+# resource from the inventory.
+# =============================================================================
+
+@test "resources.yaml: token in a flow sequence still yields kind and name" {
+  stage_product_preconditions
+  cat > "${TEST_DIR}/kaptain-out/manifests/substituted/product-foo/distribution.yaml" << 'EOF'
+apiVersion: cloudfront.services.k8s.aws/v1alpha1
+kind: Distribution
+metadata:
+  name: ${Environment}-env-ext-example-com
+spec:
+  distributionConfig:
+    allowedMethods:
+      items: [${RunEnvironment/CloudfrontAllowedMethods}]
+EOF
+  run_script
+  [ "${status}" -eq 0 ]
+  local file="${TEST_DIR}/kaptain-out/lineage-data/keys-for-lineage-data/resources.yaml"
+  grep -q "path: distribution.yaml" "${file}"
+  grep -q "kind: Distribution" "${file}"
+}
+
+@test "resources.yaml: token in a flow sequence keeps the other resources too" {
+  stage_product_preconditions
+  cat > "${TEST_DIR}/kaptain-out/manifests/substituted/product-foo/gateway.yaml" << 'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: product-foo-gateway
+spec:
+  addresses: [${GatewayAddresses}]
+EOF
+  run_script
+  [ "${status}" -eq 0 ]
+  local file="${TEST_DIR}/kaptain-out/lineage-data/keys-for-lineage-data/resources.yaml"
+  grep -q "kind: Gateway" "${file}"
+  grep -q "kind: Deployment" "${file}"
+  grep -q "kind: Service" "${file}"
+}
+
+@test "resources.yaml: multi-document file with one unparseable document" {
+  stage_product_preconditions
+  cat > "${TEST_DIR}/kaptain-out/manifests/substituted/product-foo/pair.yaml" << 'EOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: product-foo-pair-cm
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: product-foo-pair-secret
+stringData:
+  hosts: [${Hosts}]
+EOF
+  run_script
+  [ "${status}" -eq 0 ]
+  local file="${TEST_DIR}/kaptain-out/lineage-data/keys-for-lineage-data/resources.yaml"
+  grep -q "name: product-foo-pair-cm" "${file}"
+  grep -q "name: product-foo-pair-secret" "${file}"
+}
+
+@test "resources.yaml: valid yaml still read by yq, not the fallback" {
+  stage_product_preconditions
+  cat > "${TEST_DIR}/kaptain-out/manifests/substituted/product-foo/flowmeta.yaml" << 'EOF'
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: product-foo-sa, namespace: default}
+EOF
+  run_script
+  [ "${status}" -eq 0 ]
+  local file="${TEST_DIR}/kaptain-out/lineage-data/keys-for-lineage-data/resources.yaml"
+  grep -q "name: product-foo-sa" "${file}"
+}
+
+@test "resources.yaml: file with no kind or name fails the build" {
+  stage_product_preconditions
+  cat > "${TEST_DIR}/kaptain-out/manifests/substituted/product-foo/notamanifest.yaml" << 'EOF'
+${ProjectName}
+${project-name}
+EOF
+  run_script
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"notamanifest.yaml"* ]] || return 1
+}
+
+# =============================================================================
 # Metadata: additional labels and annotations
 # =============================================================================
 

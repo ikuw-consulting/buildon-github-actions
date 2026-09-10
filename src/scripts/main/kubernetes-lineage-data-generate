@@ -205,6 +205,32 @@ assert_no_squat() {
 # CM's self-reference last using the project-name token plus the -lineage-data
 # suffix so the sub-round substitute resolves it to the CM's actual
 # metadata.name (which is ${ProjectName}-lineage-data).
+# Line-oriented kind/name reader for manifests yq cannot parse. Bundles ship
+# partially substituted manifests, and a token inside a flow sequence or flow
+# mapping is not valid YAML. Only a column-0 kind: and a two-space name: inside
+# a column-0 metadata: block count, so nested fields are not picked up.
+read_kind_name_lines() {
+  awk '
+    function unquote(v) {
+      sub(/[[:space:]]+#.*$/, "", v)
+      sub(/[[:space:]]+$/, "", v)
+      if (v ~ /^".*"$/ || v ~ /^'"'"'.*'"'"'$/) v = substr(v, 2, length(v) - 2)
+      return v
+    }
+    function flush() {
+      if (kind != "" && name != "") printf "%s\t%s\n", kind, name
+      kind = ""; name = ""; in_meta = 0
+    }
+    /^---/                    { flush(); next }
+    /^kind:[[:space:]]/       { v = $0; sub(/^kind:[[:space:]]*/, "", v); kind = unquote(v); next }
+    /^metadata:[[:space:]]*$/ { in_meta = 1; next }
+    /^[^[:space:]#]/          { in_meta = 0 }
+    { if (in_meta && name == "" && $0 ~ /^  name:[[:space:]]/) {
+        v = $0; sub(/^  name:[[:space:]]*/, "", v); name = unquote(v) } }
+    END { flush() }
+  ' "$1"
+}
+
 build_resources_inventory() {
   local product_dir="$1"
   local out_file="$2"
@@ -219,11 +245,21 @@ build_resources_inventory() {
     local file rel docs line kind name
     while IFS= read -r -d '' file; do
       rel="${file#"${product_dir}/"}"
-      docs=$(yq eval '
+      # yq owns the parse whenever the file is valid YAML, so anchors, tags and
+      # flow style stay correct. It streams, so a mid-file error emits partial
+      # output alongside a non-zero exit: branch on the status, never on
+      # emptiness, or the documents after the bad one are lost silently.
+      if ! docs=$(yq eval '
         select(.kind != null and .metadata.name != null)
         | [.kind, .metadata.name] | @tsv
-      ' "${file}" 2>/dev/null || true)
-      [[ -z "${docs}" ]] && continue
+      ' "${file}" 2>/dev/null); then
+        docs=$(read_kind_name_lines "${file}")
+      fi
+      if [[ -z "${docs}" ]]; then
+        log_error "No kind and metadata.name found in ${rel}"
+        log_error "Every file under ${product_dir} must declare at least one resource."
+        return 1
+      fi
       while IFS= read -r line; do
         [[ -z "${line}" ]] && continue
         kind="${line%%$'\t'*}"
