@@ -398,6 +398,103 @@ teardown() {
 }
 
 # =============================================================================
+# version_resolve_range - unsatisfiable ranges
+#
+# These fail even when a version inside the intended span is available, and the
+# message must name the range rather than the candidate list.
+# =============================================================================
+
+@test "resolve_range: reversed bounds fail" {
+  local versions
+  versions=$(printf "1.0\n1.2\n2.0\n3.2\n")
+  run version_resolve_range "[3.2,1.2]" "${versions}"
+  [[ "$status" -eq 1 ]] || return 1
+  [[ "$output" == *"Impossible range [3.2,1.2]"* ]] || return 1
+}
+
+@test "resolve_range: reversed bounds fail with exclusive brackets" {
+  local versions
+  versions=$(printf "1.0\n2.0\n9.9\n")
+  run version_resolve_range "(9.9,1.0]" "${versions}"
+  [[ "$status" -eq 1 ]] || return 1
+  [[ "$output" == *"Impossible range (9.9,1.0]"* ]] || return 1
+}
+
+@test "resolve_range: reversed bounds reported as range fault not missing version" {
+  local versions
+  versions=$(printf "1.0\n1.2\n2.0\n3.2\n")
+  run version_resolve_range "[3.2,1.2]" "${versions}"
+  [[ "$output" != *"No version matching range"* ]] || return 1
+}
+
+@test "resolve_range: reversed bounds detected across differing part counts" {
+  local versions
+  versions=$(printf "1.0\n2.0\n")
+  run version_resolve_range "[2.0.1,2]" "${versions}"
+  [[ "$status" -eq 1 ]] || return 1
+  [[ "$output" == *"Impossible range"* ]] || return 1
+}
+
+@test "resolve_range: equal bounds with exclusive upper fail" {
+  local versions
+  versions=$(printf "1.0\n2.0\n3.0\n")
+  run version_resolve_range "[2.0,2.0)" "${versions}"
+  [[ "$status" -eq 1 ]] || return 1
+  [[ "$output" == *"Empty range [2.0,2.0)"* ]] || return 1
+}
+
+@test "resolve_range: equal bounds with exclusive lower fail" {
+  local versions
+  versions=$(printf "1.0\n2.0\n3.0\n")
+  run version_resolve_range "(2.0,2.0]" "${versions}"
+  [[ "$status" -eq 1 ]] || return 1
+  [[ "$output" == *"Empty range (2.0,2.0]"* ]] || return 1
+}
+
+@test "resolve_range: equal bounds excluded both ends fail" {
+  local versions
+  versions=$(printf "1.0\n2.0\n3.0\n")
+  run version_resolve_range "(2.0,2.0)" "${versions}"
+  [[ "$status" -eq 1 ]] || return 1
+  [[ "$output" == *"Empty range (2.0,2.0)"* ]] || return 1
+}
+
+@test "resolve_range: equal bounds excluded reported as range fault" {
+  local versions
+  versions=$(printf "1.0\n2.0\n3.0\n")
+  run version_resolve_range "[2.0,2.0)" "${versions}"
+  [[ "$output" != *"No version matching range"* ]] || return 1
+}
+
+@test "resolve_range: equal bounds both inclusive still resolve" {
+  local versions
+  versions=$(printf "1.0\n2.0\n3.0\n")
+  version_resolve_range "[2.0,2.0]" "${versions}"
+  [[ "${VERSION_RESOLVE_RESULT}" == "2.0" ]] || return 1
+}
+
+@test "resolve_range: equal bounds both inclusive across differing part counts" {
+  local versions
+  versions=$(printf "1.0\n2.0\n3.0\n")
+  version_resolve_range "[2,2.0.0]" "${versions}"
+  [[ "${VERSION_RESOLVE_RESULT}" == "2.0" ]] || return 1
+}
+
+@test "resolve_range: open-ended ranges bypass the bound-order check" {
+  local versions
+  versions=$(printf "1.0\n2.0\n3.0\n")
+  version_resolve_range "[2.0,)" "${versions}"
+  [[ "${VERSION_RESOLVE_RESULT}" == "3.0" ]] || return 1
+}
+
+@test "resolve_range: open-lower range bypasses the bound-order check" {
+  local versions
+  versions=$(printf "1.0\n2.0\n3.0\n")
+  version_resolve_range "(,2.0]" "${versions}"
+  [[ "${VERSION_RESOLVE_RESULT}" == "2.0" ]] || return 1
+}
+
+# =============================================================================
 # version_resolve_range - edge cases
 # =============================================================================
 
