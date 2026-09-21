@@ -20,6 +20,11 @@
 #
 # Versions are compared numerically part by part (1.10 > 1.9).
 # Missing parts are treated as 0 (1.2 == 1.2.0).
+#
+# Ranges that cannot be satisfied by any version are rejected up front, before
+# candidates are considered: a lower bound above the upper bound ([3.2,1.2]),
+# or equal bounds with either bracket exclusive ([2.0,2.0)). Equal bounds with
+# both brackets inclusive ([2.0,2.0]) are fine and pin that one version.
 
 # Compare two version strings numerically.
 # Handles suffixed versions (e.g. 1.1-PRERELEASE): suffix is stripped for
@@ -208,6 +213,27 @@ version_resolve_range() {
   if [[ "${upper_bracket}" != "]" && "${upper_bracket}" != ")" ]]; then
     log_error "Invalid range syntax: must end with ] or ) : ${range}"
     return 1
+  fi
+
+  # A range whose bounds cannot both be satisfied matches nothing, whatever is
+  # published. Rejecting it here names the range as the fault; falling through
+  # to the scan reports "no version matching" instead, which reads as "not
+  # published yet" and sends the reader to the registry hunting a version that
+  # was never the problem. The schema cannot catch this: patterns are regexes
+  # and a regex cannot compare one captured number against another.
+  if [[ -n "${lower_version}" && -n "${upper_version}" ]]; then
+    local bound_order=0
+    version_compare "${lower_version}" "${upper_version}" || bound_order=$?
+    if [[ ${bound_order} -eq 1 ]]; then
+      log_error "Impossible range ${range}: lower bound ${lower_version} is above upper bound ${upper_version}"
+      return 1
+    fi
+    # Equal bounds are satisfiable only when both brackets are inclusive.
+    if [[ ${bound_order} -eq 0 ]] \
+       && { [[ "${lower_bracket}" == "(" ]] || [[ "${upper_bracket}" == ")" ]]; }; then
+      log_error "Empty range ${range}: bounds are equal but excluded by the brackets - use [${lower_version}] to pin that version"
+      return 1
+    fi
   fi
 
   # Find the highest matching version

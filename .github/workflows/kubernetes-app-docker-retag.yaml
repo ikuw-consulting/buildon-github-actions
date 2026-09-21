@@ -2078,7 +2078,7 @@ jobs:
           build-kind: kubernetes-app-docker-retag
           product-name: ${{ steps.product-aggregate.outputs.product-name }}
           product-short-name: ${{ steps.product-aggregate.outputs.product-short-name }}
-          git-sha: ${{ github.sha }}
+          git-sha: ${{ github.event.pull_request.head.sha || github.sha }}
           token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
           token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
           config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}

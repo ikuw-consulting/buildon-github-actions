@@ -1,15 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.30/spec-kaptainpm-schema-layerset-1.30.yaml",
+  "$id": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.31/spec-kaptainpm-schema-layerset-1.31.yaml",
   "name": "spec-kaptainpm-schema",
-  "version": "1.30",
+  "version": "1.31",
   "source": "https://github.com/kube-kaptain/spec-kaptainpm-schema",
   "latest": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/main/spec-kaptainpm-schema.yaml",
-  "tagged": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/1.30/spec-kaptainpm-schema.yaml",
-  "release": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.30/spec-kaptainpm-schema-layerset-1.30.yaml",
-  "validate-using": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.30/spec-kaptainpm-schema-layerset-1.30.json",
+  "tagged": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/1.31/spec-kaptainpm-schema.yaml",
+  "release": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.31/spec-kaptainpm-schema-layerset-1.31.yaml",
+  "validate-using": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.31/spec-kaptainpm-schema-layerset-1.31.json",
   "title": "KaptainPM",
-  "description": "Kaptain project manifest schema (version 1.30).\n",
+  "description": "Kaptain project manifest schema (version 1.31).\n",
   "type": "object",
   "required": [
     "apiVersion"
@@ -19,7 +19,7 @@
     "apiVersion": {
       "type": "string",
       "pattern": "^kaptain\\.org/[0-9]+(\\.[0-9]+)*$",
-      "description": "API version - must be kaptain.org/ followed by the schema version (e.g. kaptain.org/1.2). Set via 1.30 token substitution at build time.\n"
+      "description": "API version - must be kaptain.org/ followed by the schema version (e.g. kaptain.org/1.2). Set via 1.31 token substitution at build time.\n"
     },
     "kind": {
       "type": "string",
@@ -136,22 +136,22 @@
       }
     },
     "artifactReference": {
-      "description": "Artifact reference. Three forms are supported:\n\n  Short    name:version              (default registry and namespace)\n  Prefixed prefix/name:version       (default registry, explicit namespace)\n  Full     domain/path/name:version  (explicit registry - first segment contains a dot)\nVersion is one of: an exact version (one or more dot-separated integers, optional -PRERELEASE suffix); a Maven-style fixed bracket form pinning that exact version (e.g. [1.0.1]); or a Maven-style range (e.g. [1.0,2.0), (1.0,), (,2.0]).\n",
+      "description": "Artifact reference. Three forms are supported:\n\n  Short    name:version              (default registry and namespace)\n  Prefixed prefix/name:version       (default registry, explicit namespace)\n  Full     domain/path/name:version  (explicit registry - first segment contains a dot)\nAny form may carry an optional resolution-provider prefix, \"provider|\", naming the plugin that resolves it (e.g. docker|name:version). Omitted, the default provider (docker) applies. Version is one of: an exact version (one or more dot-separated integers, optional -PRERELEASE suffix); a Maven-style fixed bracket form pinning that exact version (e.g. [1.0.1]); or a Maven-style range (e.g. [1.0,2.0), (1.0,), (,2.0]). A range may omit one bound but not both, and each bound it carries starts with a digit. Range bounds take no -PRERELEASE suffix. An exact version may be pinned further by an OCI digest, written after the version in either spelling: name:1.2@sha256:<64 hex> or name:[1.2]@sha256:<64 hex>. The digest never goes inside the bracket, and a range takes no digest: a digest identifies one artifact, so there is nothing left to resolve.\n",
       "oneOf": [
         {
           "description": "Short form: name:version-or-range",
           "type": "string",
-          "pattern": "^[a-z][a-z0-9-]*:([0-9]+(\\.[0-9]+)*(-PRERELEASE)?|\\[[0-9]+(\\.[0-9]+)*(-PRERELEASE)?\\]|[\\[\\(][0-9]*(\\.[0-9]+)*,[0-9]*(\\.[0-9]+)*[\\]\\)])$"
+          "pattern": "^([a-z][a-z0-9-]*\\|)?[a-z][a-z0-9-]*:(([0-9]+(\\.[0-9]+)*(-PRERELEASE)?|\\[[0-9]+(\\.[0-9]+)*(-PRERELEASE)?\\])(@sha256:[0-9a-f]{64})?|[\\[\\(]([0-9]+(\\.[0-9]+)*,([0-9]+(\\.[0-9]+)*)?|,[0-9]+(\\.[0-9]+)*)[\\]\\)])$"
         },
         {
           "description": "Prefixed form: prefix/prefix-name:version-or-range",
           "type": "string",
-          "pattern": "^[a-z][a-z0-9-]*/[a-z][a-z0-9-]*:([0-9]+(\\.[0-9]+)*(-PRERELEASE)?|\\[[0-9]+(\\.[0-9]+)*(-PRERELEASE)?\\]|[\\[\\(][0-9]*(\\.[0-9]+)*,[0-9]*(\\.[0-9]+)*[\\]\\)])$"
+          "pattern": "^([a-z][a-z0-9-]*\\|)?[a-z][a-z0-9-]*/[a-z][a-z0-9-]*:(([0-9]+(\\.[0-9]+)*(-PRERELEASE)?|\\[[0-9]+(\\.[0-9]+)*(-PRERELEASE)?\\])(@sha256:[0-9a-f]{64})?|[\\[\\(]([0-9]+(\\.[0-9]+)*,([0-9]+(\\.[0-9]+)*)?|,[0-9]+(\\.[0-9]+)*)[\\]\\)])$"
         },
         {
           "description": "Full form: sub.domain/namespace/my/my-name:version-or-range (first segment contains a dot)",
           "type": "string",
-          "pattern": "^[a-z0-9][a-z0-9.-]*\\.[a-z]{2,}(:[0-9]+)?(/[a-z0-9][a-z0-9._-]*)+:([0-9]+(\\.[0-9]+)*(-PRERELEASE)?|\\[[0-9]+(\\.[0-9]+)*(-PRERELEASE)?\\]|[\\[\\(][0-9]*(\\.[0-9]+)*,[0-9]*(\\.[0-9]+)*[\\]\\)])$"
+          "pattern": "^([a-z][a-z0-9-]*\\|)?[a-z0-9][a-z0-9.-]*\\.[a-z]{2,}(:[0-9]+)?(/[a-z0-9][a-z0-9._-]*)+:(([0-9]+(\\.[0-9]+)*(-PRERELEASE)?|\\[[0-9]+(\\.[0-9]+)*(-PRERELEASE)?\\])(@sha256:[0-9a-f]{64})?|[\\[\\(]([0-9]+(\\.[0-9]+)*,([0-9]+(\\.[0-9]+)*)?|,[0-9]+(\\.[0-9]+)*)[\\]\\)])$"
         }
       ]
     },
@@ -162,22 +162,22 @@
       }
     },
     "artifactReferenceFixed": {
-      "description": "Artifact reference with a pinned exact version (no ranges allowed). Used in resolved/built artifacts where all versions must be concrete. Same three forms as artifactReference. Version must be exact, written either bare (1.0.1) or in Maven-style fixed bracket form ([1.0.1]).\n",
+      "description": "Artifact reference with a pinned exact version (no ranges allowed). Used in resolved/built artifacts where all versions must be concrete. Same three forms as artifactReference, and the same optional resolution-provider prefix. Version must be exact, written either bare (1.0.1) or in Maven-style fixed bracket form ([1.0.1]), and may carry the same optional OCI digest suffix.\n",
       "oneOf": [
         {
           "description": "Short form: name:version",
           "type": "string",
-          "pattern": "^[a-z][a-z0-9-]*:([0-9]+(\\.[0-9]+)*(-PRERELEASE)?|\\[[0-9]+(\\.[0-9]+)*(-PRERELEASE)?\\])$"
+          "pattern": "^([a-z][a-z0-9-]*\\|)?[a-z][a-z0-9-]*:([0-9]+(\\.[0-9]+)*(-PRERELEASE)?|\\[[0-9]+(\\.[0-9]+)*(-PRERELEASE)?\\])(@sha256:[0-9a-f]{64})?$"
         },
         {
           "description": "Prefixed form: prefix/prefix-name:version",
           "type": "string",
-          "pattern": "^[a-z][a-z0-9-]*/[a-z][a-z0-9-]*:([0-9]+(\\.[0-9]+)*(-PRERELEASE)?|\\[[0-9]+(\\.[0-9]+)*(-PRERELEASE)?\\])$"
+          "pattern": "^([a-z][a-z0-9-]*\\|)?[a-z][a-z0-9-]*/[a-z][a-z0-9-]*:([0-9]+(\\.[0-9]+)*(-PRERELEASE)?|\\[[0-9]+(\\.[0-9]+)*(-PRERELEASE)?\\])(@sha256:[0-9a-f]{64})?$"
         },
         {
           "description": "Full form: sub.domain/namespace/my/my-name:version (first segment contains a dot)",
           "type": "string",
-          "pattern": "^[a-z0-9][a-z0-9.-]*\\.[a-z]{2,}(:[0-9]+)?(/[a-z0-9][a-z0-9._-]*)+:([0-9]+(\\.[0-9]+)*(-PRERELEASE)?|\\[[0-9]+(\\.[0-9]+)*(-PRERELEASE)?\\])$"
+          "pattern": "^([a-z][a-z0-9-]*\\|)?[a-z0-9][a-z0-9.-]*\\.[a-z]{2,}(:[0-9]+)?(/[a-z0-9][a-z0-9._-]*)+:([0-9]+(\\.[0-9]+)*(-PRERELEASE)?|\\[[0-9]+(\\.[0-9]+)*(-PRERELEASE)?\\])(@sha256:[0-9a-f]{64})?$"
         }
       ]
     },

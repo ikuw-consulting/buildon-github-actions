@@ -2,5 +2,5 @@
 # This example is released to the public domain. Use freely without attribution.
 
 # This is a minimum example with no overrides, extend as needed
-apiVersion: kaptain.org/1.30
+apiVersion: kaptain.org/1.31
 kind: kubernetes-run-environment

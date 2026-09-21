@@ -689,6 +689,99 @@ generate_docs() {
   echo "  Injected: workflow links table"
 }
 
+# Validate that no env: block assigns a GitHub Actions default environment variable.
+# The runner injects its own value for these into every step and that value wins, so
+# the assignment is silently ignored and the intended value never reaches the script.
+# Anything we want to control must use a name we own.
+validate_reserved_env_vars() {
+  echo "Validating reserved env vars..."
+
+  # GitHub Actions default environment variables, as injected by the runner.
+  # GITHUB_TOKEN is deliberately absent: the runner does not set it, so it is ours.
+  local reserved_vars="
+    CI
+    GITHUB_ACTION GITHUB_ACTIONS GITHUB_ACTION_PATH GITHUB_ACTION_REPOSITORY
+    GITHUB_ACTOR GITHUB_ACTOR_ID GITHUB_API_URL GITHUB_BASE_REF GITHUB_ENV
+    GITHUB_EVENT_NAME GITHUB_EVENT_PATH GITHUB_GRAPHQL_URL GITHUB_HEAD_REF
+    GITHUB_JOB GITHUB_OUTPUT GITHUB_PATH GITHUB_REF GITHUB_REF_NAME
+    GITHUB_REF_PROTECTED GITHUB_REF_TYPE GITHUB_REPOSITORY GITHUB_REPOSITORY_ID
+    GITHUB_REPOSITORY_OWNER GITHUB_REPOSITORY_OWNER_ID GITHUB_RETENTION_DAYS
+    GITHUB_RUN_ATTEMPT GITHUB_RUN_ID GITHUB_RUN_NUMBER GITHUB_SERVER_URL
+    GITHUB_SHA GITHUB_STEP_SUMMARY GITHUB_TRIGGERING_ACTOR GITHUB_WORKFLOW
+    GITHUB_WORKFLOW_REF GITHUB_WORKFLOW_SHA GITHUB_WORKSPACE
+    RUNNER_ARCH RUNNER_DEBUG RUNNER_NAME RUNNER_OS RUNNER_TEMP RUNNER_TOOL_CACHE
+  "
+
+  # Reserved names we assign anyway, each to the exact value the runner already
+  # provides, so the assignment is a harmless no-op whichever side wins. A name
+  # only belongs here if the value assigned is provably identical to the runner's.
+  local allowed_vars="
+    GITHUB_REPOSITORY
+    GITHUB_SERVER_URL
+    GITHUB_WORKFLOW_REF
+  "
+
+  local reserved allowed
+  reserved=" $(printf '%s' "$reserved_vars" | tr '\n' ' ') "
+  allowed=" $(printf '%s' "$allowed_vars" | tr '\n' ' ') "
+
+  local errors=0
+
+  for dir in "$ACTION_TEMPLATES_DIR" "$STEPS_DIR" "$TEMPLATES_DIR"; do
+    local dir_label
+    dir_label=$(basename "$dir")
+    for file in "$dir"/*.yaml; do
+      [[ -f "$file" ]] || continue
+      local file_basename
+      file_basename=$(basename "$file")
+
+      local in_env_block=false
+      local env_indent=0
+      local line_number=0
+
+      while IFS= read -r line; do
+        line_number=$((line_number + 1))
+
+        # Detect start of an env: block
+        if [[ "$line" =~ ^([[:space:]]*)env:[[:space:]]*$ ]]; then
+          in_env_block=true
+          env_indent=${#BASH_REMATCH[1]}
+          continue
+        fi
+
+        [[ "$in_env_block" == "true" ]] || continue
+
+        # Blank lines do not end the block
+        [[ "$line" =~ ^([[:space:]]*)[^[:space:]] ]] || continue
+
+        local line_indent=${#BASH_REMATCH[1]}
+        if [[ $line_indent -le $env_indent ]]; then
+          in_env_block=false
+          continue
+        fi
+
+        # Only the key matters here; the assigned value is never read
+        [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*): ]] || continue
+        local key="${BASH_REMATCH[1]}"
+
+        if [[ "$reserved" == *" $key "* ]] && [[ "$allowed" != *" $key "* ]]; then
+          echo "  ERROR: $dir_label/$file_basename:$line_number assigns reserved env var $key"
+          errors=$((errors + 1))
+        fi
+      done < "$file"
+    done
+  done
+
+  if [[ $errors -gt 0 ]]; then
+    echo "  FAILED: $errors reserved env var assignment(s)"
+    echo "  The runner injects its own value for these into every step, so the assignment"
+    echo "  is silently ignored. Rename the variable to a name this project owns."
+    exit 1
+  fi
+
+  echo "  No reserved env vars assigned"
+}
+
 # Validate that all action templates and steps-common files that set BUILD_PLATFORM
 # also set BUILD_MODE and BUILD_PLATFORM_LOG_PROVIDER. These three must travel together.
 validate_build_context_env_vars() {
@@ -799,6 +892,10 @@ validate_build_context_env_vars() {
 main() {
   local start_time=$SECONDS
   local section_start
+
+  # Reject reserved env var assignments before doing any work
+  validate_reserved_env_vars
+  echo
 
   # Validate build context env vars before doing any work
   validate_build_context_env_vars

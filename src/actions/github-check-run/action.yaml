@@ -34,12 +34,12 @@ runs:
       shell: bash
       env:
         ACTION: ${{ inputs.action }}
+        GH_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
         CHECK_NAME: ${{ inputs.check-name }}
         CHECK_RUN_ID: ${{ inputs.check-run-id }}
         CHECK_SUMMARY: ${{ inputs.summary }}
-        GH_TOKEN: ${{ github.token }}
-        GITHUB_REPOSITORY: ${{ github.repository }}
-        GITHUB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        CHECK_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       run: |
         set -euo pipefail
 
@@ -62,7 +62,7 @@ runs:
             -H "Accept: application/vnd.github+json" \
             "/repos/${GITHUB_REPOSITORY}/check-runs" \
             -f "name=${name}" \
-            -f "head_sha=${GITHUB_SHA}" \
+            -f "head_sha=${CHECK_HEAD_SHA}" \
             -f "status=in_progress" \
             -f "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)")
 
