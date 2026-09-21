@@ -19,7 +19,7 @@ on:
 
 jobs:
   build:
-    uses: kube-kaptain/buildon-github-actions/.github/workflows/kubernetes-app-docker-retag.yaml@1.1.57
+    uses: kube-kaptain/buildon-github-actions/.github/workflows/kubernetes-app-docker-retag.yaml@1.1.58
     permissions:
       contents: write
       packages: write
