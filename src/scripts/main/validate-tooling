@@ -196,7 +196,7 @@ elif [[ "${BUILD_MODE}" == "build_server" ]]; then
     fi
   fi
   if check_tool "pip3"; then
-    pip3 install check-jsonschema
+    pip3 install check-jsonschema==0.38.0
   fi
   if check_tool "check-jsonschema"; then
     log_tool "✓" "check-jsonschema" "$(tool_version check-jsonschema) (installed)"
