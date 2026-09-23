@@ -1,0 +1,23 @@
+test: test_setup-2dlocal-2dcontext-3a_TARGET-5fBRANCH_can_be_overridden_via_environment
+status: 0
+--- output ---
+
+################################################################################
+###                                                                          ###
+###                               Build Started                              ###
+###                                                                          ###
+################################################################################
+
+=== Build Context ===
+Build mode:      local
+Build platform:  test
+Log provider:    stdout
+Remote:          origin
+Current branch:  test-branch
+Target branch:   custom/branch
+Release branch:  origin/main
+Default branch:  origin/main
+Repository:      kube-kaptain/buildon-github-actions
+Registry:        ghcr.io
+Namespace:       kube-kaptain
+TARGET_BRANCH=custom/branch

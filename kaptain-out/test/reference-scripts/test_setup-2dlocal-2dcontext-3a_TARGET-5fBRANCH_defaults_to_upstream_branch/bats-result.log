@@ -1,0 +1,23 @@
+test: test_setup-2dlocal-2dcontext-3a_TARGET-5fBRANCH_defaults_to_upstream_branch
+status: 0
+--- output ---
+
+################################################################################
+###                                                                          ###
+###                               Build Started                              ###
+###                                                                          ###
+################################################################################
+
+=== Build Context ===
+Build mode:      local
+Build platform:  test
+Log provider:    stdout
+Remote:          origin
+Current branch:  test-branch
+Target branch:   origin/main
+Release branch:  origin/main
+Default branch:  origin/main
+Repository:      kube-kaptain/buildon-github-actions
+Registry:        ghcr.io
+Namespace:       kube-kaptain
+TARGET_BRANCH=origin/main

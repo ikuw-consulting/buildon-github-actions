@@ -1,0 +1,6 @@
+validate-tooling
+load-project-kaptainpm-docker-logins
+docker-registry-logins
+kaptain-init
+load-final-kaptainpm-yaml
+basic-quality-checks

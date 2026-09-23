@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+echo "$(basename "$0")" >> "$CALL_LOG"
+for var in CURRENT_BRANCH TARGET_BRANCH BUILD_MODE BUILD_PLATFORM RELEASE_BRANCH DEFAULT_BRANCH REPOSITORY_NAME REPOSITORY_OWNER; do
+  eval "val=\${$var:-}"
+  if [[ -z "$val" ]]; then
+    echo "MISSING REQUIRED VAR: $var (in $(basename "$0"))" >&2
+    exit 1
+  fi
+done

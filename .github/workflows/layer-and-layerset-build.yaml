@@ -144,7 +144,7 @@ jobs:
         if: steps.parse.outputs.ref != 'LOCAL' && success()
         uses: actions/checkout@v5.0.1
         with:
-          repository: kube-kaptain/buildon-github-actions
+          repository: ikuw-consulting/buildon-github-actions
           ref: ${{ steps.parse.outputs.ref }}
           path: .github/buildon-github-actions
 

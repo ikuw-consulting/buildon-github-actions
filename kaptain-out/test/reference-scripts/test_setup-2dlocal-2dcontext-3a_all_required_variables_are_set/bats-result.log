@@ -1,0 +1,23 @@
+test: test_setup-2dlocal-2dcontext-3a_all_required_variables_are_set
+status: 0
+--- output ---
+
+################################################################################
+###                                                                          ###
+###                               Build Started                              ###
+###                                                                          ###
+################################################################################
+
+=== Build Context ===
+Build mode:      local
+Build platform:  test
+Log provider:    stdout
+Remote:          origin
+Current branch:  test-branch
+Target branch:   origin/main
+Release branch:  origin/main
+Default branch:  origin/main
+Repository:      kube-kaptain/buildon-github-actions
+Registry:        ghcr.io
+Namespace:       kube-kaptain
+ALL_SET
