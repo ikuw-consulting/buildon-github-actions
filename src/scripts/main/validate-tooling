@@ -24,6 +24,14 @@ source "${SCRIPT_DIR}/../defaults/build-mode.bash"
 # shellcheck source=src/scripts/lib/output-var.bash
 source "${SCRIPT_DIR}/../lib/output-var.bash"
 
+# jv release to install when no schema validator is present. Same version and
+# checksums as the image-environment-base-* Dockerfiles - bump both together.
+JV_VERSION="6.0.3"
+# shellcheck disable=SC2034  # Read indirectly via JV_SHA512_${jv_arch}
+JV_SHA512_amd64="c2ca33588b399b14fc24d28c80c19dadfff1ec85c4289c598e1ecc5506fa474474b04dacf8befe138307e081e037c676e46bae79aae977a0320d797ec9c7cd0e"
+# shellcheck disable=SC2034  # Read indirectly via JV_SHA512_${jv_arch}
+JV_SHA512_arm64="8bc82ddf96661b73e6da4bfc77933beae13808a312011c6afc38ee9ce2293269bb03a08f5d28b4d0dcf064f769e11e68bb95577bf5374cde44ee38694654431f"
+
 # Tool categories
 CORE_TOOLS="git grep yq jq find cmp awk tr wc cp mkdir basename date uname zip"
 BUILD_SERVER_TOOLS="sudo systemctl"
@@ -192,19 +200,23 @@ elif [[ "${BUILD_MODE}" == "build_server" ]]; then
   case "$(uname -m)" in
     x86_64|amd64)  jv_arch="amd64" ;;
     arm64|aarch64) jv_arch="arm64" ;;
-    i386|i686)     jv_arch="386" ;;
     *)             jv_arch="" ;;
   esac
-  if [[ "${jv_os}" != "linux" && "${jv_os}" != "darwin" ]]; then
-    jv_arch=""
-  fi
+  jv_sha512_var="JV_SHA512_${jv_arch}"
+  jv_sha512="${!jv_sha512_var:-}"
 
-  if [[ -n "${jv_arch}" ]]; then
-    jv_url="https://github.com/santhosh-tekuri/jsonschema/releases/download/v6.0.3/jv-v6.0.3-${jv_os}-${jv_arch}.tar.gz"
-    log "  jv not found - installing v6.0.3 for ${jv_os}-${jv_arch}..."
-    curl -fsSL "${jv_url}" | sudo tar xz -C /usr/local/bin jv || log_warning "jv download failed: ${jv_url}"
+  if [[ "${jv_os}" == "linux" && -n "${jv_sha512}" ]]; then
+    jv_url="https://github.com/santhosh-tekuri/jsonschema/releases/download/v${JV_VERSION}/jv-v${JV_VERSION}-linux-${jv_arch}.tar.gz"
+    log "  jv not found - installing v${JV_VERSION} for linux-${jv_arch}..."
+    jv_tar="$(mktemp)"
+    if ! (curl -fsSL -o "${jv_tar}" "${jv_url}" \
+          && echo "${jv_sha512}  ${jv_tar}" | sha512sum -c - > /dev/null \
+          && sudo tar xzf "${jv_tar}" -C /usr/local/bin jv); then
+      log_warning "jv install failed (download, checksum or extract): ${jv_url}"
+    fi
+    rm -f "${jv_tar}"
   else
-    log_warning "No jv binary for ${jv_os}-$(uname -m) - falling back to check-jsonschema"
+    log_warning "No pinned jv binary for ${jv_os}-$(uname -m) - falling back to check-jsonschema"
   fi
 
   if check_tool "jv"; then
