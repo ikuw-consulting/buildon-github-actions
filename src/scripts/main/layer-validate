@@ -50,6 +50,8 @@ source "${SCRIPT_DIR}/../defaults/tokens.bash"
 source "${SCRIPT_DIR}/../lib/token-format.bash"
 # shellcheck source=src/scripts/lib/assert-unique-artifact-refs.bash
 source "${SCRIPT_DIR}/../lib/assert-unique-artifact-refs.bash"
+# shellcheck source=src/scripts/defaults/schema-validation.bash
+source "${SCRIPT_DIR}/../defaults/schema-validation.bash"
 
 log "=== Layer Validate ==="
 
@@ -155,7 +157,7 @@ if [[ ! -f "${schema_file}" ]]; then
 fi
 
 log "Schema: $(basename "${schema_file}")"
-check-jsonschema --schemafile "${schema_file}" "${json_file}"
+"${SCHEMA_VALIDATION_COMMAND}" "${schema_file}" "${json_file}"
 log "Schema validation passed"
 
 # Layer type: validate layer-payload declarations against the substituted
@@ -247,7 +249,7 @@ if [[ "${LAYER_TYPE}" == "layerset" ]]; then
     fi
 
     # Validate the pulled dep against this build system's layer schema
-    if ! check-jsonschema --schemafile "${dep_schema_file}" "${dep_staging}/KaptainPM.yaml" >/dev/null 2>&1; then
+    if ! "${SCHEMA_VALIDATION_COMMAND}" "${dep_schema_file}" "${dep_staging}/KaptainPM.yaml" >/dev/null 2>&1; then
       log_error "Dependency ${ref} KaptainPM.yaml failed schema validation against $(basename "${dep_schema_file}")"
       validation_failed=true
       continue

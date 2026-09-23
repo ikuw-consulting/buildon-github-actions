@@ -38,6 +38,9 @@ exit 0
 MOCK
   chmod +x "${MOCK_BIN_DIR}/check-jsonschema"
 
+  # Mocking check-jsonschema only works if the plugin routes there, so pin it
+  export SCHEMA_VALIDATION_COMMAND="${PLUGINS_DIR}/schema-validation-providers/check-jsonschema"
+
   export SPEC_TYPE="schema"
 }
 

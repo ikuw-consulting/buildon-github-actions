@@ -97,6 +97,8 @@ log "content-resolve: base=${CONTENT_BASE}"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/assert-unique-artifact-refs.bash"
 # shellcheck source=src/scripts/lib/builtin-tokens-from-entry.bash
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/builtin-tokens-from-entry.bash"
+# shellcheck source=src/scripts/defaults/schema-validation.bash
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../defaults" && pwd)/schema-validation.bash"
 
 CONTENT_RESOLVE_UTIL_DIR="${CONTENT_RESOLVE_UTIL_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../util" && pwd)}"
 CONTENT_RESOLVE_PLUGINS_DIR="${CONTENT_RESOLVE_PLUGINS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../plugins" && pwd)}"
@@ -283,7 +285,7 @@ content_validate_bundle() {
     log_error "Bundle ${project}: schema not found: ${schema_file}"
     return 1
   fi
-  if ! check-jsonschema --schemafile "${schema_file}" "${contract_file}"; then
+  if ! "${SCHEMA_VALIDATION_COMMAND}" "${schema_file}" "${contract_file}"; then
     log_error "Bundle ${project}: contract.yaml does not validate against schema ${schema_version}"
     return 1
   fi

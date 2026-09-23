@@ -198,6 +198,7 @@ jobs:
           BUILD_PLATFORM: github-actions
           BUILD_PLATFORM_LOG_PROVIDER: github-actions
           IMAGE_BUILD_COMMAND: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          SCHEMA_VALIDATION_COMMAND: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
           DOCKER_TARGET_REGISTRY: ${{ steps.registry-defaults.outputs.registry }}
           DOCKER_TARGET_NAMESPACE: ${{ steps.registry-defaults.outputs.namespace }}
         run: ./.github/buildon-github-actions/src/scripts/main/kaptain-init
@@ -268,6 +269,7 @@ jobs:
         with:
           build-kind: basic-quality-checks
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
           build-scripts-repo-root: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
           docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
           strip-repository-name-prefix: ${{ steps.kpm.outputs.STRIP_REPOSITORY_NAME_PREFIX }}
@@ -469,6 +471,7 @@ jobs:
         with:
           build-kind: basic-quality-checks
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
           build-scripts-repo-root: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
           docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
           # === Workflow Inputs ===

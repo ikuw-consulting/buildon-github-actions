@@ -47,6 +47,8 @@ source "${SCRIPT_DIR}/../defaults/tokens.bash"
 
 # shellcheck source=src/scripts/lib/output-var.bash
 source "${SCRIPT_DIR}/../lib/output-var.bash"
+# shellcheck source=src/scripts/defaults/schema-validation.bash
+source "${SCRIPT_DIR}/../defaults/schema-validation.bash"
 
 # Optional inputs
 METADATA_DESCRIPTION="${METADATA_DESCRIPTION:-}"
@@ -276,7 +278,7 @@ main() {
     log_error "Schema not found: ${schema_file}"
     exit 1
   fi
-  check-jsonschema --schemafile "${schema_file}" "${contract_file}"
+  "${SCHEMA_VALIDATION_COMMAND}" "${schema_file}" "${contract_file}"
   log "Contract validates against schema ${CONTRACT_SCHEMA_VERSION}"
 
   # --- Create contract zip ---

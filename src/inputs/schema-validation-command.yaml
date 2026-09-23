@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+#
+# Schema validation provider
+schema-validation-command:
+  description: 'Full path to the schema validation plugin (from validate-tooling)'
+  required: true
+  type: string

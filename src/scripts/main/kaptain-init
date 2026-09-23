@@ -61,6 +61,8 @@ source "${SCRIPT_DIR}/../lib/validate-layer-payload.bash"
 source "${SCRIPT_DIR}/../defaults/docker-target.bash"
 # shellcheck source=src/scripts/lib/kaptainpm-bool.bash
 source "${SCRIPT_DIR}/../lib/kaptainpm-bool.bash"
+# shellcheck source=src/scripts/defaults/schema-validation.bash
+source "${SCRIPT_DIR}/../defaults/schema-validation.bash"
 
 # IMAGE_BUILD_COMMAND is required because it's both written as a builtin token
 # below and consumed later by artifact-fetch when resolving layers. Same source
@@ -163,7 +165,7 @@ if [[ ! -f "${SCHEMA_PROJECT}" ]]; then
   exit 1
 fi
 log "Validating against schema: $(basename "${SCHEMA_PROJECT}")"
-check-jsonschema --schemafile "${SCHEMA_PROJECT}" "${PM_FILE}"
+"${SCHEMA_VALIDATION_COMMAND}" "${SCHEMA_PROJECT}" "${PM_FILE}"
 log "Schema validation passed"
 
 mkdir -p "${INTERPOLATION_DIR}" "${FINAL_DIR}" "${LAYERS_DIR}"
@@ -224,7 +226,7 @@ if [[ "${layer_count}" -eq 0 ]]; then
     exit 1
   fi
   log "Validating final KaptainPM.yaml against schema: $(basename "${SCHEMA_FINAL}")"
-  check-jsonschema --schemafile "${SCHEMA_FINAL}" "${FINAL_FILE}"
+  "${SCHEMA_VALIDATION_COMMAND}" "${SCHEMA_FINAL}" "${FINAL_FILE}"
   log "Final schema validation passed"
 
   write_kaptainpm_builtin_tokens "${FINAL_FILE}"
@@ -334,7 +336,7 @@ resolve_layer() {
 
     # Validate against layerset schema
     if [[ -f "${SCHEMA_LAYERSET}" ]]; then
-      check-jsonschema --schemafile "${SCHEMA_LAYERSET}" "${layer_file}"
+      "${SCHEMA_VALIDATION_COMMAND}" "${SCHEMA_LAYERSET}" "${layer_file}"
     fi
 
     # Validate type (no other spec.* content alongside spec.layers)
@@ -375,7 +377,7 @@ resolve_layer() {
 
     # Validate against layer schema
     if [[ -f "${SCHEMA_LAYER}" ]]; then
-      check-jsonschema --schemafile "${SCHEMA_LAYER}" "${layer_file}"
+      "${SCHEMA_VALIDATION_COMMAND}" "${SCHEMA_LAYER}" "${layer_file}"
     fi
 
     # Check kind conflict if layer declares one
@@ -557,7 +559,7 @@ if [[ ! -f "${SCHEMA_FINAL}" ]]; then
   exit 1
 fi
 log "Validating final merged KaptainPM.yaml against schema: $(basename "${SCHEMA_FINAL}")"
-check-jsonschema --schemafile "${SCHEMA_FINAL}" "${FINAL_FILE}"
+"${SCHEMA_VALIDATION_COMMAND}" "${SCHEMA_FINAL}" "${FINAL_FILE}"
 log "Final schema validation passed"
 
 write_kaptainpm_builtin_tokens "${FINAL_FILE}"

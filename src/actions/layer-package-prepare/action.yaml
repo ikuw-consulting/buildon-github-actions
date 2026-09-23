@@ -26,6 +26,10 @@ inputs:
     description: 'Build output directory (relative)'
     required: false
     default: 'kaptain-out'
+  # Schema validation provider
+  schema-validation-command:
+    description: 'Full path to the schema validation plugin (from validate-tooling)'
+    required: true
 
   # Required by the docker artifact provider when resolving short-form layer
   # dep references (version-range or bare name) against the registry.
@@ -85,6 +89,7 @@ runs:
         REPOSITORY_OWNER: ${{ inputs.repository-owner }}
         REPOSITORY_NAME: ${{ inputs.repository-name }}
         OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
+        SCHEMA_VALIDATION_COMMAND: ${{ inputs.schema-validation-command }}
         IMAGE_BUILD_COMMAND: ${{ inputs.image-build-command }}
         DOCKER_IMAGE_NAME: ${{ inputs.docker-image-name }}
         DOCKER_TARGET_REGISTRY: ${{ inputs.docker-target-registry }}

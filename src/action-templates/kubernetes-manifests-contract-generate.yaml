@@ -6,6 +6,7 @@ description: 'Generates a manifests contract file describing token scheme, requi
 
 inputs:
   # INJECT-INPUT: output-sub-path
+  # INJECT-INPUT: schema-validation-command
   # INJECT-INPUT: token-substitution
 
   # Action-specific inputs
@@ -45,6 +46,7 @@ runs:
         VERSION: ${{ inputs.version }}
         BUILD_KIND: ${{ inputs.build-kind }}
         OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
+        SCHEMA_VALIDATION_COMMAND: ${{ inputs.schema-validation-command }}
         TOKEN_DELIMITER_STYLE: ${{ inputs.token-delimiter-style }}
         TOKEN_NAME_STYLE: ${{ inputs.token-name-style }}
         METADATA_DESCRIPTION: ${{ inputs.metadata-description }}

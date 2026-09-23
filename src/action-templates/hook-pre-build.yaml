@@ -10,6 +10,7 @@ inputs:
     required: true
 
   # INJECT-INPUT: image-build-command
+  # INJECT-INPUT: schema-validation-command
   # INJECT-INPUT: build-scripts-repo-root
 
   # Project name
@@ -66,6 +67,7 @@ runs:
         GH_TOKEN: ${{ github.token }}
         GITHUB_TOKEN: ${{ github.token }}
         IMAGE_BUILD_COMMAND: ${{ inputs.image-build-command }}
+        SCHEMA_VALIDATION_COMMAND: ${{ inputs.schema-validation-command }}
         BUILD_SCRIPTS_REPO_ROOT: ${{ inputs.build-scripts-repo-root }}
         # GitHub context - needed for PROJECT_NAME and IS_RELEASE calculation
         REPOSITORY_NAME: ${{ github.event.repository.name }}

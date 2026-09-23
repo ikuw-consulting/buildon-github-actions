@@ -78,6 +78,9 @@ exit 0
 MOCK
   chmod +x "${MOCK_BIN_DIR}/check-jsonschema"
 
+  # Mocking check-jsonschema only works if the plugin routes there, so pin it
+  export SCHEMA_VALIDATION_COMMAND="${PLUGINS_DIR}/schema-validation-providers/check-jsonschema"
+
   # Ensure yq is available (it should be, but guard)
   if ! command -v yq &>/dev/null; then
     skip "yq not available"
@@ -405,7 +408,8 @@ EOF
   # Drop the always-pass mock: this test pins the VENDORED schema's exclusion
   # end-to-end through kaptain-init's real validation.
   rm "${MOCK_BIN_DIR}/check-jsonschema"
-  command -v check-jsonschema &>/dev/null || skip "check-jsonschema not available"
+  command -v jv &>/dev/null || command -v check-jsonschema &>/dev/null || skip "no schema validator available"
+  export SCHEMA_VALIDATION_COMMAND="${HOST_SCHEMA_VALIDATION_COMMAND}"
   cat > "${REPO_DIR}/KaptainPM.yaml" << 'EOF'
 apiVersion: kaptain.org/1.2
 kind: kubernetes-app-docker-dockerfile

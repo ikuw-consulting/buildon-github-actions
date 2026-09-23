@@ -22,6 +22,18 @@ PLUGINS_DIR="$PROJECT_ROOT/src/scripts/plugins"
 REPO_PROVIDERS_DIR="$PLUGINS_DIR/kubernetes-manifests-repo-providers"
 FIXTURES_DIR="$PROJECT_ROOT/src/test/fixtures"
 
+# validate-tooling selects the provider in a real build; tests have no
+# validate-tooling step, so select the same way it does - jv first, then
+# check-jsonschema - and the suite runs against whatever the host has.
+# Tests that mock a specific validator override this with the plugin they mock.
+if command -v jv &>/dev/null; then
+  HOST_SCHEMA_VALIDATION_COMMAND="$PLUGINS_DIR/schema-validation-providers/jv"
+else
+  HOST_SCHEMA_VALIDATION_COMMAND="$PLUGINS_DIR/schema-validation-providers/check-jsonschema"
+fi
+export HOST_SCHEMA_VALIDATION_COMMAND
+export SCHEMA_VALIDATION_COMMAND="${HOST_SCHEMA_VALIDATION_COMMAND}"
+
 # Test output directory - all test artifacts go here for diagnostics
 OUTPUT_SUB_PATH="${OUTPUT_SUB_PATH:-kaptain-out}"
 TEST_TARGET_DIR="$PROJECT_ROOT/${OUTPUT_SUB_PATH}/test"
@@ -334,7 +346,7 @@ extract_defaults_inputs() {
   local defaults_file="$1"
   # Match: VAR_NAME="${VAR_NAME:-...}" pattern for known input prefixes
   # These are the workflow input variables that hooks should export
-  local prefixes="KUBERNETES_|DOCKER_|MANIFESTS_|TOKEN_|TAG_VERSION_|GITHUB_RELEASE_|QC_|BLOCK_|OUTPUT_|CONFIG_|ADDITIONAL_RELEASE_BRANCHES|DEFAULT_BRANCH|CURRENT_BRANCH|RELEASE_BRANCH|BUILD_MODE|IMAGE_BUILD_COMMAND"
+  local prefixes="KUBERNETES_|DOCKER_|MANIFESTS_|TOKEN_|TAG_VERSION_|GITHUB_RELEASE_|QC_|BLOCK_|OUTPUT_|CONFIG_|ADDITIONAL_RELEASE_BRANCHES|DEFAULT_BRANCH|CURRENT_BRANCH|RELEASE_BRANCH|BUILD_MODE|IMAGE_BUILD_COMMAND|SCHEMA_VALIDATION_COMMAND"
   grep -E "^(${prefixes})[A-Z0-9_]*=\"\\\$\\{" "$defaults_file" 2>/dev/null \
     | sed -E 's/^([A-Z][A-Z0-9_]*)=.*/\1/' \
     | grep -v '_INPUT$' \
