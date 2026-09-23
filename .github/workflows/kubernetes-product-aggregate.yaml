@@ -279,6 +279,7 @@ jobs:
           BUILD_PLATFORM: github-actions
           BUILD_PLATFORM_LOG_PROVIDER: github-actions
           IMAGE_BUILD_COMMAND: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          SCHEMA_VALIDATION_COMMAND: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
           DOCKER_TARGET_REGISTRY: ${{ steps.registry-defaults.outputs.registry }}
           DOCKER_TARGET_NAMESPACE: ${{ steps.registry-defaults.outputs.namespace }}
         run: ./.github/buildon-github-actions/src/scripts/main/kaptain-init
@@ -349,6 +350,7 @@ jobs:
         with:
           build-kind: kubernetes-product-aggregate
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
           build-scripts-repo-root: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
           docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
           strip-repository-name-prefix: ${{ steps.kpm.outputs.STRIP_REPOSITORY_NAME_PREFIX }}
@@ -612,6 +614,7 @@ jobs:
         with:
           build-kind: kubernetes-product-aggregate
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
           build-scripts-repo-root: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
           docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
           strip-repository-name-prefix: ${{ steps.kpm.outputs.STRIP_REPOSITORY_NAME_PREFIX }}
@@ -820,6 +823,7 @@ jobs:
         with:
           build-kind: kubernetes-product-aggregate
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
           build-scripts-repo-root: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
           docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
           # === Workflow Inputs ===
@@ -1097,6 +1101,7 @@ jobs:
         with:
           build-kind: kubernetes-product-aggregate
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
           build-scripts-repo-root: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
           docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
           # === Workflow Inputs ===
@@ -1279,6 +1284,7 @@ jobs:
         with:
           project-name: ${{ steps.versions.outputs.project-name }}
           output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
           token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
           token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
           docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
@@ -1393,6 +1399,7 @@ jobs:
           token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
           metadata-description: ${{ steps.kpm.outputs.METADATA_DESCRIPTION }}
           output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
       - name: Pass check - Generate Manifests Contract
         if: success() && steps.check-manifest-contract-generate.outputs.check-run-id != ''
         continue-on-error: true
@@ -1530,6 +1537,7 @@ jobs:
         with:
           build-kind: kubernetes-product-aggregate
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
           build-scripts-repo-root: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
           docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
           # === Workflow Inputs ===
@@ -2016,6 +2024,7 @@ jobs:
         with:
           build-kind: kubernetes-product-aggregate
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
           build-scripts-repo-root: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
           docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
           # === Workflow Inputs ===

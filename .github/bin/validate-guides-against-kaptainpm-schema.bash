@@ -10,6 +10,13 @@ set -euo pipefail
 SCHEMAS_DIR="src/schemas"
 VERSION_FILE="${SCHEMAS_DIR}/version"
 
+# validate-tooling does the selecting in a real build; this harness runs on its
+# own, so point at the in-repo plugin unless something upstream already chose.
+SCHEMA_VALIDATION_COMMAND="${SCHEMA_VALIDATION_COMMAND:-src/scripts/plugins/schema-validation-providers/check-jsonschema}"
+
+# Every kaptain script sources platform.bash, which requires this
+export BUILD_PLATFORM="${BUILD_PLATFORM:-test}"
+
 if [[ ! -f "${VERSION_FILE}" ]]; then
   echo "ERROR: Schema version file not found: ${VERSION_FILE}" >&2
   exit 1
@@ -38,7 +45,7 @@ total=0
 shopt -s nullglob
 for example in examples/guides/*/KaptainPM.yaml; do
   total=$((total + 1))
-  if output=$(check-jsonschema --schemafile "${SCHEMA_FILE}" "${example}" 2>&1); then
+  if output=$("${SCHEMA_VALIDATION_COMMAND}" "${SCHEMA_FILE}" "${example}" 2>&1); then
     echo "PASS  ${example}"
     passed=$((passed + 1))
   else

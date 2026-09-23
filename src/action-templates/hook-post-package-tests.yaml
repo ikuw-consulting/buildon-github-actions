@@ -10,6 +10,7 @@ inputs:
     required: true
 
   # INJECT-INPUT: image-build-command
+  # INJECT-INPUT: schema-validation-command
   # INJECT-INPUT: build-scripts-repo-root
 
   # === Workflow Inputs ===
@@ -74,6 +75,7 @@ runs:
         GH_TOKEN: ${{ github.token }}
         GITHUB_TOKEN: ${{ github.token }}
         IMAGE_BUILD_COMMAND: ${{ inputs.image-build-command }}
+        SCHEMA_VALIDATION_COMMAND: ${{ inputs.schema-validation-command }}
         BUILD_SCRIPTS_REPO_ROOT: ${{ inputs.build-scripts-repo-root }}
         # Workflow inputs - build output
         OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}

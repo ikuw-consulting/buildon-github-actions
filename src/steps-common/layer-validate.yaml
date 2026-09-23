@@ -13,3 +13,4 @@
     token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
     token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
     output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+    schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}

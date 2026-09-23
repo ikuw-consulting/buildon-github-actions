@@ -58,6 +58,8 @@ source "${SCRIPT_DIR}/../lib/output-var.bash"
 source "${SCRIPT_DIR}/../lib/version-range.bash"
 # shellcheck source=src/scripts/lib/validate-exact-file-exists.bash
 source "${SCRIPT_DIR}/../lib/validate-exact-file-exists.bash"
+# shellcheck source=src/scripts/defaults/schema-validation.bash
+source "${SCRIPT_DIR}/../defaults/schema-validation.bash"
 
 log "=== Layer Package Prepare ==="
 
@@ -195,7 +197,7 @@ if [[ ! -f "${source_schema}" ]]; then
   exit 1
 fi
 log "Validating source against schema: $(basename "${source_schema}")"
-check-jsonschema --schemafile "${source_schema}" "${context_dir}/KaptainPM.yaml"
+"${SCHEMA_VALIDATION_COMMAND}" "${source_schema}" "${context_dir}/KaptainPM.yaml"
 log "Source schema validation passed"
 
 # Inject build metadata via yq - all values injected directly

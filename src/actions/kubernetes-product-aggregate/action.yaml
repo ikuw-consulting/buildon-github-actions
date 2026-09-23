@@ -10,6 +10,10 @@ inputs:
     description: 'Build output directory (relative)'
     required: false
     default: 'kaptain-out'
+  # Schema validation provider
+  schema-validation-command:
+    description: 'Full path to the schema validation plugin (from validate-tooling)'
+    required: true
   # Token substitution
   token-delimiter-style:
     description: 'Token delimiter syntax for variables (shell, mustache, helm, erb, github-actions, blade, stringtemplate, ognl, t4, swift)'
@@ -91,6 +95,7 @@ runs:
         BUILD_PLATFORM_LOG_PROVIDER: github-actions
         PROJECT_NAME: ${{ inputs.project-name }}
         OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
+        SCHEMA_VALIDATION_COMMAND: ${{ inputs.schema-validation-command }}
         TOKEN_DELIMITER_STYLE: ${{ inputs.token-delimiter-style }}
         TOKEN_NAME_STYLE: ${{ inputs.token-name-style }}
         DOCKER_TARGET_REGISTRY: ${{ inputs.docker-target-registry }}

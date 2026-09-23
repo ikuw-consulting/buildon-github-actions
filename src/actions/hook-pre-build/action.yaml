@@ -13,6 +13,10 @@ inputs:
   image-build-command:
     description: 'Container runtime command (podman or docker)'
     required: true
+  # Schema validation provider
+  schema-validation-command:
+    description: 'Full path to the schema validation plugin (from validate-tooling)'
+    required: true
   # Build scripts repo root (computed by load-final-kaptainpm-yaml)
   build-scripts-repo-root:
     description: 'Absolute path to the buildon checkout, propagated so user hook scripts can locate build defaults/libs'
@@ -942,6 +946,7 @@ runs:
         GH_TOKEN: ${{ github.token }}
         GITHUB_TOKEN: ${{ github.token }}
         IMAGE_BUILD_COMMAND: ${{ inputs.image-build-command }}
+        SCHEMA_VALIDATION_COMMAND: ${{ inputs.schema-validation-command }}
         BUILD_SCRIPTS_REPO_ROOT: ${{ inputs.build-scripts-repo-root }}
         # GitHub context - needed for PROJECT_NAME and IS_RELEASE calculation
         REPOSITORY_NAME: ${{ github.event.repository.name }}

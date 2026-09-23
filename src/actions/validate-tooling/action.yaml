@@ -8,6 +8,9 @@ outputs:
   IMAGE_BUILD_COMMAND:
     description: 'Container runtime command to use (podman or docker)'
     value: ${{ steps.validate.outputs.IMAGE_BUILD_COMMAND }}
+  SCHEMA_VALIDATION_COMMAND:
+    description: 'Full path to the schema validation plugin to use'
+    value: ${{ steps.validate.outputs.SCHEMA_VALIDATION_COMMAND }}
 
 runs:
   using: 'composite'

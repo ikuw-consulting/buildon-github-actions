@@ -65,6 +65,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/../defaults/tag-versioning.bash"
 source "$(dirname "${BASH_SOURCE[0]}")/../defaults/quality-checks.bash"
 # shellcheck source=src/scripts/defaults/docker-common.bash
 source "$(dirname "${BASH_SOURCE[0]}")/../defaults/docker-common.bash"
+# shellcheck source=src/scripts/defaults/schema-validation.bash
+source "$(dirname "${BASH_SOURCE[0]}")/../defaults/schema-validation.bash"
 
 # === Vendor Specific ===
 # shellcheck source=src/scripts/defaults/vendor-github-release.bash
@@ -105,6 +107,7 @@ export OUTPUT_SUB_PATH
 export DOCKER_PUSH_IMAGE_LIST_FILE
 export DOCKER_REGISTRY_LOGINS DOCKER_TARGET_REGISTRY DOCKER_TARGET_NAMESPACE DOCKER_PUSH_TARGETS
 export DOCKERFILE_SQUASH DOCKERFILE_NO_CACHE IMAGE_BUILD_COMMAND DOCKER_PLATFORM
+export SCHEMA_VALIDATION_COMMAND
 export DOCKERFILE_SUB_PATH DOCKERFILE_SUB_PATH_LINUX_AMD64 DOCKERFILE_SUB_PATH_LINUX_ARM64
 export DOCKER_CONTEXT_SUB_PATH DOCKER_CONTEXT_SUB_PATH_LINUX_AMD64 DOCKER_CONTEXT_SUB_PATH_LINUX_ARM64
 export DOCKER_SOURCE_REGISTRY DOCKER_SOURCE_NAMESPACE DOCKER_SOURCE_IMAGE_NAME DOCKER_SOURCE_TAG

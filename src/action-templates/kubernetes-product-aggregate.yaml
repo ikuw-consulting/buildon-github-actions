@@ -6,6 +6,7 @@ description: 'Resolves spec.contents bundles, stages manifests/defaults into the
 
 inputs:
   # INJECT-INPUT: output-sub-path
+  # INJECT-INPUT: schema-validation-command
   # INJECT-INPUT: token-substitution
   # INJECT-INPUT: docker-build
   # INJECT-INPUT: image-build-command
@@ -42,6 +43,7 @@ runs:
         BUILD_PLATFORM_LOG_PROVIDER: github-actions
         PROJECT_NAME: ${{ inputs.project-name }}
         OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
+        SCHEMA_VALIDATION_COMMAND: ${{ inputs.schema-validation-command }}
         TOKEN_DELIMITER_STYLE: ${{ inputs.token-delimiter-style }}
         TOKEN_NAME_STYLE: ${{ inputs.token-name-style }}
         DOCKER_TARGET_REGISTRY: ${{ inputs.docker-target-registry }}

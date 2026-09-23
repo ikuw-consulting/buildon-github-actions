@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+#
+# check-jsonschema - Validates a YAML or JSON document against a JSON schema
+#
+# Usage:
+#   check-jsonschema <schema-file> <target-file>
+#
+# Exit:
+#   0 - target validates against the schema
+#   non-zero - validation failed, or the schema/target could not be read
+#
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=src/scripts/defaults/platform.bash
+source "${SCRIPT_DIR}/../../defaults/platform.bash"
+# shellcheck source=src/scripts/lib/log.bash
+source "${SCRIPT_DIR}/../../lib/log.bash"
+
+if [[ ${#} -ne 2 ]]; then
+  log_error "Usage: check-jsonschema <schema-file> <target-file>"
+  exit 1
+fi
+
+exec check-jsonschema --schemafile "${1}" "${2}"

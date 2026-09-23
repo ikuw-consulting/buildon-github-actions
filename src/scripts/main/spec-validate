@@ -34,6 +34,8 @@ source "${SCRIPT_DIR}/../defaults/output-sub-path.bash"
 source "${SCRIPT_DIR}/../defaults/docker-common.bash"
 # shellcheck source=src/scripts/defaults/spec-build.bash
 source "${SCRIPT_DIR}/../defaults/spec-build.bash"
+# shellcheck source=src/scripts/defaults/schema-validation.bash
+source "${SCRIPT_DIR}/../defaults/schema-validation.bash"
 
 log "=== Spec Validate ==="
 
@@ -68,7 +70,7 @@ log "Type: ${SPEC_TYPE} | Files: ${#spec_files[@]}"
 validate_with_check_jsonschema() {
   local spec_file="$1" schema_url="$2"
   log "Validating with check-jsonschema..."
-  check-jsonschema --schemafile "${schema_url}" "${spec_file}"
+  "${SCHEMA_VALIDATION_COMMAND}" "${schema_url}" "${spec_file}"
 }
 
 for spec_file in "${spec_files[@]}"; do

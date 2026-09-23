@@ -11,6 +11,7 @@
     repository-owner: ${{ steps.versions.outputs.repository-owner }}
     repository-name: ${{ steps.versions.outputs.repository-name }}
     output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+    schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
     image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
     docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
     docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}

@@ -208,6 +208,12 @@ else
   log_error "check-jsonschema not found - install it locally (brew install check-jsonschema or pip3 install check-jsonschema)"
   MISSING_CORE="${MISSING_CORE} check-jsonschema"
 fi
+
+SCHEMA_VALIDATION_COMMAND=""
+if check_tool "check-jsonschema"; then
+  SCHEMA_VALIDATION_COMMAND="$(cd "${SCRIPT_DIR}/../plugins/schema-validation-providers" && pwd)/check-jsonschema"
+  log "  → Set SCHEMA_VALIDATION_COMMAND=${SCHEMA_VALIDATION_COMMAND}"
+fi
 log ""
 
 # Check helm (required)
@@ -261,6 +267,10 @@ fi
 
 if [[ -n "${IMAGE_BUILD_COMMAND}" ]]; then
   output_var "IMAGE_BUILD_COMMAND" "${IMAGE_BUILD_COMMAND}"
+fi
+
+if [[ -n "${SCHEMA_VALIDATION_COMMAND}" ]]; then
+  output_var "SCHEMA_VALIDATION_COMMAND" "${SCHEMA_VALIDATION_COMMAND}"
 fi
 
 exit ${EXIT_CODE}

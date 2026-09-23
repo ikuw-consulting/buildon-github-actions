@@ -21,6 +21,7 @@
     BUILD_PLATFORM: github-actions
     BUILD_PLATFORM_LOG_PROVIDER: github-actions
     IMAGE_BUILD_COMMAND: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+    SCHEMA_VALIDATION_COMMAND: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
     DOCKER_TARGET_REGISTRY: ${{ steps.registry-defaults.outputs.registry }}
     DOCKER_TARGET_NAMESPACE: ${{ steps.registry-defaults.outputs.namespace }}
   run: ./.github/buildon-github-actions/src/scripts/main/kaptain-init

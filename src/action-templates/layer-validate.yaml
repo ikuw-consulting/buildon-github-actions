@@ -26,6 +26,7 @@ inputs:
 
   # INJECT-INPUT: token-substitution
   # INJECT-INPUT: output-sub-path
+  # INJECT-INPUT: schema-validation-command
 
 runs:
   using: 'composite'
@@ -45,4 +46,5 @@ runs:
         TOKEN_DELIMITER_STYLE: ${{ inputs.token-delimiter-style }}
         TOKEN_NAME_STYLE: ${{ inputs.token-name-style }}
         OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
+        SCHEMA_VALIDATION_COMMAND: ${{ inputs.schema-validation-command }}
       run: "${{ github.action_path }}/../../scripts/main/layer-validate"
