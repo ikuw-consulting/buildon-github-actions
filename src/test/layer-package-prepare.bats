@@ -37,6 +37,9 @@ setup() {
 exit 0
 MOCK
   chmod +x "${MOCK_BIN_DIR}/check-jsonschema"
+
+  # Mocking check-jsonschema only works if the plugin routes there, so pin it
+  export SCHEMA_VALIDATION_COMMAND="${PLUGINS_DIR}/schema-validation-providers/check-jsonschema"
   export PATH="${MOCK_BIN_DIR}:${PATH}"
 
   # Mock docker for the layerset verification loop (artifact-exists). Defaults

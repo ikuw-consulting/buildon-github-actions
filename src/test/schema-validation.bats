@@ -136,7 +136,7 @@ teardown() {
 # =============================================================================
 
 @test "defaults: accepts the value supplied by validate-tooling" {
-  run bash -c "SCHEMA_VALIDATION_COMMAND='${PLUGIN}' source '${DEFAULTS}' && echo \"\${SCHEMA_VALIDATION_COMMAND}\""
+  run bash -c "export SCHEMA_VALIDATION_COMMAND='${PLUGIN}'; source '${DEFAULTS}'; echo \"\${SCHEMA_VALIDATION_COMMAND}\""
   [ "$status" -eq 0 ]
   assert_output_contains "${PLUGIN}"
 }

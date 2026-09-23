@@ -22,9 +22,17 @@ PLUGINS_DIR="$PROJECT_ROOT/src/scripts/plugins"
 REPO_PROVIDERS_DIR="$PLUGINS_DIR/kubernetes-manifests-repo-providers"
 FIXTURES_DIR="$PROJECT_ROOT/src/test/fixtures"
 
-# validate-tooling selects this in a real build; tests have no validate-tooling
-# step, so point every script under test at the in-repo plugin.
-export SCHEMA_VALIDATION_COMMAND="${SCHEMA_VALIDATION_COMMAND:-$PLUGINS_DIR/schema-validation-providers/check-jsonschema}"
+# validate-tooling selects the provider in a real build; tests have no
+# validate-tooling step, so select the same way it does - jv first, then
+# check-jsonschema - and the suite runs against whatever the host has.
+# Tests that mock a specific validator override this with the plugin they mock.
+if command -v jv &>/dev/null; then
+  HOST_SCHEMA_VALIDATION_COMMAND="$PLUGINS_DIR/schema-validation-providers/jv"
+else
+  HOST_SCHEMA_VALIDATION_COMMAND="$PLUGINS_DIR/schema-validation-providers/check-jsonschema"
+fi
+export HOST_SCHEMA_VALIDATION_COMMAND
+export SCHEMA_VALIDATION_COMMAND="${HOST_SCHEMA_VALIDATION_COMMAND}"
 
 # Test output directory - all test artifacts go here for diagnostics
 OUTPUT_SUB_PATH="${OUTPUT_SUB_PATH:-kaptain-out}"
