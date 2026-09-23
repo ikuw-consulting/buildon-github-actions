@@ -178,40 +178,72 @@ for tool in ${BUILD_SERVER_TOOLS}; do
 done
 log ""
 
-# Check check-jsonschema CLI (required for spec/schema validation)
-log "Checking check-jsonschema..."
-if check_tool "check-jsonschema"; then
+# Check schema validation tooling (required for spec/schema validation).
+# jv is preferred - a single static binary with no runtime. check-jsonschema
+# is the fallback, used when already present or when jv ships no binary for
+# this platform.
+log "Checking schema validation..."
+if check_tool "jv"; then
+  log_tool "✓" "jv" "$(tool_version jv)"
+elif check_tool "check-jsonschema"; then
   log_tool "✓" "check-jsonschema" "$(tool_version check-jsonschema)"
 elif [[ "${BUILD_MODE}" == "build_server" ]]; then
-  log "  check-jsonschema not found - installing..."
-  if ! check_tool "pip3"; then
-    log "  pip3 not found - installing..."
-    if command -v apt-get &>/dev/null; then
-      sudo apt-get update
-      sudo apt-get install -y python3-pip
-    elif command -v yum &>/dev/null; then
-      sudo yum install -y python3-pip
+  jv_os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  case "$(uname -m)" in
+    x86_64|amd64)  jv_arch="amd64" ;;
+    arm64|aarch64) jv_arch="arm64" ;;
+    i386|i686)     jv_arch="386" ;;
+    *)             jv_arch="" ;;
+  esac
+  if [[ "${jv_os}" != "linux" && "${jv_os}" != "darwin" ]]; then
+    jv_arch=""
+  fi
+
+  if [[ -n "${jv_arch}" ]]; then
+    jv_url="https://github.com/santhosh-tekuri/jsonschema/releases/download/v6.0.3/jv-v6.0.3-${jv_os}-${jv_arch}.tar.gz"
+    log "  jv not found - installing v6.0.3 for ${jv_os}-${jv_arch}..."
+    curl -fsSL "${jv_url}" | sudo tar xz -C /usr/local/bin jv || log_warning "jv download failed: ${jv_url}"
+  else
+    log_warning "No jv binary for ${jv_os}-$(uname -m) - falling back to check-jsonschema"
+  fi
+
+  if check_tool "jv"; then
+    log_tool "✓" "jv" "$(tool_version jv) (installed)"
+  else
+    log "  installing check-jsonschema..."
+    if ! check_tool "pip3"; then
+      log "  pip3 not found - installing..."
+      if command -v apt-get &>/dev/null; then
+        sudo apt-get update
+        sudo apt-get install -y python3-pip
+      elif command -v yum &>/dev/null; then
+        sudo yum install -y python3-pip
+      else
+        log_error "No supported package manager found (need apt-get or yum)"
+      fi
+    fi
+    if check_tool "pip3"; then
+      pip3 install check-jsonschema==0.38.0
+    fi
+    if check_tool "check-jsonschema"; then
+      log_tool "✓" "check-jsonschema" "$(tool_version check-jsonschema) (installed)"
     else
-      log_error "No supported package manager found (need apt-get or yum)"
+      log_error "Schema validation tooling installation failed"
+      MISSING_CORE="${MISSING_CORE} schema-validation"
     fi
   fi
-  if check_tool "pip3"; then
-    pip3 install check-jsonschema==0.38.0
-  fi
-  if check_tool "check-jsonschema"; then
-    log_tool "✓" "check-jsonschema" "$(tool_version check-jsonschema) (installed)"
-  else
-    log_error "check-jsonschema installation failed"
-    MISSING_CORE="${MISSING_CORE} check-jsonschema"
-  fi
 else
-  log_error "check-jsonschema not found - install it locally (brew install check-jsonschema or pip3 install check-jsonschema)"
-  MISSING_CORE="${MISSING_CORE} check-jsonschema"
+  log_error "No schema validator found - install jv (https://github.com/santhosh-tekuri/jsonschema/releases) or check-jsonschema (brew install check-jsonschema)"
+  MISSING_CORE="${MISSING_CORE} schema-validation"
 fi
 
 SCHEMA_VALIDATION_COMMAND=""
-if check_tool "check-jsonschema"; then
+if check_tool "jv"; then
+  SCHEMA_VALIDATION_COMMAND="$(cd "${SCRIPT_DIR}/../plugins/schema-validation-providers" && pwd)/jv"
+elif check_tool "check-jsonschema"; then
   SCHEMA_VALIDATION_COMMAND="$(cd "${SCRIPT_DIR}/../plugins/schema-validation-providers" && pwd)/check-jsonschema"
+fi
+if [[ -n "${SCHEMA_VALIDATION_COMMAND}" ]]; then
   log "  → Set SCHEMA_VALIDATION_COMMAND=${SCHEMA_VALIDATION_COMMAND}"
 fi
 log ""
