@@ -196,7 +196,12 @@ elif [[ "${BUILD_MODE}" == "build_server" ]]; then
     fi
   fi
   if check_tool "pip3"; then
-    pip3 install check-jsonschema
+    # Pinned. 0.38.1 declares click>=8 but needs click>=8.2, and pip keeps the
+    # click 8.1 that GitHub's ubuntu-24.04 image ships, so an unpinned install
+    # died on import (TypeError: type 'ParamType' is not subscriptable) and
+    # failed every build at Kaptain Init. Move this deliberately, not by
+    # whatever PyPI published last.
+    pip3 install 'check-jsonschema==0.38.0'
   fi
   if check_tool "check-jsonschema"; then
     log_tool "✓" "check-jsonschema" "$(tool_version check-jsonschema) (installed)"
