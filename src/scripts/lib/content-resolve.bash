@@ -194,13 +194,22 @@ content_collect_on_behalf() {
     return 1
   fi
 
-  mkdir -p "${unzipped_dir}" "${dest}"
-  unzip -q "${zip}" -d "${unzipped_dir}"
-  if [[ ! -d "${unzipped_dir}/${project}" ]]; then
+  # Its own audit dir, never <unzipped-dir> itself: the child's manifests zip
+  # has already been unzipped there under the same <project>/ root, and copying
+  # that merged tree would hand the run-platform the child's whole namespaced
+  # manifest set to apply with cluster-scoped authority.
+  local on_behalf_dir="${unzipped_dir}/cluster-scoped-on-behalf"
+  if [[ -e "${on_behalf_dir}" ]]; then
+    log_error "Delegated cluster-scoped zip for ${project} already unzipped at ${on_behalf_dir}"
+    return 1
+  fi
+  mkdir -p "${on_behalf_dir}" "${dest}"
+  unzip -q "${zip}" -d "${on_behalf_dir}"
+  if [[ ! -d "${on_behalf_dir}/${project}" ]]; then
     log_error "Delegated cluster-scoped zip has no ${project}/ root: ${zip}"
     return 1
   fi
-  cp -R "${unzipped_dir}/${project}" "${dest}/${project}"
+  cp -R "${on_behalf_dir}/${project}" "${dest}/${project}"
 
   local count
   count=$(find "${dest}/${project}" -type f -name '*.yaml' | grep -c . || true)

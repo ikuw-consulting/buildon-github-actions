@@ -545,3 +545,24 @@ make_bundle_dirs() {
   run content_validate_bundle app "${root}/contracts" "${root}/defaults" "${root}/manifests"
   [ "$status" -eq 0 ]
 }
+
+# --- content_collect_on_behalf -------------------------------------------------
+# The child's manifests zip is unzipped into the same audit dir, under the same
+# <project>/ root, before the delegated cluster-scoped zip is collected. Only the
+# cluster-scoped documents may reach the run-platform's collection.
+
+@test "content_collect_on_behalf: collects only the delegated cluster-scoped set" {
+  local unzipped="${TEST_DIR}/unzipped/child"
+  mkdir -p "${unzipped}/child"
+  printf 'kind: Deployment\n' > "${unzipped}/child/deploy.yaml"   # the child's own manifests, already unzipped
+  local stage="${TEST_DIR}/_stage-cs"
+  mkdir -p "${stage}/child"
+  printf 'kind: ClusterRole\n' > "${stage}/child/cr.yaml"
+  ( cd "${stage}" && zip -qr "${TEST_DIR}/child-cluster-scoped-resources.zip" child )
+
+  run content_collect_on_behalf "${TEST_DIR}/child-cluster-scoped-resources.zip" "${unzipped}" child
+  [ "$status" -eq 0 ]
+  local dest="${OUTPUT_SUB_PATH}/run-platform/cluster-scoped-on-behalf/child"
+  [ -f "${dest}/cr.yaml" ]
+  [ ! -e "${dest}/deploy.yaml" ]
+}
