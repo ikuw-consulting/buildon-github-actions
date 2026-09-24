@@ -94,6 +94,8 @@ source "${SCRIPT_DIR}/../lib/token-usage.bash"
 source "${SCRIPT_DIR}/../lib/token-format.bash"
 # shellcheck source=src/scripts/lib/token-markers.bash
 source "${SCRIPT_DIR}/../lib/token-markers.bash"
+# shellcheck source=src/scripts/lib/manifest-file-kinds.bash
+source "${SCRIPT_DIR}/../lib/manifest-file-kinds.bash"
 # shellcheck source=src/scripts/lib/builtin-tokens-from-entry.bash
 source "${SCRIPT_DIR}/../lib/builtin-tokens-from-entry.bash"
 # shellcheck source=src/scripts/lib/env-deploy-base-image-compose.bash
@@ -246,16 +248,26 @@ step_substitution_gate() {
   token_regex=$(unresolved_token_regex "${TOKEN_DELIMITER_STYLE}" "${TOKEN_NAME_STYLE}") || exit 1
   local failures=0
   local deferred=0
-  local file rel tokens tok
-  while IFS= read -r -d '' file; do
+  local file rel tokens tok effective
+  # Every packageable file: manifests AND patches. A patch is merged into its
+  # manifest by run-finalise after this gate, and nothing re-scans the tree, so
+  # a patch skipped here ships whatever it left unresolved.
+  while IFS= read -r file; do
+    [[ -z "${file}" ]] && continue
     rel="${file#"${AGGREGATE_SUBSTITUTED_DIR}"/}"
+    # A patch is judged as the manifest it patches: one aimed at a secret
+    # template carries secret-template tokens.
+    effective="${file##*/}"
+    if manifest_file_classify "${file}" && [[ "${MANIFEST_FILE_KIND}" == "patch" ]]; then
+      effective="${MANIFEST_FILE_PATCH_TARGET}"
+    fi
     if [[ -n "${IGNORE_MARKERS_FILE}" ]]; then
       tokens=$(gate_unignored_tokens "${file}" "${rel}" "${token_regex}")
     else
       tokens=$(grep -oE "${token_regex}" "${file}" | LC_ALL=C sort -u | strip_token_delimiters "${TOKEN_DELIMITER_STYLE}" || true)
     fi
     [[ -z "${tokens}" ]] && continue
-    if [[ "${file}" == *.template.yaml ]]; then
+    if [[ "${effective}" == *.template.yaml ]]; then
       while IFS= read -r tok; do
         [[ -z "${tok}" ]] && continue
         if [[ "${RUN_BUILD_KIND}" == "run-platform" ]]; then
@@ -283,7 +295,7 @@ step_substitution_gate() {
         failures=$((failures + 1))
       done <<< "${tokens}"
     fi
-  done < <(find "${AGGREGATE_SUBSTITUTED_DIR}" -type f -name '*.yaml' -print0 | LC_ALL=C sort -z)
+  done < <(manifest_files_find_packageable "${AGGREGATE_SUBSTITUTED_DIR}" | LC_ALL=C sort)
 
   # Always fatal, in every build mode. A local build exists to fail the same
   # way a server build would; the only things it may legitimately soften are

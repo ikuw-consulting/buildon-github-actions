@@ -367,3 +367,48 @@ EOF
 teardown() {
   dump_bats_result
 }
+
+# =============================================================================
+# Patches pass through the gate too
+# =============================================================================
+# run-finalise merges yq patches into their manifests after this gate and
+# nothing re-scans the tree, so a patch the gate skipped shipped whatever it
+# left unresolved.
+
+@test "run-substitute: an unresolved token in a yq patch fails the gate" {
+  printf '%s' 'yes' > src/config/Known
+  write_manifest plain.yaml << 'EOF'
+resolved: ${Known}
+EOF
+  write_manifest plain.yaml.yq-merge-yaml-extra << 'EOF'
+extra: ${Unknown}
+EOF
+  run "$SCRIPT"
+  [ "$status" -ne 0 ]
+  assert_output_contains "plain.yaml.yq-merge-yaml-extra: unresolved token 'Unknown'"
+}
+
+@test "run-substitute: a patch to a secret template is held to the secret-template rule" {
+  write_manifest thing.template.yaml << 'EOF'
+kind: Secret
+EOF
+  write_manifest thing.template.yaml.yq-merge-yaml-extra << 'EOF'
+secret: ${PatchedSecret}
+EOF
+  run "$SCRIPT"
+  [ "$status" -ne 0 ]
+  assert_output_contains "unresolved token 'PatchedSecret' in a secret template"
+}
+
+@test "run-substitute: a patch to a secret template passes with an encrypted value" {
+  printf '%s' 'ciphertext' > src/secrets/PatchedSecret.age
+  write_manifest thing.template.yaml << 'EOF'
+kind: Secret
+EOF
+  write_manifest thing.template.yaml.yq-merge-yaml-extra << 'EOF'
+secret: ${PatchedSecret}
+EOF
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  assert_output_contains "Gate passed"
+}
