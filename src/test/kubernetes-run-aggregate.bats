@@ -610,3 +610,26 @@ teardown() {
   dump_bats_result
   :
 }
+
+# =============================================================================
+# Schema validation goes through SCHEMA_VALIDATION_COMMAND
+# =============================================================================
+# validate-tooling installs jv, not check-jsonschema, on build servers. A
+# direct check-jsonschema call exits 127 there and every env build fails at the
+# cleanup-policy step reporting "does not validate".
+
+@test "cleanup policy: validated with SCHEMA_VALIDATION_COMMAND, never check-jsonschema directly" {
+  local fake_bin="${TEST_DIR}/fake-bin"
+  mkdir -p "${fake_bin}"
+  printf '#!/usr/bin/env bash\necho "check-jsonschema called directly" >&2\nexit 127\n' > "${fake_bin}/check-jsonschema"
+  printf '#!/usr/bin/env bash\necho "$@" >> "%s/validator.log"\nexit 0\n' "${TEST_DIR}" > "${fake_bin}/ok-validator"
+  chmod +x "${fake_bin}/check-jsonschema" "${fake_bin}/ok-validator"
+
+  write_pm
+  setup_mock_oci
+  stage_own_deploy_manifests_output run-foo
+  PATH="${fake_bin}:${PATH}" SCHEMA_VALIDATION_COMMAND="${fake_bin}/ok-validator" PROJECT_NAME=run-foo run_script
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"check-jsonschema called directly"* ]] || return 1
+  grep -q "cleanup" "${TEST_DIR}/validator.log"
+}

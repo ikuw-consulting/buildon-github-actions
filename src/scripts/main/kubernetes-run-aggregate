@@ -737,7 +737,7 @@ build_cleanup_policy_document() {
   # kind, and spec.main.environment, which both run kinds use. That way the schema
   # shipped alongside it validates it directly - no sub-schema to generate,
   # no reconstruction step at the far end, and the checker is eventually
-  # just check-jsonschema over the two keys.
+  # just schema validation over the two keys.
   #
   # The cleanUp block itself is VERBATIM, exactly as configured, with no
   # defaults applied. Defaults are behaviour and the behaviour lives in the
@@ -762,12 +762,14 @@ build_cleanup_policy_document() {
        spec: { main: { environment: (if ($cleanUp | length) > 0 then { cleanUp: $cleanUp } else {} end) } } }' \
     | yq -P "." > "${out}"
 
-  # Refuse to package something that does not validate. The build already
-  # depends on check-jsonschema (validate-tooling requires it, kaptain-init
-  # uses it), and failing here is cheap where failing at deploy time is not.
-  if ! check-jsonschema --schemafile "${CLEANUP_SCHEMA_FILE}" "${out}" > /dev/null 2>&1; then
+  # Refuse to package something that does not validate; failing here is cheap
+  # where failing at deploy time is not. Through SCHEMA_VALIDATION_COMMAND, as
+  # every other schema check does: validate-tooling installs jv, not
+  # check-jsonschema, on build servers, so a direct check-jsonschema call exits
+  # 127 there and reads as "does not validate".
+  if ! "${SCHEMA_VALIDATION_COMMAND}" "${CLEANUP_SCHEMA_FILE}" "${out}" > /dev/null 2>&1; then
     log_error "Generated cleanup policy document does not validate against ${CLEANUP_SCHEMA_FILE}"
-    check-jsonschema --schemafile "${CLEANUP_SCHEMA_FILE}" "${out}" 2>&1 | sed "s/^/  /" || true
+    "${SCHEMA_VALIDATION_COMMAND}" "${CLEANUP_SCHEMA_FILE}" "${out}" 2>&1 | sed "s/^/  /" || true
     exit 1
   fi
 }
