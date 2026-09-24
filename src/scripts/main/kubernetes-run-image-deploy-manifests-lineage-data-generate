@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+#
+# kubernetes-run-image-deploy-manifests-lineage-data-generate - Thin
+# wrapper: the stock kubernetes-lineage-data-generate pinned at the
+# deploy-manifests block's dirs (see
+# lib/run-image-deploy-manifests-context.bash), with ENV_BUILD_SECTION=app:
+# this set is the run's inner app, so it gets the manifest-set lineage
+# flavour. The environment-record flavour (ENV_BUILD_SECTION=env|rp)
+# belongs to the later bespoke block.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=src/scripts/defaults/platform.bash
+source "${SCRIPT_DIR}/../defaults/platform.bash"
+# shellcheck source=src/scripts/lib/log.bash
+source "${SCRIPT_DIR}/../lib/log.bash"
+# shellcheck source=src/scripts/defaults/output-sub-path.bash
+source "${SCRIPT_DIR}/../defaults/output-sub-path.bash"
+# shellcheck source=src/scripts/defaults/environments.bash
+source "${SCRIPT_DIR}/../defaults/environments.bash"
+# shellcheck source=src/scripts/lib/run-image-deploy-manifests-context.bash
+source "${SCRIPT_DIR}/../lib/run-image-deploy-manifests-context.bash"
+
+export ENV_BUILD_SECTION="app"
+
+exec "${SCRIPT_DIR}/kubernetes-lineage-data-generate"

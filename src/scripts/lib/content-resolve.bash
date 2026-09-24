@@ -12,12 +12,18 @@
 # and stage under a different tree entirely.
 #
 # CONTENT_FLAVOUR contract (required, validated at source time):
-#   contents   - read spec.contents[], stage under ${OUTPUT_SUB_PATH}/contents/,
-#                produce contents.yaml + contents-resolved.yaml
-#   templates  - read spec.templates[], stage under ${OUTPUT_SUB_PATH}/templates/,
-#                produce templates.yaml + templates-resolved.yaml
+#   contents      - read spec.contents[], stage under ${OUTPUT_SUB_PATH}/contents/,
+#                   produce contents.yaml + contents-resolved.yaml
+#   templates     - read spec.templates[], stage under ${OUTPUT_SUB_PATH}/templates/,
+#                   produce templates.yaml + templates-resolved.yaml
+#   environment   - env builds: read spec.contents[], stage under
+#                   ${OUTPUT_SUB_PATH}/environment/, produce environment.yaml +
+#                   environment-resolved.yaml
+#   run-platform  - RP builds: read spec.contents[], stage under
+#                   ${OUTPUT_SUB_PATH}/run-platform/, produce run-platform.yaml +
+#                   run-platform-resolved.yaml
 # A given script picks the flavour appropriate to its phase. env/rp builds will
-# run two passes (contents then templates) in separate scripts.
+# run two passes (environment/run-platform then templates) in separate scripts.
 #
 # Required env to source this file:
 #   OUTPUT_SUB_PATH   - set by defaults/output-sub-path.bash before sourcing
@@ -65,13 +71,18 @@ case "${CONTENT_FLAVOUR:-}" in
   templates)
     CONTENT_RESOLVE_SPEC_EXPR='.spec.templates[]'
     ;;
+  environment|run-platform)
+    # env/RP builds aggregate spec.contents like a product does, but stage
+    # under their own flavour-named tree.
+    CONTENT_RESOLVE_SPEC_EXPR='.spec.contents[]'
+    ;;
   "")
-    log_error "CONTENT_FLAVOUR must be set before sourcing content-resolve.bash (expected 'contents' or 'templates')."
+    log_error "CONTENT_FLAVOUR must be set before sourcing content-resolve.bash (expected 'contents', 'templates', 'environment', or 'run-platform')."
     # shellcheck disable=SC2317 # dual-mode: works whether sourced or executed
     return 1 2>/dev/null || exit 1
     ;;
   *)
-    log_error "CONTENT_FLAVOUR='${CONTENT_FLAVOUR}' invalid (expected 'contents' or 'templates')."
+    log_error "CONTENT_FLAVOUR='${CONTENT_FLAVOUR}' invalid (expected 'contents', 'templates', 'environment', or 'run-platform')."
     # shellcheck disable=SC2317 # dual-mode: works whether sourced or executed
     return 1 2>/dev/null || exit 1
     ;;
@@ -130,10 +141,12 @@ content_find_zips() {
 
   local manifests_zips=()
   local contract_zips=()
+  local on_behalf_zips=()
   while IFS= read -r -d '' zip; do
     case "${zip}" in
-      *-manifests.zip) manifests_zips+=("${zip}") ;;
-      *-contract.zip)  contract_zips+=("${zip}") ;;
+      *-manifests.zip)                manifests_zips+=("${zip}") ;;
+      *-contract.zip)                 contract_zips+=("${zip}") ;;
+      *-cluster-scoped-resources.zip) on_behalf_zips+=("${zip}") ;;
     esac
   done < <(find "${extract_dir}" -type f -name '*.zip' -print0)
 
@@ -146,8 +159,52 @@ content_find_zips() {
     return 1
   fi
 
+  # Optional: only env children that delegate cluster-scoped resources
+  # upwards carry one, so zero is the normal case. More than one means two
+  # projects published into the same artifact, which is a packaging bug.
+  if [[ ${#on_behalf_zips[@]} -gt 1 ]]; then
+    log_error "Expected at most one *-cluster-scoped-resources.zip in ${extract_dir}, found ${#on_behalf_zips[@]}"
+    return 1
+  fi
+
   CONTENT_MANIFESTS_ZIP="${manifests_zips[0]}"
   CONTENT_CONTRACT_ZIP="${contract_zips[0]}"
+  CONTENT_ON_BEHALF_ZIP="${on_behalf_zips[0]:-}"
+}
+
+# Unzip a child's delegated cluster-scoped zip into the run-platform's
+# collection dir, from which kubernetes-run-package stages it into the RP
+# deploy image at /kd/cluster-scoped-on-behalf. The zip has a single
+# <project>/ root (the manifests-zip convention), and that dir name IS the
+# per-child partition the deploy side applies from.
+#
+# Usage: content_collect_on_behalf <on-behalf-zip> <unzipped-dir> <project>
+content_collect_on_behalf() {
+  if [[ $# -ne 3 ]]; then
+    log_error "content_collect_on_behalf requires exactly 3 arguments, got $#"
+    return 1
+  fi
+  local zip="$1"
+  local unzipped_dir="$2"
+  local project="$3"
+
+  local dest="${OUTPUT_SUB_PATH}/run-platform/cluster-scoped-on-behalf"
+  if [[ -e "${dest}/${project}" ]]; then
+    log_error "Delegated cluster-scoped set for ${project} already collected in ${dest}"
+    return 1
+  fi
+
+  mkdir -p "${unzipped_dir}" "${dest}"
+  unzip -q "${zip}" -d "${unzipped_dir}"
+  if [[ ! -d "${unzipped_dir}/${project}" ]]; then
+    log_error "Delegated cluster-scoped zip has no ${project}/ root: ${zip}"
+    return 1
+  fi
+  cp -R "${unzipped_dir}/${project}" "${dest}/${project}"
+
+  local count
+  count=$(find "${dest}/${project}" -type f -name '*.yaml' | grep -c . || true)
+  log "  Collected ${count} delegated cluster-scoped manifest(s) from ${project}"
 }
 
 # Unzip a manifests zip into <unzipped-dir> (audit trail) and cp the
@@ -489,6 +546,13 @@ content_resolve_all() {
       "${CONTENT_CONTRACTS_DIR}" "${CONTENT_DEFAULTS_DIR}" "${project}" || return $?
 
     content_validate_bundle "${project}" "${CONTENT_CONTRACTS_DIR}" "${CONTENT_DEFAULTS_DIR}" "${CONTENT_MANIFESTS_DIR}" || return $?
+
+    # Presence-driven, no flag: a child that delegated its cluster-scoped
+    # resources ships the zip, and only an RP has the cluster credentials
+    # to apply what it collects.
+    if [[ -n "${CONTENT_ON_BEHALF_ZIP}" && "${CONTENT_FLAVOUR}" == "run-platform" ]]; then
+      content_collect_on_behalf "${CONTENT_ON_BEHALF_ZIP}" "${unzipped_dir}" "${project}" || return $?
+    fi
 
     log "  Staged ${project}"
     log ""

@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: 'Kubernetes Run Image Deploy Manifests'
+description: 'Stages (or generates) the deploy-image manifest set for an env/RP build - the first step of the bone-stock deploy-manifests block'
+
+inputs:
+  # Action-specific inputs
+  project-name:
+    description: 'Run name (run-* / run-platform-*)'
+    required: true
+  version:
+    description: 'Version (carried for log clarity)'
+    required: true
+
+  # INJECT-INPUT: output-sub-path
+  # INJECT-INPUT: token-substitution
+  # INJECT-INPUT: run-environment-settings
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Stage deploy-image manifests
+      id: run-image-deploy-manifests
+      shell: bash
+      env:
+        BUILD_MODE: build_server
+        BUILD_PLATFORM: github-actions
+        BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        PROJECT_NAME: ${{ inputs.project-name }}
+        VERSION: ${{ inputs.version }}
+        OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
+        TOKEN_DELIMITER_STYLE: ${{ inputs.token-delimiter-style }}
+        TOKEN_NAME_STYLE: ${{ inputs.token-name-style }}
+        ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH: ${{ inputs.env-deploy-source-base-path }}
+        ENV_GENERATE_IDEAL_ENVIRONMENT_DEPLOY_MANIFESTS: ${{ inputs.generate-ideal-environment-deploy-manifests }}
+        ENV_IMAGE_DEPLOY_MANIFESTS_APPLY_MODE: ${{ inputs.image-deploy-manifests-apply-mode }}
+        ENV_DEPLOY_MODE: ${{ inputs.env-deploy-mode }}
+        ENV_IMAGE_AUTO_UPDATE_PROVIDER: ${{ inputs.image-auto-update-provider }}
+        ENV_IMAGE_AUTO_UPDATE_POLICY: ${{ inputs.image-auto-update-policy }}
+        ENV_IMAGE_AUTO_UPDATE_TRIGGER: ${{ inputs.image-auto-update-trigger }}
+        ENV_IMAGE_AUTO_UPDATE_POLL_SCHEDULE: ${{ inputs.image-auto-update-poll-schedule }}
+        ENV_IMAGE_AUTO_UPDATE_FIELD_MANAGER_STRATEGY: ${{ inputs.image-auto-update-field-manager-strategy }}
+        ENV_CLUSTER_SCOPED_DELEGATION: ${{ inputs.cluster-scoped-delegation }}
+      run: "${{ github.action_path }}/../../scripts/main/kubernetes-run-image-deploy-manifests"

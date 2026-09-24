@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: 'Kubernetes Run Image Deploy Manifests Lineage Data Generate'
+description: 'Emits the deploy-manifests set''s lineage data ConfigMap (the run''s inner app record, ENV_BUILD_SECTION=app) - the stock lineage-data-generate pinned by its wrapper script'
+
+inputs:
+  # INJECT-INPUT: output-sub-path
+  # INJECT-INPUT: token-substitution
+  # INJECT-INPUT: run-environment-settings
+
+  # Action-specific inputs
+  project-name:
+    description: 'Run name (run-* / run-platform-*)'
+    required: true
+  version:
+    description: 'Version'
+    required: true
+  build-kind:
+    description: 'Build kind (kubernetes-run-environment or kubernetes-run-platform-meta-environment)'
+    required: true
+  git-sha:
+    description: 'Git SHA for the kaptain.org/git-sha annotation (optional)'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate deploy-manifests lineage data ConfigMap
+      id: lineage-data
+      shell: bash
+      env:
+        BUILD_MODE: build_server
+        BUILD_PLATFORM: github-actions
+        BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        PROJECT_NAME: ${{ inputs.project-name }}
+        VERSION: ${{ inputs.version }}
+        BUILD_KIND: ${{ inputs.build-kind }}
+        GIT_SHA: ${{ inputs.git-sha }}
+        OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
+        TOKEN_DELIMITER_STYLE: ${{ inputs.token-delimiter-style }}
+        TOKEN_NAME_STYLE: ${{ inputs.token-name-style }}
+        CONFIG_VALUE_TRAILING_NEWLINE: ${{ inputs.config-value-trailing-newline }}
+        TOKEN_SUBSTITUTION_PASSES: ${{ inputs.token-substitution-passes }}
+        ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH: ${{ inputs.env-deploy-source-base-path }}
+      run: "${{ github.action_path }}/../../scripts/main/kubernetes-run-image-deploy-manifests-lineage-data-generate"

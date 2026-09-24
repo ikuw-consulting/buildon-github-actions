@@ -75,7 +75,8 @@ token_markers_trim() {
   printf '%s' "${s}"
 }
 
-# Internal: report a marker problem and count it.
+# Report a marker problem and count it. Callers use this for family-specific
+# problems the parser cannot know about, so everything lands in one count.
 token_markers_error() {
   TOKEN_MARKERS_ERROR_COUNT=$((TOKEN_MARKERS_ERROR_COUNT + 1))
   log_error "${1}"

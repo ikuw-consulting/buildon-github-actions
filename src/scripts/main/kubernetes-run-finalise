@@ -1,0 +1,363 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+#
+# kubernetes-run-finalise - Post-substitution finalisation of a run's
+# workload-aggregate manifest tree (shared by env and run-platform).
+#
+# Runs three steps, in this order, on the assembled-and-substituted tree:
+#
+#   1. signoff check            - signoff_check_tree against MANIFESTS_SIGNOFFS_SUB_PATH;
+#                                 fails the build on missing / mismatched / stale signoffs.
+#                                 Skipped entirely when MANIFESTS_TRUSTED_CONTRIBUTORS_ONLY=true.
+#   2. resource checksum pass   - per ResourceChecksum.md. checksum_tree processes
+#                                 Secret templates first (against SECRETS_SUB_PATH,
+#                                 env-build only), then the kinds in the configured
+#                                 order file. Resources opt in by carrying the
+#                                 '-<kind>-checksum' name marker; ones without it
+#                                 pass through untouched.
+#   3. env-content-data emit    - scan the workload tree and emit the
+#                                 content-data ConfigMap (per EnvContentData.md),
+#                                 mountable by label by a runtime consumer such
+#                                 as an added content-data webserver package.
+#                                 The env lineage data
+#                                 ConfigMap is emitted by kubernetes-lineage-data-generate,
+#                                 not here. LAST because content-data carries an
+#                                 inventory of post-checksum names and is not
+#                                 itself checksummed.
+#
+# Order rationale:
+#   - signoff before checksum: signoffs are computed against pre-suffix bytes;
+#     running checksum first would invalidate every signoff. The lib's strip
+#     expression does NOT strip metadata.name, so a name change DOES move the
+#     hash.
+#   - content-data CM after checksum: it enumerates the suffixed names and is
+#     looked up at runtime via a known label, not by hashed name. Running
+#     checksum first then emitting this CM guarantees the inventory matches what
+#     actually deploys.
+#
+# Inputs (env):
+#   PROJECT_NAME                       - Required; run name (run-* / run-platform-*)
+#   VERSION                            - Required; carried for log clarity
+#   ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH                 - Required; the assembled+substituted tree
+#                                        produced by the upstream stage + sub steps
+#   OUTPUT_SUB_PATH                    - Build output dir (default kaptain-out)
+#   KAPTAINPM_FILE                     - Path to final KaptainPM.yaml
+#                                        (default kaptainpm/final/KaptainPM.yaml)
+#   MANIFESTS_SIGNOFFS_SUB_PATH        - Where signoff files live
+#                                        (default src/signoffs)
+#   MANIFESTS_SIGNOFFS_KINDS_FILE      - File NAME (versioned) of the sensitive-kind
+#                                        list, resolved in the fixed data dir
+#                                        src/data/signoff-kinds/ shipped with the
+#                                        scripts (extensions can drop files there).
+#                                        Default default-1.1.txt. Replaces, not merges.
+#   MANIFESTS_TRUSTED_CONTRIBUTORS_ONLY
+#                                      - "true" disables signoff entirely (master gate
+#                                        for trusted-contributor-only repos); logs the
+#                                        skip loudly. Default "false".
+#   SECRETS_SUB_PATH                   - Per-token secrets dir for the build-time
+#                                        Secret checksum special case
+#                                        (default src/secrets, spec.global.secretsSubPath).
+#                                        Skipped when missing.
+#   IMAGE_BUILD_COMMAND / ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_*
+#                                      - Pull the deploy base image for its supported
+#                                        secret encryption types when checksumming
+#                                        Secrets (lib/secret-encryption-types.bash)
+#   ENV_CHECKSUM_SECRETS_TIMING        - build (default) | deploy. When 'deploy',
+#                                        Secret templates keep their checksum
+#                                        markers through the build and the deploy
+#                                        image's own pass hashes and renames them
+#                                        at apply time (over decrypted plaintext,
+#                                        so key rotation alone does not roll
+#                                        workloads). All other kinds always hash
+#                                        at build. See the schema field
+#                                        checksumSecretsTiming for the full
+#                                        trade-off.
+#   RESOURCE_CHECKSUM_LENGTH           - Suffix length in Base32 chars (default 5;
+#                                        warn <4 or >12; fail >52). See ResourceChecksum.md
+#   MANIFESTS_CHECKSUM_ORDER_FILE      - File NAME (versioned) of the ordered-kinds
+#                                        list, resolved in the fixed data dir
+#                                        src/data/resource-order/ shipped with the
+#                                        scripts (extensions can drop files there).
+#                                        Default default-1.1.txt. Replaces, not merges.
+#
+# Outputs: none. Mutates the tree at ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH in place.
+#
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=src/scripts/defaults/platform.bash
+source "${SCRIPT_DIR}/../defaults/platform.bash"
+# shellcheck source=src/scripts/lib/log.bash
+source "${SCRIPT_DIR}/../lib/log.bash"
+# BUILD_MODE is required with no default and validated here so a build
+# cannot run without declaring which mode it is in; no step below branches
+# on it - missing secret values fail identically in every mode.
+# shellcheck source=src/scripts/defaults/build-mode.bash
+source "${SCRIPT_DIR}/../defaults/build-mode.bash"
+# shellcheck source=src/scripts/defaults/output-sub-path.bash
+source "${SCRIPT_DIR}/../defaults/output-sub-path.bash"
+# shellcheck source=src/scripts/defaults/tokens.bash
+source "${SCRIPT_DIR}/../defaults/tokens.bash"
+# All env/RP-scope setting defaults live here (signoffs, secrets dir,
+# checksum length/order/timing, trusted-only, ...).
+# shellcheck source=src/scripts/defaults/environments.bash
+source "${SCRIPT_DIR}/../defaults/environments.bash"
+# shellcheck source=src/scripts/lib/sensitive-resource-signoff.bash
+source "${SCRIPT_DIR}/../lib/sensitive-resource-signoff.bash"
+# shellcheck source=src/scripts/lib/manifest-file-kinds.bash
+source "${SCRIPT_DIR}/../lib/manifest-file-kinds.bash"
+# shellcheck source=src/scripts/lib/manifest-patch-apply.bash
+source "${SCRIPT_DIR}/../lib/manifest-patch-apply.bash"
+# shellcheck source=src/scripts/lib/output-var.bash
+source "${SCRIPT_DIR}/../lib/output-var.bash"
+# shellcheck source=src/scripts/lib/token-format.bash
+source "${SCRIPT_DIR}/../lib/token-format.bash"
+# shellcheck source=src/scripts/lib/env-deploy-base-image-compose.bash
+source "${SCRIPT_DIR}/../lib/env-deploy-base-image-compose.bash"
+# shellcheck source=src/scripts/lib/secret-encryption-types.bash
+source "${SCRIPT_DIR}/../lib/secret-encryption-types.bash"
+# shellcheck source=src/scripts/lib/resource-checksum.bash
+source "${SCRIPT_DIR}/../lib/resource-checksum.bash"
+# shellcheck source=src/scripts/lib/env-content-scan.bash
+source "${SCRIPT_DIR}/../lib/env-content-scan.bash"
+
+PROJECT_NAME="${PROJECT_NAME:?PROJECT_NAME is required}"
+VERSION="${VERSION:?VERSION is required}"
+ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH="${ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH:?ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH is required - the substituted tree, exported by kubernetes-run-substitute}"
+KAPTAINPM_FILE="${KAPTAINPM_FILE:-kaptainpm/final/KaptainPM.yaml}"
+case "${ENV_CHECKSUM_SECRETS_TIMING}" in
+  build|deploy) ;;
+  *)
+    log_error "ENV_CHECKSUM_SECRETS_TIMING must be 'build' or 'deploy', got '${ENV_CHECKSUM_SECRETS_TIMING}'"
+    exit 1
+    ;;
+esac
+
+# Settings hold versioned file NAMES; the directories are fixed so
+# extensions of the toolkit can ship additional versioned lists there.
+SIGNOFF_KINDS_PATH="${SCRIPT_DIR}/../../data/signoff-kinds/${MANIFESTS_SIGNOFFS_KINDS_FILE}"
+CHECKSUM_ORDER_PATH="${SCRIPT_DIR}/../../data/resource-order/${MANIFESTS_CHECKSUM_ORDER_FILE}"
+
+# Build-kind detection drives the content-data document's top-level kind
+# and decides whether Secret-template checksumming runs. RP entrypoint sets
+# RUN_BUILD_KIND=run-platform; env entrypoint sets RUN_BUILD_KIND=environment.
+# Fall back to inferring from PROJECT_NAME if unset.
+RUN_BUILD_KIND="${RUN_BUILD_KIND:-}"
+
+# The manifests-* stages sit beside each other under the run's aggregate base,
+# so the input tree's parent IS that base. Derived rather than recomputed from
+# RUN_BUILD_KIND so the kind-to-base mapping stays in one place (the aggregate),
+# and so a caller pointing this step somewhere else keeps its stages together.
+STAGE_BASE="$(dirname "${ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH}")"
+MANIFESTS_PATCHED_DIR="${STAGE_BASE}/manifests-patched"
+MANIFESTS_CHECKSUMMED_DIR="${STAGE_BASE}/manifests-checksummed"
+MANIFESTS_FINAL_DIR="${STAGE_BASE}/manifests-final"
+# Per-target sandboxes and their before-states, kept for provenance.
+PATCH_SANDBOX_DIR="${STAGE_BASE}/manifests-patch-working"
+
+# Every step below works on the checksummed stage. The substituted tree it was
+# handed stays untouched so provenance can show what each stage changed.
+WORKING_TREE="${MANIFESTS_CHECKSUMMED_DIR}"
+if [[ -z "${RUN_BUILD_KIND}" ]]; then
+  case "${PROJECT_NAME}" in
+    run-platform-*) RUN_BUILD_KIND="run-platform" ;;
+    run-*)          RUN_BUILD_KIND="environment" ;;
+    *)              RUN_BUILD_KIND="environment" ;;
+  esac
+fi
+
+CONTENT_DATA_FILENAME="kaptain-environment-content-data.yaml"
+CONTENT_DATA_CM_NAME="kaptain-environment-content-data"
+CONTENT_DATA_ROLE_LITERAL="kaptain-environment-content-data"
+
+step_signoff_check() {
+  log ""
+  log "[2/5] Sensitive-resource signoff check..."
+  if [[ "${MANIFESTS_TRUSTED_CONTRIBUTORS_ONLY}" == "true" ]]; then
+    log "  SKIPPED - MANIFESTS_TRUSTED_CONTRIBUTORS_ONLY=true (master disable)."
+    log "  This bypasses the signoff gate entirely. Only appropriate for repos where"
+    log "  every contributor is a trusted reviewer for every sensitive resource."
+    return 0
+  fi
+  # Missing signoffs get review-ready skeletons (sourcePath + canonical
+  # checksum) written here: review the resource, then copy the skeleton
+  # into ${MANIFESTS_SIGNOFFS_SUB_PATH}/. Left behind as build output.
+  SIGNOFF_SKELETON_DIR="${OUTPUT_SUB_PATH}/run-finalise/signoffs-needed"
+  signoff_check_tree \
+    "${WORKING_TREE}" \
+    "${MANIFESTS_SIGNOFFS_SUB_PATH}" \
+    "${SIGNOFF_KINDS_PATH}"
+}
+
+step_resource_checksum() {
+  log ""
+  log "[3/5] Resource checksum pass..."
+  if [[ ! -f "${CHECKSUM_ORDER_PATH}" ]]; then
+    log_error "Resource checksum order file '${MANIFESTS_CHECKSUM_ORDER_FILE}' not found in the fixed data dir"
+    log_error "(resolved: ${CHECKSUM_ORDER_PATH})"
+    return 1
+  fi
+  log "  Length:    ${RESOURCE_CHECKSUM_LENGTH}"
+  log "  Order:     src/data/resource-order/${MANIFESTS_CHECKSUM_ORDER_FILE}"
+  log "  Secrets:   ${SECRETS_SUB_PATH}"
+  export RESOURCE_CHECKSUM_LENGTH
+
+  # One orchestrated pass: tree-wide inventory, then Secret templates
+  # FIRST (tier-1 leaves; consumer hashes must be computed over final
+  # Secret names), then the remaining kinds in order-file sequence, each
+  # resource checksummed and its references rewritten immediately. An
+  # empty secrets dir skips Secret templates cleanly: the RP case
+  # (children own their own secrets) and the timing=deploy case (markers
+  # ride to the deploy image, whose own pass always runs and resolves
+  # them; no var needed on that side).
+  local secrets_dir=""
+  if [[ "${RUN_BUILD_KIND}" == "environment" && -d "${SECRETS_SUB_PATH}" ]]; then
+    secrets_dir="${SECRETS_SUB_PATH}"
+  fi
+  if [[ -n "${secrets_dir}" && "${ENV_CHECKSUM_SECRETS_TIMING}" == "deploy" ]]; then
+    log "  Secret checksum timing 'deploy': Secret markers left in place for the deploy-time pass."
+    secrets_dir=""
+  fi
+  log ""
+  checksum_tree "${WORKING_TREE}" "${secrets_dir}" "${CHECKSUM_ORDER_PATH}"
+
+  log "Checksum totals: ${RESOURCE_CHECKSUM_TOTAL_RESOURCES} resource(s) checksummed," \
+      "${RESOURCE_CHECKSUM_TOTAL_REFS} reference(s) updated across ${RESOURCE_CHECKSUM_TOTAL_REF_FILES} file(s)"
+}
+
+# Emit a ConfigMap containing the freshly-scanned content-data.yaml.
+# Built inline (no token generator) because at this point names are
+# already concrete and we want a literal CM name a runtime consumer
+# mounts by label/name. Lands at the root of the workload tree.
+emit_content_data_configmap() {
+  local content_data_file="$1"
+  local cm_out="$2"
+
+  local indented
+  indented=$(sed 's/^/    /' "${content_data_file}")
+
+  {
+    printf 'apiVersion: v1\n'
+    printf 'kind: ConfigMap\n'
+    printf 'metadata:\n'
+    printf '  name: %s\n' "${CONTENT_DATA_CM_NAME}"
+    printf '  labels:\n'
+    printf '    kaptain.org/role: %s\n' "${CONTENT_DATA_ROLE_LITERAL}"
+    printf '    kaptain.org/run-kind: %s\n' "${RUN_BUILD_KIND}"
+    printf '    kaptain.org/run-name: %s\n' "${PROJECT_NAME}"
+    printf 'data:\n'
+    printf '  content-data.yaml: |\n'
+    printf '%s\n' "${indented}"
+  } > "${cm_out}"
+}
+
+step_env_content_data() {
+  log ""
+  log "[4/5] Env content data (post-checksum)..."
+
+  local workspace="${OUTPUT_SUB_PATH}/run-finalise"
+  mkdir -p "${workspace}"
+
+  local content_data_file="${workspace}/content-data.yaml"
+  env_content_scan_tree \
+    "${WORKING_TREE}" \
+    "${RUN_BUILD_KIND}" \
+    "${PROJECT_NAME}" \
+    "${VERSION}" \
+    "${content_data_file}"
+
+  local target="${WORKING_TREE}/${CONTENT_DATA_FILENAME}"
+  emit_content_data_configmap "${content_data_file}" "${target}"
+  log "  Wrote ${target}"
+}
+
+# Apply the yq patches, before signoff rather than after it. A patch may edit a
+# sensitive resource, and a signature taken before that covers content which is
+# not what ships, so patching first is what keeps the signoff gate honest. It is
+# also necessarily before checksums, since a patched Secret must hash to its
+# patched contents.
+step_patch() {
+  log ""
+  log "[1/5] Applying yq patches (${MANIFESTS_PATCHED_DIR})..."
+  mkdir -p "${MANIFESTS_PATCHED_DIR}"
+  cp -R "${ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH}/." "${MANIFESTS_PATCHED_DIR}/"
+
+  if ! manifest_patch_tree "${MANIFESTS_PATCHED_DIR}" "${PATCH_SANDBOX_DIR}"; then
+    log_error ""
+    log_error "One or more patches could not be applied. Intermediate states are under"
+    log_error "${PATCH_SANDBOX_DIR} for diagnosis."
+    exit 1
+  fi
+
+  if [[ "${MANIFEST_PATCH_TARGET_COUNT}" -eq 0 ]]; then
+    log "  No patches in this set."
+  else
+    log ""
+    log "  ${MANIFEST_PATCH_APPLIED_COUNT} patch(es) applied across ${MANIFEST_PATCH_TARGET_COUNT} manifest(s)."
+  fi
+}
+
+# Copy the patched stage into the tree the remaining steps mutate, so the
+# patched state survives for provenance rather than being edited over.
+step_stage_for_checksum() {
+  log ""
+  log "Staging for signoff and checksum (${MANIFESTS_CHECKSUMMED_DIR})..."
+  mkdir -p "${MANIFESTS_CHECKSUMMED_DIR}"
+  cp -R "${MANIFESTS_PATCHED_DIR}/." "${MANIFESTS_CHECKSUMMED_DIR}/"
+}
+
+# The final stage: manifests alone. Patches were applied several stages ago and
+# their working copies stay behind for provenance; what ships is the manifests.
+step_stage_final() {
+  log ""
+  log "Staging the final manifest set (${MANIFESTS_FINAL_DIR})..."
+  mkdir -p "${MANIFESTS_FINAL_DIR}"
+
+  local file rel kept=0 dropped=0
+  while IFS= read -r file; do
+    manifest_file_classify "${file}" || continue
+    rel="${file#"${WORKING_TREE}"/}"
+    if [[ "${MANIFEST_FILE_KIND}" == "patch" ]]; then
+      dropped=$((dropped + 1))
+      continue
+    fi
+    mkdir -p "$(dirname "${MANIFESTS_FINAL_DIR}/${rel}")"
+    cp "${file}" "${MANIFESTS_FINAL_DIR}/${rel}"
+    kept=$((kept + 1))
+  done < <(manifest_files_find_packageable "${WORKING_TREE}")
+
+  log "  ${kept} manifest(s) staged, ${dropped} patch(es) left behind for provenance."
+  output_var "ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH" "${MANIFESTS_FINAL_DIR}"
+}
+
+main() {
+  log "=== Kubernetes Run Finalise ==="
+  log "Project:        ${PROJECT_NAME}"
+  log "Version:        ${VERSION}"
+  log "Build kind:     ${RUN_BUILD_KIND}"
+  log "Manifests:      ${ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH}"
+  log "Signoffs:       ${MANIFESTS_SIGNOFFS_SUB_PATH}"
+  log "Trusted-only:   ${MANIFESTS_TRUSTED_CONTRIBUTORS_ONLY}"
+  log "Checksum len:   ${RESOURCE_CHECKSUM_LENGTH}"
+  log "================================"
+
+  if [[ ! -d "${ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH}" ]]; then
+    log_error "Manifests directory not found: ${ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH}"
+    log_error "Did kubernetes-manifests-substitute run first?"
+    exit 1
+  fi
+
+  step_patch
+  step_stage_for_checksum
+  step_signoff_check
+  step_resource_checksum
+  step_env_content_data
+  step_stage_final
+
+  log ""
+  log "=== Run Finalise Complete ==="
+}
+
+main "$@"

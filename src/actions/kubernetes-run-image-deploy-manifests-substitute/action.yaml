@@ -1,0 +1,144 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: 'Kubernetes Run Image Deploy Manifests Substitute'
+description: 'Token substitution over the deploy-manifests set - the stock substitute pinned at the deploy-manifests block dirs by its wrapper script'
+
+inputs:
+  # Action-specific inputs
+  project-name:
+    description: 'Run name (run-* / run-platform-*)'
+    required: true
+  version:
+    description: 'Version (carried for log clarity)'
+    required: true
+
+  # Build output
+  output-sub-path:
+    description: 'Build output directory (relative)'
+    required: false
+    default: 'kaptain-out'
+  # Token substitution
+  token-delimiter-style:
+    description: 'Token delimiter syntax for variables (shell, mustache, helm, erb, github-actions, blade, stringtemplate, ognl, t4, swift)'
+    required: false
+    default: 'shell'
+  token-name-style:
+    description: 'Case style for token names (UPPER_SNAKE, lower_snake, lower-kebab, UPPER-KEBAB, camelCase, PascalCase, lower.dot, UPPER.DOT)'
+    required: false
+    default: 'PascalCase'
+  token-name-validation:
+    description: 'How to validate user token names (MATCH = must match token-name-style, ALL = accept any valid name)'
+    required: false
+    default: 'MATCH'
+  config-sub-path:
+    description: 'Directory containing user-defined token files (relative)'
+    required: false
+    default: 'src/config'
+  config-value-trailing-newline:
+    description: 'How to handle trailing newlines in config values (strip-for-single-line, preserve-all, always-strip-one-newline)'
+    required: false
+    default: 'strip-for-single-line'
+  token-substitution-passes:
+    description: 'Number of times to run the token substitution pass (for nested token references)'
+    required: false
+    default: '1'
+  # Env/RP-scope run settings (spec.main.environment
+  # projections plus the shared global paths the run steps consume).
+  # Empty values fall through to the script defaults in
+  # src/scripts/defaults/environments.bash.
+  env-deploy-source-base-path:
+    description: 'Source dir for the deploy-image manifests (relative)'
+    required: false
+    default: ''
+  generate-ideal-environment-deploy-manifests:
+    description: 'Generate the ideal deploy manifests (true) or consume supplied ones (false)'
+    required: false
+    default: ''
+  image-deploy-manifests-apply-mode:
+    description: 'How a run-platform applies this environment deploy-manifests set - seed-and-compare or enforce-state-normally, environment only'
+    required: false
+    default: ''
+  env-deploy-mode:
+    description: 'deployment | job (generate-mode only)'
+    required: false
+    default: ''
+  image-auto-update-provider:
+    description: 'keel | keelson | none'
+    required: false
+    default: ''
+  image-auto-update-policy:
+    description: 'patch | minor | major | all | force (force is keel-only)'
+    required: false
+    default: ''
+  image-auto-update-trigger:
+    description: 'poll | default'
+    required: false
+    default: ''
+  image-auto-update-poll-schedule:
+    description: 'Single-unit duration, e.g. 1m (rendered per provider)'
+    required: false
+    default: ''
+  image-auto-update-field-manager-strategy:
+    description: 'mimic | patch | claim (keelson only, ignored otherwise)'
+    required: false
+    default: ''
+  cluster-scoped-delegation:
+    description: 'self | parent (env-only; RP is the root and always self)'
+    required: false
+    default: ''
+  cluster-scoped-kinds-file:
+    description: 'File NAME (versioned) of the cluster-scoped Kind list in fixed src/data/cluster-scoped-kinds/'
+    required: false
+    default: ''
+  env-deploy-base-image-registry:
+    description: 'Registry of the composed environment deploy base image'
+    required: false
+    default: ''
+  env-deploy-base-image-include-namespace:
+    description: 'true (default) includes the namespace segment in the composed base image; false ignores the namespace value and condenses the segment out'
+    required: false
+    default: ''
+  env-deploy-base-image-namespace:
+    description: 'Namespace segment of the composed environment deploy base image'
+    required: false
+    default: ''
+  env-deploy-base-image-family:
+    description: 'Family of the composed environment deploy base image'
+    required: false
+    default: ''
+  env-deploy-base-image-version:
+    description: 'Version of the composed environment deploy base image'
+    required: false
+    default: ''
+  allow-local-manifests-override:
+    description: 'When true, local src/kubernetes files override colliding child-contributed paths (warn per replacement)'
+    required: false
+    default: ''
+  fail-on-unreferenced-config-or-secrets:
+    description: 'When true (default), config/secret value files no token references fail the build; false warns'
+    required: false
+    default: ''
+  secrets-sub-path:
+    description: 'Directory containing encrypted secret value files (relative)'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Substitute deploy-manifests
+      id: substitute
+      shell: bash
+      env:
+        BUILD_MODE: build_server
+        BUILD_PLATFORM: github-actions
+        BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        PROJECT_NAME: ${{ inputs.project-name }}
+        VERSION: ${{ inputs.version }}
+        OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
+        TOKEN_DELIMITER_STYLE: ${{ inputs.token-delimiter-style }}
+        CONFIG_VALUE_TRAILING_NEWLINE: ${{ inputs.config-value-trailing-newline }}
+        TOKEN_SUBSTITUTION_PASSES: ${{ inputs.token-substitution-passes }}
+        ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH: ${{ inputs.env-deploy-source-base-path }}
+      run: "${{ github.action_path }}/../../scripts/main/kubernetes-run-image-deploy-manifests-substitute"

@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: 'Kubernetes Run Image Deploy Manifests Package'
+description: 'Zips the substituted deploy-manifests tree - the stock package pinned by its wrapper script'
+
+inputs:
+  # Action-specific inputs
+  project-name:
+    description: 'Run name (run-* / run-platform-*)'
+    required: true
+  version:
+    description: 'Version for zip naming'
+    required: true
+
+  # INJECT-INPUT: output-sub-path
+  # INJECT-INPUT: run-environment-settings
+
+outputs:
+  manifests-zip-sub-path:
+    description: 'Directory containing the zip file (relative)'
+    value: ${{ steps.package.outputs.MANIFESTS_ZIP_SUB_PATH }}
+  manifests-zip-file-name:
+    description: 'Filename of the zip'
+    value: ${{ steps.package.outputs.MANIFESTS_ZIP_FILE_NAME }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Package deploy-manifests
+      id: package
+      shell: bash
+      env:
+        BUILD_MODE: build_server
+        BUILD_PLATFORM: github-actions
+        BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        PROJECT_NAME: ${{ inputs.project-name }}
+        VERSION: ${{ inputs.version }}
+        OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
+        ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH: ${{ inputs.env-deploy-source-base-path }}
+      run: "${{ github.action_path }}/../../scripts/main/kubernetes-run-image-deploy-manifests-package"

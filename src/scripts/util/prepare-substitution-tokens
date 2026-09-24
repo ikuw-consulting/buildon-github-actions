@@ -126,12 +126,12 @@ scan_auto_builtin_tokens() {
   fi
 
   local flavour upper_prefix expected_prefix dir file name
-  for flavour in contents templates layers build image git kaptainpm repository product; do
+  for flavour in contents templates layers build image git kaptainpm repository product environment; do
     dir="${base_dir}/${flavour}"
     [[ ! -d "${dir}" ]] && continue
 
     # contents -> CONTENT, templates -> TEMPLATE, layers -> LAYER,
-    # build/image/git/kaptainpm/repository/product -> unchanged (no 's' to strip).
+    # build/image/git/kaptainpm/repository/product/environment -> unchanged (no 's').
     upper_prefix=$(printf '%s' "${flavour%s}" | tr '[:lower:]' '[:upper:]')
     expected_prefix=$(convert_token_name "${TOKEN_NAME_STYLE}" "${upper_prefix}")
 
@@ -210,10 +210,12 @@ main() {
   fi
 
   # Auto-emitted builtins: per-entry (contents/templates/layers) plus context
-  # scalars (repository/product/git/etc). Delivered via the on-disk scan, NOT
-  # per-step env - env plumbing has to be repeated at every call site and a
-  # missed site fails silently (tokens ship unsubstituted); files written once
-  # by their owning step reach every context identically, local and remote.
+  # scalars (repository/product/environment/git/etc). Delivered via the on-disk
+  # scan, NOT per-step env - env plumbing has to be repeated at every call site
+  # and a missed site fails silently (tokens ship unsubstituted); files written
+  # once by their owning step reach every context identically, local and remote.
+  # Product and Environment tokens are emitted this way too (by
+  # kubernetes-product-aggregate and kubernetes-run-substitute respectively).
   # Treated as built-ins for the override conflict check below: user config
   # that tries to redefine them fails the build.
   scan_auto_builtin_tokens

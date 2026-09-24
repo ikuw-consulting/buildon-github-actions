@@ -33,7 +33,7 @@ JV_SHA512_amd64="c2ca33588b399b14fc24d28c80c19dadfff1ec85c4289c598e1ecc5506fa474
 JV_SHA512_arm64="8bc82ddf96661b73e6da4bfc77933beae13808a312011c6afc38ee9ce2293269bb03a08f5d28b4d0dcf064f769e11e68bb95577bf5374cde44ee38694654431f"
 
 # Tool categories
-CORE_TOOLS="git grep yq jq find cmp awk tr wc cp mkdir basename date uname zip"
+CORE_TOOLS="git grep yq jq find cmp awk tr wc cp mkdir basename date uname zip sha256sum"
 BUILD_SERVER_TOOLS="sudo systemctl"
 CLOUD_TOOLS="aws az gcloud"
 

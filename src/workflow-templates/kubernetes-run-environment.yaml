@@ -1,0 +1,313 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: Kubernetes Run Environment
+kaptain-order: 66
+kaptain-description: Builds a deployable environment - a bone-stock deploy-manifests set plus the bespoke workload aggregate, deploy image, and run artifacts
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: 'GitHub Actions runner label (or JSON array of labels) the job runs on'
+        required: false
+        type: string
+        default: ubuntu-24.04
+    secrets:
+      docker-registry-logins-secrets:
+        description: 'JSON object of secrets for docker-registry-logins (e.g., {"DOCKER_USER": "x", "DOCKER_PASS": "y"})'
+        required: false
+    outputs:
+      # Version outputs
+      version:
+        description: 'The generated version'
+        value: ${{ jobs.build.outputs.version }}
+      version-major:
+        description: 'Major version number'
+        value: ${{ jobs.build.outputs.version-major }}
+      version-minor:
+        description: 'Minor version number'
+        value: ${{ jobs.build.outputs.version-minor }}
+      version-patch:
+        description: 'Patch version number'
+        value: ${{ jobs.build.outputs.version-patch }}
+      version-2-part:
+        description: 'Version padded/truncated to 2 parts'
+        value: ${{ jobs.build.outputs.version-2-part }}
+      version-3-part:
+        description: 'Version padded/truncated to 3 parts'
+        value: ${{ jobs.build.outputs.version-3-part }}
+      version-4-part:
+        description: 'Version padded/truncated to 4 parts'
+        value: ${{ jobs.build.outputs.version-4-part }}
+      docker-tag:
+        description: 'Tag for Docker images'
+        value: ${{ jobs.build.outputs.docker-tag }}
+      docker-image-name:
+        description: 'Docker image name'
+        value: ${{ jobs.build.outputs.docker-image-name }}
+      git-tag:
+        description: 'Tag for git'
+        value: ${{ jobs.build.outputs.git-tag }}
+      project-name:
+        description: 'The repository/project name'
+        value: ${{ jobs.build.outputs.project-name }}
+      is-release:
+        description: 'Whether this is a release build'
+        value: ${{ jobs.build.outputs.is-release }}
+      environment-name:
+        description: 'Environment name (PROJECT_NAME verbatim)'
+        value: ${{ jobs.build.outputs.environment-name }}
+      environment-short-name:
+        description: 'Environment short name (run- prefix stripped)'
+        value: ${{ jobs.build.outputs.environment-short-name }}
+      # Deploy-manifests outputs
+      manifests-uri:
+        description: 'Reference to the published deploy-manifests set (format depends on repo provider)'
+        value: ${{ jobs.build.outputs.manifests-uri }}
+      manifests-published:
+        description: 'Whether the deploy-manifests set was published'
+        value: ${{ jobs.build.outputs.manifests-published }}
+      # Run package outputs
+      run-deploy-image-uri:
+        description: 'The deploy image URI (standard project image name)'
+        value: ${{ jobs.build.outputs.run-deploy-image-uri }}
+      run-artifacts-image-uri:
+        description: 'The artifacts wrapper image URI'
+        value: ${{ jobs.build.outputs.run-artifacts-image-uri }}
+jobs:
+  build:
+    name: Build & Publish
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: write
+      packages: write
+      checks: write
+    outputs:
+      version: ${{ steps.versions.outputs.version }}
+      version-major: ${{ steps.versions.outputs.version-major }}
+      version-minor: ${{ steps.versions.outputs.version-minor }}
+      version-patch: ${{ steps.versions.outputs.version-patch }}
+      version-2-part: ${{ steps.versions.outputs.version-2-part }}
+      version-3-part: ${{ steps.versions.outputs.version-3-part }}
+      version-4-part: ${{ steps.versions.outputs.version-4-part }}
+      docker-tag: ${{ steps.versions.outputs.docker-tag }}
+      docker-image-name: ${{ steps.versions.outputs.docker-image-name }}
+      git-tag: ${{ steps.versions.outputs.git-tag }}
+      project-name: ${{ steps.versions.outputs.project-name }}
+      is-release: ${{ steps.versions.outputs.is-release }}
+      environment-name: ${{ steps.run-aggregate.outputs.environment-name }}
+      environment-short-name: ${{ steps.run-aggregate.outputs.environment-short-name }}
+      manifests-uri: ${{ steps.manifest-repo-provider-publish.outputs.manifests-uri }}
+      manifests-published: ${{ steps.manifest-repo-provider-publish.outputs.manifests-published }}
+      run-deploy-image-uri: ${{ steps.run-package.outputs.run-deploy-image-uri }}
+      run-artifacts-image-uri: ${{ steps.run-package.outputs.run-artifacts-image-uri }}
+    steps:
+      # INJECT: parse-workflow-ref-and-checkout
+
+      # === Validate Tooling ===
+      # INJECT: github-check-start(name="Validate Tooling", id="check-validate-tooling")
+      # INJECT: validate-tooling
+      # INJECT: github-check-end(name="Validate Tooling", id="check-validate-tooling")
+
+      # === Load Project KaptainPM Docker Logins ===
+      # INJECT: github-check-start(name="Load Project KaptainPM Docker Logins", id="check-load-project-kpm")
+      # INJECT: load-project-kaptainpm-docker-logins
+      # INJECT: github-check-end(name="Load Project KaptainPM Docker Logins", id="check-load-project-kpm")
+
+      # === Pre-Init Docker Registry Logins ===
+      # INJECT: github-check-start(name="Pre-Init Docker Registry Logins", id="check-docker-registry-logins-pre-init")
+      # INJECT: docker-registry-logins-pre-init
+      # INJECT: github-check-end(name="Pre-Init Docker Registry Logins", id="check-docker-registry-logins-pre-init")
+
+      # === Kaptain Init ===
+      # INJECT: github-check-start(name="Kaptain Init", id="check-kaptain-init")
+      # INJECT: kaptain-init
+      # INJECT: github-check-end(name="Kaptain Init", id="check-kaptain-init")
+
+      # === Load Final KaptainPM YAML ===
+      # INJECT: github-check-start(name="Load Final KaptainPM YAML", id="check-load-final-kpm")
+      # INJECT: load-final-kaptainpm-yaml
+      # INJECT: github-check-end(name="Load Final KaptainPM YAML", id="check-load-final-kpm")
+
+
+      # === Pre-Build ===
+      # INJECT: github-check-start(name="Pre-Build", id="check-pre-build", if="steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != ''")
+      # INJECT: hook-pre-build
+      # INJECT: github-check-end(name="Pre-Build", id="check-pre-build", if="steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != ''")
+
+      # === Basic Quality Checks ===
+      # INJECT: github-check-start(name="Basic Quality Checks", id="check-basic-quality", if="github.event_name == 'pull_request'")
+      # INJECT: basic-quality-checks
+      # INJECT: github-check-end(name="Basic Quality Checks", id="check-basic-quality", if="github.event_name == 'pull_request'")
+
+      # === Docker Registry Logins ===
+      # INJECT: github-check-start(name="Docker Registry Logins", id="check-docker-registry-logins")
+      # INJECT: docker-registry-logins
+      # INJECT: github-check-end(name="Docker Registry Logins", id="check-docker-registry-logins")
+
+      # === Docker Platform Setup ===
+      # INJECT: github-check-start(name="Docker Platform Setup", id="check-docker-platform-setup")
+      # INJECT: docker-platform-setup
+      # INJECT: github-check-end(name="Docker Platform Setup", id="check-docker-platform-setup")
+
+      # === Pre-tagging Tests ===
+      # INJECT: github-check-start(name="Pre-tagging Tests", id="check-pre-tagging", if="steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH != ''")
+      # INJECT: hook-pre-tagging-tests
+      # INJECT: github-check-end(name="Pre-tagging Tests", id="check-pre-tagging", if="steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH != ''")
+
+      # === Versions & Naming ===
+      # INJECT: github-check-start(name="Versions & Naming", id="check-versions")
+      # INJECT: versions-and-naming
+      # INJECT: github-check-end(name="Versions & Naming", id="check-versions")
+
+      # === Post-Versions-and-Naming ===
+      # INJECT: github-check-start(name="Post-Versions-and-Naming", id="check-post-versions-and-naming", if="steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH != ''")
+      # INJECT: hook-post-versions-and-naming
+      # INJECT: github-check-end(name="Post-Versions-and-Naming", id="check-post-versions-and-naming", if="steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH != ''")
+
+      # === Change Source Note ===
+      # INJECT: github-check-start(name="Change Source Note", id="check-change-source-note", if="steps.versions.outputs.is-release != 'true'")
+      # INJECT: change-source-note-write
+      # INJECT: github-check-end(name="Change Source Note", id="check-change-source-note", if="steps.versions.outputs.is-release != 'true'")
+
+      # === Release Change Data Generate ===
+      # INJECT: github-check-start(name="Release Change Data Generate", id="check-release-change-data-generate")
+      # INJECT: release-change-data-generate
+      # INJECT: github-check-end(name="Release Change Data Generate", id="check-release-change-data-generate")
+
+      # === Release Change Data OCI Package ===
+      # INJECT: github-check-start(name="Release Change Data OCI Package", id="check-release-change-data-oci-package")
+      # INJECT: release-change-data-oci-package
+      # INJECT: github-check-end(name="Release Change Data OCI Package", id="check-release-change-data-oci-package")
+
+      # === Pre-package Prepare ===
+      # INJECT: github-check-start(name="Pre-package Prepare", id="check-pre-package-prepare", if="steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH != ''")
+      # INJECT: hook-pre-package-prepare
+      # INJECT: github-check-end(name="Pre-package Prepare", id="check-pre-package-prepare", if="steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH != ''")
+
+      # --- Environment workload contents ---
+      #
+      # FIRST in an environment build, which is the opposite of the
+      # run-platform order. An environment does not self-include: it is
+      # seeded by a run-platform, so its deployer manifests are applied BY
+      # that run-platform and it has no reason to carry them in its own
+      # content. That leaves the workload contents with no dependency on the
+      # deploy-manifests set at all. A run-platform does self-include, to
+      # seed the cluster with its own deployer, so there the deploy-manifests
+      # set has to come first.
+
+      # === Aggregate Environment ===
+      # INJECT: github-check-start(name="Aggregate Environment", id="check-run-aggregate")
+      # INJECT: run-aggregate
+      # INJECT: github-check-end(name="Aggregate Environment", id="check-run-aggregate")
+
+      # === Substitute Run Aggregate ===
+      # INJECT: github-check-start(name="Substitute Run Aggregate", id="check-run-substitute")
+      # INJECT: run-substitute
+      # INJECT: github-check-end(name="Substitute Run Aggregate", id="check-run-substitute")
+
+      # === Finalise Workload Tree ===
+      # INJECT: github-check-start(name="Finalise Workload Tree", id="check-run-finalise")
+      # INJECT: run-finalise
+      # INJECT: github-check-end(name="Finalise Workload Tree", id="check-run-finalise")
+
+      # === Consumption Report ===
+      # INJECT: github-check-start(name="Consumption Report", id="check-run-consumption-report")
+      # INJECT: run-consumption-report
+      # INJECT: github-check-end(name="Consumption Report", id="check-run-consumption-report")
+
+      # === Environment Record Lineage Data ===
+      # INJECT: github-check-start(name="Environment Record Lineage Data", id="check-run-record-lineage")
+      # INJECT: run-record-lineage-data-generate
+      # INJECT: github-check-end(name="Environment Record Lineage Data", id="check-run-record-lineage")
+
+      # === Package Run ===
+      # INJECT: github-check-start(name="Package Run", id="check-run-package")
+      # INJECT: run-package
+      # INJECT: github-check-end(name="Package Run", id="check-run-package")
+
+      # === Validate Deploy Image ===
+      # INJECT: github-check-start(name="Validate Deploy Image", id="check-run-deploy-image-validate")
+      # INJECT: run-deploy-image-validate
+      # INJECT: github-check-end(name="Validate Deploy Image", id="check-run-deploy-image-validate")
+
+      # --- Deploy-manifests set ---
+      #
+      # LAST in an environment build: the manifests image also carries the
+      # delegated cluster-scoped zip, which only exists once run-package has
+      # carved it out. The run-platform workflow runs this block first - it
+      # never delegates upwards, so it has nothing to wait for.
+      # === Stage Deploy-Image Manifests ===
+      # INJECT: github-check-start(name="Stage Deploy-Image Manifests", id="check-run-idm")
+      # INJECT: run-image-deploy-manifests
+      # INJECT: github-check-end(name="Stage Deploy-Image Manifests", id="check-run-idm")
+
+      # === Prepare Deploy-Manifests ===
+      # INJECT: github-check-start(name="Prepare Deploy-Manifests", id="check-run-idm-package-prepare")
+      # INJECT: run-image-deploy-manifests-package-prepare
+      # INJECT: github-check-end(name="Prepare Deploy-Manifests", id="check-run-idm-package-prepare")
+
+      # === Substitute Deploy-Manifests ===
+      # INJECT: github-check-start(name="Substitute Deploy-Manifests", id="check-run-idm-substitute")
+      # INJECT: run-image-deploy-manifests-substitute
+      # INJECT: github-check-end(name="Substitute Deploy-Manifests", id="check-run-idm-substitute")
+
+      # === Generate Deploy-Manifests Contract ===
+      # INJECT: github-check-start(name="Generate Deploy-Manifests Contract", id="check-run-idm-contract")
+      # INJECT: run-image-deploy-manifests-contract-generate
+      # INJECT: github-check-end(name="Generate Deploy-Manifests Contract", id="check-run-idm-contract")
+
+      # === Generate Deploy-Manifests Lineage Data ===
+      # INJECT: github-check-start(name="Generate Deploy-Manifests Lineage Data", id="check-run-idm-lineage")
+      # INJECT: run-image-deploy-manifests-lineage-data-generate
+      # INJECT: github-check-end(name="Generate Deploy-Manifests Lineage Data", id="check-run-idm-lineage")
+
+      # === Package Deploy-Manifests ===
+      # INJECT: github-check-start(name="Package Deploy-Manifests", id="check-run-idm-package")
+      # INJECT: run-image-deploy-manifests-package
+      # INJECT: github-check-end(name="Package Deploy-Manifests", id="check-run-idm-package")
+
+      # === Package Deploy-Manifests for Repo Provider ===
+      # INJECT: github-check-start(name="Package Deploy-Manifests for Repo Provider", id="check-run-idm-repo-provider-package")
+      # INJECT: run-image-deploy-manifests-repo-provider-package
+      # INJECT: github-check-end(name="Package Deploy-Manifests for Repo Provider", id="check-run-idm-repo-provider-package")
+
+      # === Post-package Tests ===
+      # INJECT: github-check-start(name="Post-package Tests", id="check-post-package", if="steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH != ''")
+      # INJECT: hook-post-package-tests
+      # INJECT: github-check-end(name="Post-package Tests", id="check-post-package", if="steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH != ''")
+
+      # === Docker Multi-Tag ===
+      # INJECT: github-check-start(name="Docker Multi-Tag", id="check-docker-multi-tag", if="steps.kpm.outputs.DOCKER_PUSH_TARGETS != ''")
+      # INJECT: docker-multi-tag
+      # INJECT: github-check-end(name="Docker Multi-Tag", id="check-docker-multi-tag", if="steps.kpm.outputs.DOCKER_PUSH_TARGETS != ''")
+
+      # === GitHub Release Prepare ===
+      # INJECT: github-check-start(name="GitHub Release Prepare", id="check-github-release-prepare", if="steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true'")
+      # INJECT: github-release-prepare-run
+      # INJECT: github-check-end(name="GitHub Release Prepare", id="check-github-release-prepare", if="steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true'")
+
+      # === Git Tag Push ===
+      # INJECT: github-check-start(name="Git Tag Push", id="check-git-push-tag", if="steps.versions.outputs.is-release == 'true'")
+      # INJECT: git-push-tag
+      # INJECT: github-check-end(name="Git Tag Push", id="check-git-push-tag", if="steps.versions.outputs.is-release == 'true'")
+
+      # === Manifest Repo Provider Publish ===
+      # INJECT: github-check-start(name="Publish Deploy-Manifests via Repo Provider", id="check-manifest-repo-provider-publish", if="steps.versions.outputs.is-release == 'true'")
+      # INJECT: manifest-repo-provider-publish
+      # INJECT: github-check-end(name="Publish Deploy-Manifests via Repo Provider", id="check-manifest-repo-provider-publish", if="steps.versions.outputs.is-release == 'true'")
+
+      # === Docker Push All ===
+      # INJECT: github-check-start(name="Docker Push All", id="check-docker-push-all", if="steps.versions.outputs.is-release == 'true'")
+      # INJECT: docker-push-all
+      # INJECT: github-check-end(name="Docker Push All", id="check-docker-push-all", if="steps.versions.outputs.is-release == 'true'")
+
+      # === GitHub Release ===
+      # INJECT: github-check-start(name="GitHub Release", id="check-github-release", if="steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true'")
+      # INJECT: github-release-run
+      # INJECT: github-check-end(name="GitHub Release", id="check-github-release", if="steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true'")
+
+      # === Post-Build ===
+      # INJECT: github-check-start(name="Post-Build", id="check-post-build", if="steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != ''")
+      # INJECT: hook-post-build
+      # INJECT: github-check-end(name="Post-Build", id="check-post-build", if="steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != ''")

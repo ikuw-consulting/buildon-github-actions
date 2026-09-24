@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+- name: Generate consumption report
+  id: run-consumption-report
+  uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-consumption-report
+  with:
+    project-name: ${{ steps.versions.outputs.project-name }}
+    version: ${{ steps.versions.outputs.version }}
+    environment-workload-contents-sub-path: ${{ steps.run-substitute.outputs.environment-workload-contents-sub-path }}
+    output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+    token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+    token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}

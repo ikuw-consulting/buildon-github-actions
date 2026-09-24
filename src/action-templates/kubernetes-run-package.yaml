@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: 'Kubernetes Run Package'
+description: 'Builds the run''s deploy image (contract baked as ENV lines, cluster-scoped carve-out under delegation=parent), the contents zip, the consumption-report zip, and the artifacts wrapper image'
+
+inputs:
+  # Action-specific inputs
+  project-name:
+    description: 'Run name (run-* / run-platform-*)'
+    required: true
+  version:
+    description: 'Version'
+    required: true
+  run-build-kind:
+    description: 'environment | run-platform (derived from project-name when empty)'
+    required: false
+    default: ''
+  environment-workload-contents-sub-path:
+    description: 'The substituted+finalised workload tree'
+    required: true
+  environment-workload-contents-config-sub-path:
+    description: 'The stacked final-config dir (rides in the consumption-report zip for inspection)'
+    required: false
+    default: ''
+  docker-image-name:
+    description: 'Image name (from version generator)'
+    required: true
+  docker-tag:
+    description: 'Tag for the deploy image'
+    required: true
+  docker-platform:
+    description: 'Platform(s) for the deploy image (comma-separated list builds one image per arch from the same context)'
+    required: false
+    default: ''
+
+  # INJECT-INPUT: output-sub-path
+  # INJECT-INPUT: token-substitution
+  # INJECT-INPUT: docker-build
+  # INJECT-INPUT: docker-push-image-list
+  # INJECT-INPUT: image-build-command
+  # INJECT-INPUT: run-environment-settings
+
+outputs:
+  run-deploy-image-uri:
+    description: 'The deploy image URI (standard project image name)'
+    value: ${{ steps.run-package.outputs.RUN_DEPLOY_IMAGE_URI }}
+  run-artifacts-image-uri:
+    description: 'The artifacts wrapper image URI (manifest-list URI)'
+    value: ${{ steps.run-package.outputs.RUN_ARTIFACTS_IMAGE_URI }}
+  run-contents-zip-file:
+    description: 'Path to the environment contents zip'
+    value: ${{ steps.run-package.outputs.RUN_CONTENTS_ZIP_FILE }}
+  run-consumption-report-zip-file:
+    description: 'Path to the consumption report zip'
+    value: ${{ steps.run-package.outputs.RUN_CONSUMPTION_REPORT_ZIP_FILE }}
+  run-cluster-scoped-on-behalf-zip-file:
+    description: 'Path to the delegated cluster-scoped zip, set only when the clusterScopedDelegation=parent carve-out produced a set (env builds); empty otherwise'
+    value: ${{ steps.run-package.outputs.RUN_CLUSTER_SCOPED_ON_BEHALF_ZIP_FILE }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Package run
+      id: run-package
+      shell: bash
+      env:
+        BUILD_MODE: build_server
+        BUILD_PLATFORM: github-actions
+        BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        PROJECT_NAME: ${{ inputs.project-name }}
+        VERSION: ${{ inputs.version }}
+        RUN_BUILD_KIND: ${{ inputs.run-build-kind }}
+        ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH: ${{ inputs.environment-workload-contents-sub-path }}
+        ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH: ${{ inputs.environment-workload-contents-config-sub-path }}
+        OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
+        TOKEN_DELIMITER_STYLE: ${{ inputs.token-delimiter-style }}
+        TOKEN_NAME_STYLE: ${{ inputs.token-name-style }}
+        DOCKER_IMAGE_NAME: ${{ inputs.docker-image-name }}
+        DOCKER_TAG: ${{ inputs.docker-tag }}
+        DOCKER_PLATFORM: ${{ inputs.docker-platform }}
+        DOCKER_TARGET_REGISTRY: ${{ inputs.docker-target-registry }}
+        DOCKER_TARGET_NAMESPACE: ${{ inputs.docker-target-namespace }}
+        DOCKER_PUSH_IMAGE_LIST_FILE: ${{ inputs.docker-push-image-list-file }}
+        IMAGE_BUILD_COMMAND: ${{ inputs.image-build-command }}
+        SECRETS_SUB_PATH: ${{ inputs.secrets-sub-path }}
+        ENV_DEPLOY_MODE: ${{ inputs.env-deploy-mode }}
+        ENV_CLUSTER_SCOPED_DELEGATION: ${{ inputs.cluster-scoped-delegation }}
+        MANIFESTS_CLUSTER_SCOPED_KINDS_FILE: ${{ inputs.cluster-scoped-kinds-file }}
+        ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_REGISTRY: ${{ inputs.env-deploy-base-image-registry }}
+        ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_INCLUDE_NAMESPACE: ${{ inputs.env-deploy-base-image-include-namespace }}
+        ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_NAMESPACE: ${{ inputs.env-deploy-base-image-namespace }}
+        ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_FAMILY: ${{ inputs.env-deploy-base-image-family }}
+        ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_VERSION: ${{ inputs.env-deploy-base-image-version }}
+      run: "${{ github.action_path }}/../../scripts/main/kubernetes-run-package"

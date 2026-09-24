@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: 'Kubernetes Run Deploy Image Validate'
+description: 'Runs the freshly built deploy image''s own validate-environment against the contract baked into it - a separate step after all building so a failure reads "the image is bad"'
+
+inputs:
+  # Action-specific inputs
+  run-deploy-image-uri:
+    description: 'The deploy image URI built by kubernetes-run-package'
+    required: true
+  docker-platform:
+    description: 'Platform(s) the image was built for'
+    required: false
+    default: ''
+
+  # INJECT-INPUT: image-build-command
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Validate deploy image
+      id: deploy-image-validate
+      shell: bash
+      env:
+        BUILD_MODE: build_server
+        BUILD_PLATFORM: github-actions
+        BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        RUN_DEPLOY_IMAGE_URI: ${{ inputs.run-deploy-image-uri }}
+        DOCKER_PLATFORM: ${{ inputs.docker-platform }}
+        IMAGE_BUILD_COMMAND: ${{ inputs.image-build-command }}
+      run: "${{ github.action_path }}/../../scripts/main/kubernetes-run-deploy-image-validate"

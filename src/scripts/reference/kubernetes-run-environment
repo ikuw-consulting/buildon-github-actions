@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+#
+# Reference script: kubernetes-run-environment workflow
+#
+# Builds an environment (run-*, not run-platform-*): two sub-flows per
+# EnvFlow.md, Section 1 (env image - the manifests that install/run the
+# deploy image) staged and substituted BEFORE Section 2 (workload contents -
+# what the env actually runs), which stages, substitutes, finalises
+# (signoff + resource checksum + content-data), and packages.
+#
+# All variables can be overridden via environment.
+#
+# CI providers can wrap each script call to expose individual
+# build step pass/fail status in their UI.
+#
+set -euo pipefail
+
+# shellcheck source=../lib/setup-local-context.bash
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/setup-local-context.bash"
+
+run_step "validate-tooling"
+run_step "load-project-kaptainpm-docker-logins"
+run_step "docker-registry-logins"
+run_step "kaptain-init"
+export BUILD_KIND="${REFERENCE_SCRIPT_NAME}"
+run_step "load-final-kaptainpm-yaml"
+run_step "hook-pre-build"
+run_step "basic-quality-checks"
+run_step "docker-registry-logins"
+run_step "docker-platform-setup"
+run_step "hook-pre-tagging-tests"
+run_step "versions-and-naming"
+run_step "hook-post-versions-and-naming"
+run_step "change-source-note-write"
+run_step "release-change-data-generate"
+run_step "release-change-data-oci-package"
+run_step "hook-pre-package-prepare"
+
+# --- Environment contents (EnvFlow.md 2.x), bespoke ---
+# The environment's own pipeline over the aggregated workload set:
+# aggregate/substitute/gate, finalise, consumption report, environment
+# record, package, validate the built image.
+#
+# FIRST in an environment build, which is the opposite of the run-platform
+# order. An environment does not self-include: it is seeded by a
+# run-platform, so its deployer manifests are applied BY that run-platform
+# and it has no reason to carry them in its own content. That leaves the
+# environment contents with no dependency on the deploy-manifests set at
+# all. A run-platform does self-include, to seed the cluster with its own
+# deployer, so there the deploy-manifests set has to come first.
+run_step "kubernetes-run-aggregate"
+# TODO: Add pre-sub validation
+run_step "kubernetes-run-substitute"
+# TODO: Add post-sub validation
+run_step "kubernetes-run-finalise"
+run_step "kubernetes-run-consumption-report"
+run_step "kubernetes-lineage-data-generate"
+run_step "kubernetes-run-package"
+run_step "kubernetes-run-deploy-image-validate"
+
+# --- Deploy-manifests set (EnvFlow.md 1.x) ---
+# A bone-stock app build of the manifests that deploy the run's image: the
+# staging step, then the stock pipeline via thin wrappers that pin the
+# deploy-manifests dirs inside their own processes only - individually
+# CI-visible, and the inbound env landscape reaches nothing else. The
+# contract is correct here: deploy-time tokens carry pinned defaults for
+# the consumer (run-platform or bootstrap) to supply.
+#
+# LAST in an environment build because the manifests image also carries the
+# delegated cluster-scoped zip, which only exists once run-package has
+# carved it out.
+run_step "kubernetes-run-image-deploy-manifests"
+run_step "kubernetes-run-image-deploy-manifests-package-prepare"
+run_step "kubernetes-run-image-deploy-manifests-substitute"
+run_step "kubernetes-run-image-deploy-manifests-contract-generate"
+run_step "kubernetes-run-image-deploy-manifests-lineage-data-generate"
+run_step "kubernetes-run-image-deploy-manifests-package"
+run_step "kubernetes-run-image-deploy-manifests-repo-provider-package"
+
+run_step "hook-post-package-tests"
+run_step "docker-multi-tag"
+run_step "git-push-tag"
+run_step "kubernetes-manifests-repo-provider-publish"
+run_step "docker-push-all"
+run_step "hook-post-build"
+
+# CI provider: release file preparation, release creation
+
+print_build_complete

@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+- name: Generate deploy-manifests lineage data ConfigMap
+  id: run-idm-lineage-data-generate
+  uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-image-deploy-manifests-lineage-data-generate
+  with:
+    project-name: ${{ steps.versions.outputs.project-name }}
+    version: ${{ steps.versions.outputs.version }}
+    build-kind: ${WORKFLOW_NAME}
+    git-sha: ${{ github.sha }}
+    output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+    token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+    token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+    config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+    token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+    env-deploy-source-base-path: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH }}

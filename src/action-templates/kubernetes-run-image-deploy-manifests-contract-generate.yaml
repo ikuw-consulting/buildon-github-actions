@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: 'Kubernetes Run Image Deploy Manifests Contract Generate'
+description: 'Generates the deploy-manifests contract (deploy-time tokens with pinned defaults for the RP parent or bootstrap consumer) - the stock contract-generate pinned by its wrapper script'
+
+inputs:
+  # INJECT-INPUT: output-sub-path
+  # INJECT-INPUT: token-substitution
+  # INJECT-INPUT: run-environment-settings
+
+  # Action-specific inputs
+  project-name:
+    description: 'Run name (run-* / run-platform-*)'
+    required: true
+  version:
+    description: 'Version'
+    required: true
+  build-kind:
+    description: 'Build kind (maps to contract kind)'
+    required: true
+  metadata-description:
+    description: 'Description from KaptainPM.yaml metadata'
+    required: false
+    default: ''
+
+outputs:
+  contract-zip-sub-path:
+    description: 'Directory containing the contract zip (relative)'
+    value: ${{ steps.contract.outputs.CONTRACT_ZIP_SUB_PATH }}
+  contract-zip-file-name:
+    description: 'Filename of the contract zip'
+    value: ${{ steps.contract.outputs.CONTRACT_ZIP_FILE_NAME }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate deploy-manifests contract
+      id: contract
+      shell: bash
+      env:
+        BUILD_MODE: build_server
+        BUILD_PLATFORM: github-actions
+        BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        PROJECT_NAME: ${{ inputs.project-name }}
+        VERSION: ${{ inputs.version }}
+        BUILD_KIND: ${{ inputs.build-kind }}
+        OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
+        TOKEN_DELIMITER_STYLE: ${{ inputs.token-delimiter-style }}
+        TOKEN_NAME_STYLE: ${{ inputs.token-name-style }}
+        METADATA_DESCRIPTION: ${{ inputs.metadata-description }}
+        ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH: ${{ inputs.env-deploy-source-base-path }}
+      run: "${{ github.action_path }}/../../scripts/main/kubernetes-run-image-deploy-manifests-contract-generate"

@@ -34,6 +34,14 @@ inputs:
     description: 'Git SHA for the kaptain.org/git-sha annotation (optional)'
     required: false
     default: ''
+  environment-workload-contents-sub-path:
+    description: 'Required for the env|rp record sections: the aggregate''s substituted+finalised workload tree. Ignored otherwise.'
+    required: false
+    default: ''
+  environment-workload-contents-config-sub-path:
+    description: 'Required for the env|rp record sections: the stacked final-config dir (becomes the sub-round token dir). Ignored otherwise.'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -52,6 +60,8 @@ runs:
         PRODUCT_NAME: ${{ inputs.product-name }}
         PRODUCT_SHORT_NAME: ${{ inputs.product-short-name }}
         GIT_SHA: ${{ inputs.git-sha }}
+        ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH: ${{ inputs.environment-workload-contents-sub-path }}
+        ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH: ${{ inputs.environment-workload-contents-config-sub-path }}
         OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
         TOKEN_DELIMITER_STYLE: ${{ inputs.token-delimiter-style }}
         TOKEN_NAME_STYLE: ${{ inputs.token-name-style }}

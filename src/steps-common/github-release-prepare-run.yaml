@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+- name: Resolve internal release files
+  id: resolve-internal-release-files
+  if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true'
+  shell: bash
+  run: |
+    echo "verbatim-files=" >> "${GITHUB_OUTPUT}"
+    echo "substituted-files=" >> "${GITHUB_OUTPUT}"
+    echo "raw-files=" >> "${GITHUB_OUTPUT}"
+
+- name: Prepare release files
+  id: github-release-prepare
+  if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true'
+  uses: ./.github/buildon-github-actions/src/actions/github-release-prepare
+  with:
+    github-release-substituted-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_SUBSTITUTED_FILES }}
+    github-release-verbatim-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_VERBATIM_FILES }}
+    github-release-raw-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_RAW_FILES }}
+    internal-verbatim-files: >-
+      ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}/release-change-data/release-change-data.yaml,
+      ${{ steps.resolve-internal-release-files.outputs.verbatim-files }}
+    internal-substituted-files: ${{ steps.resolve-internal-release-files.outputs.substituted-files }}
+    internal-raw-files: >-
+      ${{ steps.run-package.outputs.run-contents-zip-file }},
+      ${{ steps.run-package.outputs.run-consumption-report-zip-file }},
+      ${{ steps.run-idm-package.outputs.manifests-zip-sub-path }}/${{ steps.run-idm-package.outputs.manifests-zip-file-name }},
+      ${{ steps.run-idm-contract-generate.outputs.contract-zip-sub-path }}/${{ steps.run-idm-contract-generate.outputs.contract-zip-file-name }},
+      ${{ steps.resolve-internal-release-files.outputs.raw-files }}
+    output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+    version: ${{ steps.versions.outputs.version }}
+    version-major: ${{ steps.versions.outputs.version-major }}
+    version-minor: ${{ steps.versions.outputs.version-minor }}
+    version-patch: ${{ steps.versions.outputs.version-patch }}
+    version-2-part: ${{ steps.versions.outputs.version-2-part }}
+    version-3-part: ${{ steps.versions.outputs.version-3-part }}
+    version-4-part: ${{ steps.versions.outputs.version-4-part }}
+    version-dns-safe: ${{ steps.versions.outputs.version-dns-safe }}
+    version-2-part-dns-safe: ${{ steps.versions.outputs.version-2-part-dns-safe }}
+    version-3-part-dns-safe: ${{ steps.versions.outputs.version-3-part-dns-safe }}
+    version-4-part-dns-safe: ${{ steps.versions.outputs.version-4-part-dns-safe }}
+    git-tag: ${{ steps.versions.outputs.git-tag }}
+    project-name: ${{ steps.versions.outputs.project-name }}
+    docker-tag: ${{ steps.versions.outputs.docker-tag }}
+    docker-image-name: ${{ steps.versions.outputs.docker-image-name }}
+    is-release: ${{ steps.versions.outputs.is-release }}
+    github-release-add-version-to-filenames: ${{ steps.kpm.outputs.GITHUB_RELEASE_ADD_VERSION_TO_FILENAMES }}
+    token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+    token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+    token-name-validation: ${{ steps.kpm.outputs.TOKEN_NAME_VALIDATION }}
+    config-sub-path: ${{ steps.kpm.outputs.CONFIG_SUB_PATH }}
+    allow-builtin-token-override: ${{ steps.kpm.outputs.ALLOW_BUILTIN_TOKEN_OVERRIDE }}
+    config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+    token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+    docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+    docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+    manifests-zip-file-name: ${{ steps.run-idm-package.outputs.manifests-zip-file-name }}

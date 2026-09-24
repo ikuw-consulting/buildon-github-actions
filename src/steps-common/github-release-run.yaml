@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+- name: Compute release notes
+  id: release-notes
+  if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true'
+  shell: bash
+  env:
+    BUILD_MODE: build_server
+    BUILD_PLATFORM: github-actions
+    BUILD_PLATFORM_LOG_PROVIDER: github-actions
+    USER_NOTES: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES }}
+    USER_NOTES_FILE: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES_FILE }}
+    VERSION: ${{ steps.versions.outputs.version }}
+    PROJECT_NAME: ${{ steps.versions.outputs.project-name }}
+    RUN_DEPLOY_IMAGE_URI: ${{ steps.run-package.outputs.run-deploy-image-uri }}
+    RUN_ARTIFACTS_IMAGE_URI: ${{ steps.run-package.outputs.run-artifacts-image-uri }}
+    RUN_CONTENTS_ZIP_FILE: ${{ steps.run-package.outputs.run-contents-zip-file }}
+    RUN_CONSUMPTION_REPORT_ZIP_FILE: ${{ steps.run-package.outputs.run-consumption-report-zip-file }}
+    MANIFESTS_URI: ${{ steps.manifest-repo-provider-publish.outputs.manifests-uri }}
+    MANIFESTS_ZIP_FILE_NAME: ${{ steps.run-idm-package.outputs.manifests-zip-file-name }}
+    CONTRACT_ZIP_FILE_NAME: ${{ steps.run-idm-contract-generate.outputs.contract-zip-file-name }}
+    RELEASE_CHANGE_DATA_URI: ${{ steps.release-change-data-oci-package.outputs.release-change-data-image-uri }}
+    OUTPUT_SUB_PATH: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+    ENV_WORKLOAD_CONTENTS_FILE: ${{ steps.run-aggregate.outputs.environment-workload-contents-file }}
+    GITHUB_SERVER_URL: ${{ github.server_url }}
+    GITHUB_REPOSITORY: ${{ github.repository }}
+  run: |
+    display_name=$(./.github/buildon-github-actions/src/scripts/util/format-project-title "${PROJECT_NAME}")
+    echo "title=${VERSION} — ${display_name}" >> "${GITHUB_OUTPUT}"
+
+    if [[ -n "${USER_NOTES_FILE}" ]]; then
+      # Notes come from file, skip inline notes computation
+      echo "notes=" >> "${GITHUB_OUTPUT}"
+    elif [[ -n "${USER_NOTES}" ]]; then
+      # User provided notes override entirely
+      {
+        echo "notes<<NOTES_EOF"
+        echo "${USER_NOTES}"
+        echo "NOTES_EOF"
+      } >> "${GITHUB_OUTPUT}"
+    else
+      # Default run release format
+      release_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${VERSION}"
+      contents_zip_name=$(basename "${RUN_CONTENTS_ZIP_FILE}")
+      report_zip_name=$(basename "${RUN_CONSUMPTION_REPORT_ZIP_FILE}")
+      {
+        echo "notes<<NOTES_EOF"
+        echo "Automatic Kaptain run release for version ${VERSION} of ${PROJECT_NAME}. This release has the environment contents zip and consumption-report zip attached, alongside the deploy image (the applyable set baked at /kd/manifests with its env-var contract) and the deploy-manifests set for the consuming parent or bootstrap."
+        echo ""
+        echo "### Contents"
+        if [[ -s "${ENV_WORKLOAD_CONTENTS_FILE}" ]]; then
+          cat "${ENV_WORKLOAD_CONTENTS_FILE}"
+        else
+          echo "_(none)_"
+        fi
+        echo ""
+        echo "### Release Assets"
+        echo "* Environment Contents: [${contents_zip_name}](${release_url}/${contents_zip_name})"
+        echo "* Consumption Report: [${report_zip_name}](${release_url}/${report_zip_name})"
+        echo "* Deploy Manifests: [${MANIFESTS_ZIP_FILE_NAME}](${release_url}/${MANIFESTS_ZIP_FILE_NAME})"
+        echo "* Deploy Manifests Contract: [${CONTRACT_ZIP_FILE_NAME}](${release_url}/${CONTRACT_ZIP_FILE_NAME})"
+        echo "* Deploy Manifests Image: [${MANIFESTS_URI}](https://${MANIFESTS_URI})"
+        echo "* Deploy Image: [${RUN_DEPLOY_IMAGE_URI}](https://${RUN_DEPLOY_IMAGE_URI})"
+        echo "* Artifacts Image: [${RUN_ARTIFACTS_IMAGE_URI}](https://${RUN_ARTIFACTS_IMAGE_URI})"
+        echo "* Release Change Data: [release-change-data-${VERSION}.yaml](${release_url}/release-change-data-${VERSION}.yaml)"
+        echo "* Release Change Data Image: [${RELEASE_CHANGE_DATA_URI}](https://${RELEASE_CHANGE_DATA_URI})"
+        ./.github/buildon-github-actions/src/scripts/util/format-release-image-list "${OUTPUT_SUB_PATH}" "${VERSION}"
+        echo "NOTES_EOF"
+      } >> "${GITHUB_OUTPUT}"
+    fi
+
+- name: GitHub Release
+  if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true'
+  uses: ./.github/buildon-github-actions/src/actions/github-release
+  with:
+    github-release-enabled: ${{ steps.kpm.outputs.GITHUB_RELEASE_ENABLED }}
+    output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+    github-release-tag: ${{ steps.versions.outputs.version }}
+    github-release-notes: ${{ steps.release-notes.outputs.notes }}
+    github-release-notes-file: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES_FILE }}
+    github-release-title: ${{ steps.release-notes.outputs.title }}

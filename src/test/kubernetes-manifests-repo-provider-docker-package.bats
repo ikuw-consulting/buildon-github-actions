@@ -22,6 +22,10 @@ setup() {
   mkdir -p "$TEST_ZIP_DIR"
   export TEST_ZIP_NAME="test-manifests.zip"
   echo "test content" > "$TEST_ZIP_DIR/$TEST_ZIP_NAME"
+  # The contract zip is required, not best-effort: consumers resolve a
+  # bundle through it, so packaging without one is always a build error
+  export TEST_CONTRACT_ZIP_NAME="test-contract.zip"
+  echo "test contract" > "$TEST_ZIP_DIR/$TEST_CONTRACT_ZIP_NAME"
   # Create output directory
   export OUTPUT_SUB_PATH="$base_dir/target"
   export DOCKER_PUSH_IMAGE_LIST_FILE="${OUTPUT_SUB_PATH}/docker-push-all/image-uris"
@@ -38,6 +42,8 @@ teardown() {
 set_required_env() {
   export MANIFESTS_ZIP_SUB_PATH="$TEST_ZIP_DIR"
   export MANIFESTS_ZIP_FILE_NAME="$TEST_ZIP_NAME"
+  export CONTRACT_ZIP_SUB_PATH="$TEST_ZIP_DIR"
+  export CONTRACT_ZIP_FILE_NAME="$TEST_CONTRACT_ZIP_NAME"
   export REPO_PROVIDER_URL="ghcr.io"
   export REPO_PROVIDER_NAME="test/my-repo"
   export REPO_PROVIDER_VERSION="1.0.0-manifests"
@@ -136,6 +142,33 @@ set_required_env() {
   run "$REPO_PROVIDERS_DIR/kubernetes-manifests-repo-provider-docker-package"
   [ "$status" -ne 0 ]
   assert_output_contains "Manifests zip not found"
+}
+
+@test "fails when CONTRACT_ZIP_SUB_PATH missing" {
+  set_required_env
+  unset CONTRACT_ZIP_SUB_PATH
+
+  run "$REPO_PROVIDERS_DIR/kubernetes-manifests-repo-provider-docker-package"
+  [ "$status" -ne 0 ]
+  assert_output_contains "CONTRACT_ZIP_SUB_PATH is required"
+}
+
+@test "fails when contract zip file not found" {
+  set_required_env
+  export CONTRACT_ZIP_SUB_PATH="/nonexistent"
+  export CONTRACT_ZIP_FILE_NAME="contract.zip"
+
+  run "$REPO_PROVIDERS_DIR/kubernetes-manifests-repo-provider-docker-package"
+  [ "$status" -ne 0 ]
+  assert_output_contains "Contract zip not found"
+}
+
+@test "publishes the contract zip alongside the manifests zip" {
+  set_required_env
+
+  run "$REPO_PROVIDERS_DIR/kubernetes-manifests-repo-provider-docker-package"
+  [ "$status" -eq 0 ]
+  [ -f "${OUTPUT_SUB_PATH}/publish/docker/${TEST_CONTRACT_ZIP_NAME}" ]
 }
 
 @test "fails when REPO_PROVIDER_NAME missing" {

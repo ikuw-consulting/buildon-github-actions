@@ -1,0 +1,105 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: 'Kubernetes Run Image Deploy Manifests Repo Provider Package'
+description: 'Packages the deploy-manifests set for the repo provider (builds the manifests docker image; does NOT publish) - the stock repo-provider-package pinned by its wrapper script'
+
+inputs:
+  # INJECT-INPUT: output-sub-path
+  # INJECT-INPUT: docker-push-image-list
+  # INJECT-INPUT: kubernetes-app-manifests
+  # INJECT-INPUT: docker-build
+  # INJECT-INPUT: run-environment-settings
+
+  # Action-specific inputs
+  manifests-zip-sub-path:
+    description: 'Relative path to the directory containing the manifests zip'
+    required: true
+  manifests-zip-file-name:
+    description: 'Filename of the manifests zip'
+    required: true
+  docker-image-name:
+    description: 'Image name (from version generator)'
+    required: false
+    default: ''
+  docker-tag:
+    description: 'Tag for target image (includes prerelease suffix if applicable)'
+    required: false
+    default: ''
+  project-name:
+    description: 'Run name (run-* / run-platform-*)'
+    required: true
+  version:
+    description: 'Version tag'
+    required: true
+  cluster-scoped-on-behalf-zip-file:
+    description: 'Path to the delegated cluster-scoped zip from kubernetes-run-package. Set only when clusterScopedDelegation=parent carved a set out (env builds); empty means nothing to ship.'
+    required: false
+    default: ''
+  contract-zip-sub-path:
+    description: 'Directory containing the contract zip (required - consumers resolve a bundle through its contract)'
+    required: true
+  contract-zip-file-name:
+    description: 'Filename of the contract zip (required)'
+    required: true
+  # INJECT-INPUT: image-build-command
+
+outputs:
+  # --- Pass-through for publish step ---
+  manifests-uri:
+    description: 'Manifests location (for publish step)'
+    value: ${{ steps.package.outputs.MANIFESTS_URI }}
+  manifests-artifact-sub-path:
+    description: 'Relative path to packaged artifact (for publish step)'
+    value: ${{ steps.package.outputs.MANIFESTS_ARTIFACT_SUB_PATH }}
+  manifests-zip-sub-path:
+    description: 'Relative path to directory containing manifests zip (pass through for publish step)'
+    value: ${{ steps.package.outputs.MANIFESTS_ZIP_SUB_PATH }}
+  manifests-zip-file-name:
+    description: 'Filename for manifests zip (pass through for publish step)'
+    value: ${{ steps.package.outputs.MANIFESTS_ZIP_FILE_NAME }}
+  version:
+    description: 'Version/tag (pass through for publish step)'
+    value: ${{ steps.package.outputs.REPO_PROVIDER_VERSION }}
+  repo-provider-url:
+    description: 'Computed REPO_PROVIDER_URL (for publish step)'
+    value: ${{ steps.package.outputs.REPO_PROVIDER_URL }}
+  repo-provider-namespace:
+    description: 'Computed REPO_PROVIDER_NAMESPACE (for publish step)'
+    value: ${{ steps.package.outputs.REPO_PROVIDER_NAMESPACE }}
+  repo-provider-name:
+    description: 'Computed REPO_PROVIDER_NAME (for publish step)'
+    value: ${{ steps.package.outputs.REPO_PROVIDER_NAME }}
+  repo-provider-version:
+    description: 'Computed REPO_PROVIDER_VERSION (for publish step)'
+    value: ${{ steps.package.outputs.REPO_PROVIDER_VERSION }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Package deploy-manifests for repo provider
+      id: package
+      shell: bash
+      env:
+        BUILD_MODE: build_server
+        BUILD_PLATFORM: github-actions
+        BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        PROJECT_NAME: ${{ inputs.project-name }}
+        VERSION: ${{ inputs.version }}
+        OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
+        DOCKER_PUSH_IMAGE_LIST_FILE: ${{ inputs.docker-push-image-list-file }}
+        MANIFESTS_REPO_PROVIDER_TYPE: ${{ inputs.manifests-repo-provider-type }}
+        MANIFESTS_ZIP_SUB_PATH: ${{ inputs.manifests-zip-sub-path }}
+        MANIFESTS_ZIP_FILE_NAME: ${{ inputs.manifests-zip-file-name }}
+        CONTRACT_ZIP_SUB_PATH: ${{ inputs.contract-zip-sub-path }}
+        CONTRACT_ZIP_FILE_NAME: ${{ inputs.contract-zip-file-name }}
+        RUN_CLUSTER_SCOPED_ON_BEHALF_ZIP_FILE: ${{ inputs.cluster-scoped-on-behalf-zip-file }}
+        DOCKER_IMAGE_NAME: ${{ inputs.docker-image-name }}
+        DOCKER_TAG: ${{ inputs.docker-tag }}
+        DOCKER_TARGET_REGISTRY: ${{ inputs.docker-target-registry }}
+        DOCKER_TARGET_NAMESPACE: ${{ inputs.docker-target-namespace }}
+        REPO_PROVIDER_AUTH_TOKEN: ${{ github.token }}
+        REPO_PROVIDER_AUTH_USER: ${{ github.actor }}
+        IMAGE_BUILD_COMMAND: ${{ inputs.image-build-command }}
+        ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH: ${{ inputs.env-deploy-source-base-path }}
+      run: "${{ github.action_path }}/../../scripts/main/kubernetes-run-image-deploy-manifests-repo-provider-package"

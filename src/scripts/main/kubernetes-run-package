@@ -1,0 +1,605 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+#
+# kubernetes-run-package - Build the run's deploy image and bespoke
+# artifacts (env and run-platform builds; the bespoke workload-contents counterpart
+# to the bone-stock deploy-manifests block).
+#
+# Produces, in order:
+#   1. The DEPLOY IMAGE: FROM the composed environmentDeployBaseImage,
+#      the finalised workload tree baked at /kd/manifests, the encrypted
+#      secret values at /kd/secrets, and the
+#      deploy-time env-var contract baked as ENV lines (DEPLOY_MODE,
+#      ENVIRONMENT, ENVIRONMENT_TYPE, VERSION and the token styles). The
+#      cleanup config is NOT here - it travels as a structured document in
+#      the cleanup policy ConfigMap, so flattening it into ENV lines would
+#      only be a lossy duplicate. Nor is there any children-apply-mode
+#      switch: how a run-platform treats a child's deployer set is declared
+#      by the CHILD and marked inside that child's own deploy-manifests
+#      set. Tagged with the
+#      STANDARD project image name - exactly what the deploy-manifests
+#      block's workload references and keel/keelson watch.
+#   2. The CONTENTS ZIP (<project>-<version>-environment-contents.zip),
+#      self-labelled by folder name: <project>/ holds the manifest set
+#      byte-equal to the baked /kd/manifests tree, and
+#      <project>-cluster-scoped-on-behalf/ mirrors the delegation
+#      carve-out when present. Alongside it, and only when that carve-out
+#      ran, the standalone
+#      <project>-<version>-cluster-scoped-resources.zip (<project>/ root)
+#      - the copy that rides in the MANIFESTS artifact for the
+#      run-platform parent to collect.
+#   3. The CONSUMPTION REPORT ZIP: the report itself is generated
+#      upstream by kubernetes-run-consumption-report (so the lineage
+#      record can embed it); this step packages it together with
+#      <project>-config/ and <project>-secrets/ - the stacked config and
+#      encrypted values the set was substituted and gated against.
+#   4. The ARTIFACTS WRAPPER IMAGE: a scratch OCI image carrying zips
+#      2 + 3 under a suffixed TAG (<tag>-environment-artifacts) so they
+#      publish to registries even when GH releases are not in play.
+#      Built by the shared docker-package-multi-arch util: both
+#      architectures, always. The deploy image (1) respects
+#      DOCKER_PLATFORM - a comma-separated list builds once per arch
+#      from the same context.
+#
+# Image URIs are appended to DOCKER_PUSH_IMAGE_LIST_FILE so the standard
+# docker-multi-tag / docker-push-all steps handle tagging and pushing.
+#
+# The clusterScopedDelegation=parent carve-out happens HERE (env builds):
+# the deploy context's manifests/ loses the cluster-scoped documents to
+# cluster-scoped-on-behalf/ (shipped at /kd/cluster-scoped-on-behalf and
+# mirrored in the contents zip). Deliberately last: every upstream scan
+# (signoff, checksum, content-data, lineage record) sees the full tree.
+#
+# Inputs (env):
+#   PROJECT_NAME / VERSION                    - Required
+#   ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH             - Required; the substituted+finalised
+#                                               tree
+#   ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH      - The stacked final config the tree was
+#                                               substituted against (exported by
+#                                               kubernetes-run-substitute); rides in
+#                                               the consumption-report zip
+#   RUN_SECRETS_ENCRYPTION_TYPE               - Single encryption-type suffix the
+#                                               secrets-dir preflight found, or empty;
+#                                               filters what reaches /kd/secrets
+#   SECRETS_SUB_PATH                          - Encrypted secret values dir (default
+#                                               src/secrets); rides in the consumption-
+#                                               report zip for inspection (env builds
+#                                               only)
+#   OUTPUT_SUB_PATH                           - Build output dir (default kaptain-out)
+#   IMAGE_BUILD_COMMAND                       - docker | podman (required)
+#   DOCKER_TARGET_REGISTRY / _NAMESPACE       - Image naming (required)
+#   DOCKER_IMAGE_NAME / DOCKER_TAG            - Image naming (required)
+#   DOCKER_PUSH_IMAGE_LIST_FILE               - URI accumulation (required)
+#   DOCKER_PLATFORM                           - Platform(s) for the deploy image
+#                                               (default linux/amd64; comma-
+#                                               separated list builds one image
+#                                               per arch from the SAME context)
+#   ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_*       - Composed FROM (defaults ship).
+#                                               INCLUDE_NAMESPACE=false ignores the
+#                                               namespace value and condenses
+#                                               the segment out (explicit
+#                                               registry-discriminator flag)
+#   ENV_DEPLOY_MODE                           - Baked into the image as part
+#                                               of the deploy env-var contract
+#   ENV_CLUSTER_SCOPED_DELEGATION             - 'parent' triggers the carve-out
+#                                               (env builds only; default self)
+#   MANIFESTS_CLUSTER_SCOPED_KINDS_FILE       - File NAME (versioned) of the
+#                                               cluster-scoped Kind list in fixed
+#                                               src/data/cluster-scoped-kinds/
+#                                               (default default-1.1.txt)
+#   RUN_BUILD_KIND                            - environment | run-platform
+#                                               (derived from PROJECT_NAME
+#                                               when unset)
+#
+# Outputs (env + GITHUB_OUTPUT):
+#   RUN_CONTENTS_ZIP_FILE     - contents zip path
+#   RUN_CONSUMPTION_REPORT_ZIP_FILE - consumption report zip path (the
+#                               report yaml path is output by
+#                               kubernetes-run-consumption-report)
+#   RUN_DEPLOY_IMAGE_URI      - the deploy image URI
+#   RUN_ARTIFACTS_IMAGE_URI   - the wrapper image URI
+#   RUN_CLUSTER_SCOPED_ON_BEHALF_ZIP_FILE - the delegated cluster-scoped
+#                               zip, emitted ONLY when the carve-out
+#                               produced a set (env builds); its presence
+#                               is the signal to publish it in the
+#                               manifests artifact
+#
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=src/scripts/defaults/platform.bash
+source "${SCRIPT_DIR}/../defaults/platform.bash"
+# shellcheck source=src/scripts/lib/log.bash
+source "${SCRIPT_DIR}/../lib/log.bash"
+# shellcheck source=src/scripts/defaults/output-sub-path.bash
+source "${SCRIPT_DIR}/../defaults/output-sub-path.bash"
+# shellcheck source=src/scripts/defaults/tokens.bash
+source "${SCRIPT_DIR}/../defaults/tokens.bash"
+# shellcheck source=src/scripts/defaults/environments.bash
+source "${SCRIPT_DIR}/../defaults/environments.bash"
+# BUILD_MODE (required, no default) gates the registry existence checks
+# in docker-build-shared; DOCKER_PLATFORM defaults in docker-common.
+# shellcheck source=src/scripts/defaults/build-mode.bash
+source "${SCRIPT_DIR}/../defaults/build-mode.bash"
+# shellcheck source=src/scripts/defaults/docker-common.bash
+source "${SCRIPT_DIR}/../defaults/docker-common.bash"
+# shellcheck source=src/scripts/lib/docker-build-shared.bash
+source "${SCRIPT_DIR}/../lib/docker-build-shared.bash"
+# shellcheck source=src/scripts/lib/output-var.bash
+source "${SCRIPT_DIR}/../lib/output-var.bash"
+# shellcheck source=src/scripts/lib/env-deploy-base-image-compose.bash
+source "${SCRIPT_DIR}/../lib/env-deploy-base-image-compose.bash"
+# shellcheck source=src/scripts/lib/manifest-file-kinds.bash
+source "${SCRIPT_DIR}/../lib/manifest-file-kinds.bash"
+
+PROJECT_NAME="${PROJECT_NAME:?PROJECT_NAME is required}"
+VERSION="${VERSION:?VERSION is required}"
+ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH="${ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH:?ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH is required (the substituted+finalised tree)}"
+IMAGE_BUILD_COMMAND="${IMAGE_BUILD_COMMAND:?IMAGE_BUILD_COMMAND is required}"
+DOCKER_TARGET_REGISTRY="${DOCKER_TARGET_REGISTRY:?DOCKER_TARGET_REGISTRY is required}"
+DOCKER_TARGET_NAMESPACE="${DOCKER_TARGET_NAMESPACE:?DOCKER_TARGET_NAMESPACE is required}"
+DOCKER_IMAGE_NAME="${DOCKER_IMAGE_NAME:?DOCKER_IMAGE_NAME is required}"
+DOCKER_TAG="${DOCKER_TAG:?DOCKER_TAG is required}"
+DOCKER_PUSH_IMAGE_LIST_FILE="${DOCKER_PUSH_IMAGE_LIST_FILE:?DOCKER_PUSH_IMAGE_LIST_FILE is required - set by docker-registry-logins}"
+
+RUN_BUILD_KIND="${RUN_BUILD_KIND:-}"
+if [[ -z "${RUN_BUILD_KIND}" ]]; then
+  case "${PROJECT_NAME}" in
+    run-platform-*) RUN_BUILD_KIND="run-platform" ;;
+    *)              RUN_BUILD_KIND="environment" ;;
+  esac
+fi
+if [[ "${RUN_BUILD_KIND}" == "run-platform" ]]; then
+  ENVIRONMENT_TYPE_VALUE="meta-env"
+else
+  ENVIRONMENT_TYPE_VALUE="env"
+fi
+
+PACKAGE_BASE="${OUTPUT_SUB_PATH}/run-package"
+DEPLOY_CONTEXT_DIR="${PACKAGE_BASE}/deploy-image-context"
+ARTIFACTS_CONTEXT_DIR="${PACKAGE_BASE}/artifacts-image-context"
+ZIP_DIR="${PACKAGE_BASE}/zip"
+
+CONTENTS_ZIP_NAME="${PROJECT_NAME}-${VERSION}-environment-contents.zip"
+REPORT_NAME="${PROJECT_NAME}-${VERSION}-consumption-report.yaml"
+REPORT_ZIP_NAME="${PROJECT_NAME}-${VERSION}-consumption-report.zip"
+ON_BEHALF_ZIP_NAME="${PROJECT_NAME}-${VERSION}-cluster-scoped-resources.zip"
+PROVENANCE_ZIP_NAME="${PROJECT_NAME}-${VERSION}-workload-contents-provenance.zip"
+
+# The manifests-* stages and config-* layers sit beside the final tree this
+# step was handed, so its parent is the run's aggregate base. Same derivation
+# as kubernetes-run-finalise, and for the same reason: the kind-to-base mapping
+# stays in the aggregate rather than being recomputed in every step.
+STAGE_BASE="$(dirname "${ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH}")"
+
+RUN_SECRETS_ENCRYPTION_TYPE="${RUN_SECRETS_ENCRYPTION_TYPE:-}"
+
+DEPLOY_IMAGE_URI="${DOCKER_TARGET_REGISTRY}/${DOCKER_TARGET_NAMESPACE}/${DOCKER_IMAGE_NAME}:${DOCKER_TAG}"
+# A Kaptain project publishes to exactly ONE repository; what a build produces
+# is distinguished by tag, never by a second repository name. The bare tag keeps
+# its core meaning (here, the env deploy image the deploy-manifests set runs),
+# and every other artefact suffixes it - the same shape as <tag>-manifests.
+ARTIFACTS_IMAGE_URI="${DOCKER_TARGET_REGISTRY}/${DOCKER_TARGET_NAMESPACE}/${DOCKER_IMAGE_NAME}:${DOCKER_TAG}-environment-artifacts"
+
+# clusterScopedDelegation=parent carve-out. Runs on the deploy-context
+# COPY of the tree, deliberately LAST in the pipeline: signoff, checksum,
+# content-data, the lineage record, and the contents zip staging all see
+# (or receive) the FULL set - only the image's applyable /kd/manifests
+# loses the delegated documents, moved to cluster-scoped-on-behalf/ in
+# their original per-child structure for the run-platform parent to
+# apply with cluster credentials. Classification is per FILE against the
+# versioned cluster-scoped Kind list (files are single-document by
+# project rule; multi-doc validation comes separately).
+step_cluster_scoped_carve_out() {
+  [[ "${RUN_BUILD_KIND}" == "environment" ]] || return 0
+  [[ "${ENV_CLUSTER_SCOPED_DELEGATION}" == "parent" ]] || return 0
+
+  local kinds_path="${SCRIPT_DIR}/../../data/cluster-scoped-kinds/${MANIFESTS_CLUSTER_SCOPED_KINDS_FILE}"
+  if [[ ! -f "${kinds_path}" ]]; then
+    log_error "Cluster-scoped kinds file '${MANIFESTS_CLUSTER_SCOPED_KINDS_FILE}' not found in the fixed data dir"
+    log_error "(resolved: ${kinds_path})"
+    exit 1
+  fi
+  local kinds
+  kinds=$(awk 'NF && $1 !~ /^#/ { gsub(/^[ \t]+|[ \t]+$/, "", $0); print }' "${kinds_path}")
+
+  log ""
+  log "  Carving out cluster-scoped resources for the parent (clusterScopedDelegation=parent)..."
+  log "  Kinds:     src/data/cluster-scoped-kinds/${MANIFESTS_CLUSTER_SCOPED_KINDS_FILE}"
+
+  local file rel kind carved=0
+  while IFS= read -r -d '' file; do
+    kind=$(yq '.kind // ""' "${file}" 2>/dev/null || true)
+    [[ -z "${kind}" || "${kind}" == "null" ]] && continue
+    grep -qxF "${kind}" <<< "${kinds}" || continue
+    rel="${file#"${DEPLOY_CONTEXT_DIR}/manifests/"}"
+    mkdir -p "$(dirname "${DEPLOY_CONTEXT_DIR}/cluster-scoped-on-behalf/${rel}")"
+    mv "${file}" "${DEPLOY_CONTEXT_DIR}/cluster-scoped-on-behalf/${rel}"
+    log "  carved   ${rel} (${kind})"
+    carved=$((carved + 1))
+  done < <(find "${DEPLOY_CONTEXT_DIR}/manifests" -type f -name '*.yaml' -print0 | LC_ALL=C sort -z)
+
+  log "  ${carved} cluster-scoped manifest(s) carved out for the parent."
+}
+
+# The final tree carries manifests and nothing else. Patches were applied by
+# the patch stage and left behind in the working directories that provenance
+# collects, so one reaching the packaging stage means a stage failed to hand on
+# a clean tree. Not the author's mistake, and worded so nobody goes looking for
+# one in their own repository.
+assert_no_patches_survive() {
+  local tree="${1}" patch_count="${2}"
+  [[ "${patch_count}" -eq 0 ]] && return 0
+
+  log_error "${patch_count} yq patch file(s) reached packaging in ${tree}:"
+  local file
+  while IFS= read -r file; do
+    manifest_file_classify "${file}" || continue
+    [[ "${MANIFEST_FILE_KIND}" == "patch" ]] && log_error "  ${file#"${tree}"/}"
+  done < <(manifest_files_find_packageable "${tree}")
+  log_error "Patches are consumed by the patch stage, which leaves its working copies"
+  log_error "for provenance rather than in the tree that ships. This is a build fault,"
+  log_error "not a problem with the project being built."
+  exit 1
+}
+
+# Report how well a staged tree compressed into its zip.
+#
+# Apparent size (the bytes in the files) rather than du's allocated blocks: a
+# tree of small YAML files rounds up to a block each, which would inflate the
+# ratio into a number about the filesystem rather than about the content.
+#
+# Usage: log_compression_ratio <staged-dir> <zip-file> <label>
+log_compression_ratio() {
+  local dir="${1}" zip_file="${2}" label="${3}"
+  local before after ratio
+
+  before=$(find "${dir}" -type f -exec cat {} + 2>/dev/null | wc -c | tr -d ' ')
+  after=$(wc -c < "${zip_file}" | tr -d ' ')
+  ratio=$(awk -v b="${before}" -v a="${after}" \
+    'BEGIN { if (a > 0) printf "%.1f", b / a; else printf "n/a" }')
+
+  log "  ${label} compression:"
+  log "    Before: $(printf '%12s' "${before}") bytes"
+  log "    Zip:    $(printf '%12s' "${after}") bytes"
+  log "    Ratio:  $(printf '%12s' "${ratio}"):1"
+}
+
+step_deploy_image() {
+  log ""
+  log "[1/5] Deploy image..."
+
+  local base_image
+  base_image=$(env_deploy_base_image_configured) || exit 1
+  log "  FROM:  ${base_image}"
+  log "  Image: ${DEPLOY_IMAGE_URI}"
+
+  mkdir -p "${DEPLOY_CONTEXT_DIR}/manifests"
+  cp -R "${ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH}/." "${DEPLOY_CONTEXT_DIR}/manifests/"
+
+  step_cluster_scoped_carve_out
+
+  # RP builds: children's carved-out cluster-scoped resources, collected
+  # per child under this dir by the RP's on-behalf collection. Same
+  # context dir as the env-side carve-out, so the Dockerfile COPY and
+  # the contents-zip mirroring below handle both cases.
+  local rp_on_behalf="${OUTPUT_SUB_PATH}/run-platform/cluster-scoped-on-behalf"
+  if [[ "${RUN_BUILD_KIND}" == "run-platform" && -d "${rp_on_behalf}" ]]; then
+    log "  Staging children's delegated cluster-scoped resources..."
+    mkdir -p "${DEPLOY_CONTEXT_DIR}/cluster-scoped-on-behalf"
+    cp -R "${rp_on_behalf}/." "${DEPLOY_CONTEXT_DIR}/cluster-scoped-on-behalf/"
+  fi
+
+  # Encrypted secret values, for the deploy to decrypt and substitute into the
+  # *.template.yaml Secrets before renaming them into place. Without them a
+  # deploy carrying secret templates has nothing to resolve them from. Both
+  # kinds: an RP has its own workload contents and its own secrets, it only
+  # defers its CHILDREN's.
+  #
+  # Filtered by the encryption type the secrets-dir preflight found, published
+  # as RUN_SECRETS_ENCRYPTION_TYPE. That preflight is the one place that
+  # decides what a valid encrypted value looks like, and it already refused to
+  # let a collection carry two types, so a single suffix identifies every file
+  # meant to be here. Anything else in that directory - plaintext mid-workflow,
+  # an editor backup, a stray note - is left on the floor rather than baked
+  # into an image, which matters because the preflight's hygiene failures
+  # soften to a warning on a local build.
+  #
+  # Empty type means copy nothing: no secrets dir, an empty one, or a
+  # collection the preflight could not vouch for.
+  if [[ -n "${RUN_SECRETS_ENCRYPTION_TYPE}" ]] && [[ -d "${SECRETS_SUB_PATH}" ]]; then
+    local secret_file rel_secret secret_count=0
+    while IFS= read -r secret_file; do
+      rel_secret="${secret_file#"${SECRETS_SUB_PATH}"/}"
+      mkdir -p "$(dirname "${DEPLOY_CONTEXT_DIR}/secrets/${rel_secret}")"
+      cp "${secret_file}" "${DEPLOY_CONTEXT_DIR}/secrets/${rel_secret}"
+      secret_count=$((secret_count + 1))
+    done < <(find "${SECRETS_SUB_PATH}" -type f -name "*.${RUN_SECRETS_ENCRYPTION_TYPE}")
+    log "  Staged ${secret_count} '.${RUN_SECRETS_ENCRYPTION_TYPE}' secret value(s) from ${SECRETS_SUB_PATH}."
+  fi
+
+  # The baked env-var contract: validate-environment in the image asserts
+  # this exact set at boot, so the deploy cannot run misconfigured.
+  # Cleanup defaults (dryrun / none) come from defaults/environments.bash
+  # - the vars must ALWAYS be present in the image.
+  {
+    echo "FROM ${base_image}"
+    echo ""
+    echo "# Workload contents (the finalised, substituted, checksummed set)"
+    echo "COPY manifests/ /kd/manifests/"
+    if [[ -d "${DEPLOY_CONTEXT_DIR}/cluster-scoped-on-behalf" ]]; then
+      echo ""
+      echo "# Cluster-scoped resources carved out for the run-platform parent"
+      echo "# (clusterScopedDelegation=parent): NOT applied by this deploy."
+      echo "COPY cluster-scoped-on-behalf/ /kd/cluster-scoped-on-behalf/"
+    fi
+    if [[ -d "${DEPLOY_CONTEXT_DIR}/secrets" ]]; then
+      echo ""
+      echo "# Encrypted secret values; the deploy decrypts these into the"
+      echo "# *.template.yaml Secrets. Never plaintext at build time."
+      echo "COPY secrets/ /kd/secrets/"
+    fi
+    echo ""
+    echo "# Deploy-time env-var contract (asserted by validate-environment)"
+    echo "ENV DEPLOY_MODE=${ENV_DEPLOY_MODE}"
+    echo "ENV ENVIRONMENT=${PROJECT_NAME}"
+    echo "ENV ENVIRONMENT_TYPE=${ENVIRONMENT_TYPE_VALUE}"
+    echo "ENV VERSION=${VERSION}"
+    echo "ENV TOKEN_DELIMITER_STYLE=${TOKEN_DELIMITER_STYLE}"
+    echo "ENV TOKEN_NAME_STYLE=${TOKEN_NAME_STYLE}"
+    echo ""
+    echo "# Run as the unprivileged kaptain user the base image creates"
+    # shellcheck disable=SC2016 # Literal: Docker expands the base image's ENV at build time
+    echo 'USER ${KAPTAIN_USER_ID}'
+  } > "${DEPLOY_CONTEXT_DIR}/Dockerfile"
+
+  # The context is platform-agnostic (manifests + ENV lines), so every
+  # configured platform builds from the SAME context dir - only the base
+  # image pull differs per arch. Multi-platform follows the standard
+  # docker-build-dockerfile shape: per-arch suffixed tags on the push
+  # list, base URI on the manifest list.
+  if [[ "${DOCKER_PLATFORM}" == *,* ]]; then
+    local platforms platform arch_uri
+    IFS=',' read -ra platforms <<< "${DOCKER_PLATFORM}"
+    local manifest_uris_file="${OUTPUT_SUB_PATH}/docker-push-all/manifest-uris"
+    mkdir -p "$(dirname "${manifest_uris_file}")"
+    confirm_target_image_doesnt_exist "${DEPLOY_IMAGE_URI}" || exit 1
+    for platform in "${platforms[@]}"; do
+      arch_uri="${DEPLOY_IMAGE_URI}-${platform//\//-}"
+      confirm_target_image_doesnt_exist "${arch_uri}" || exit 1
+      log "  Building ${arch_uri} for ${platform}..."
+      "${IMAGE_BUILD_COMMAND}" build --platform "${platform}" -t "${arch_uri}" "${DEPLOY_CONTEXT_DIR}"
+      echo "${arch_uri}" >> "${DOCKER_PUSH_IMAGE_LIST_FILE}"
+      log "  Built and queued for push: ${arch_uri}"
+    done
+    echo "${DEPLOY_IMAGE_URI}" >> "${manifest_uris_file}"
+    create_local_manifest_if_supported "${DEPLOY_IMAGE_URI}"
+  else
+    "${IMAGE_BUILD_COMMAND}" build --platform "${DOCKER_PLATFORM}" -t "${DEPLOY_IMAGE_URI}" "${DEPLOY_CONTEXT_DIR}"
+    echo "${DEPLOY_IMAGE_URI}" >> "${DOCKER_PUSH_IMAGE_LIST_FILE}"
+    log "  Built and queued for push: ${DEPLOY_IMAGE_URI}"
+  fi
+}
+
+step_contents_zip() {
+  log ""
+  log "[2/5] Packaging environment contents manifests in zip for inspection..."
+  mkdir -p "${ZIP_DIR}"
+
+  # Stage the zip layout so an unzip is self-labelling: the manifest set
+  # sits under a <project-name>/ root, copied from the deploy context so
+  # that tree is byte-equal to /kd/manifests in the image. When the
+  # delegation split ran, <project>-cluster-scoped-on-behalf/ carries the
+  # carved-out resources in their original structure (suffix = the folder
+  # name in the image).
+  local stage="${PACKAGE_BASE}/zip-stage"
+  mkdir -p "${stage}/${PROJECT_NAME}"
+  cp -R "${DEPLOY_CONTEXT_DIR}/manifests/." "${stage}/${PROJECT_NAME}/"
+  if [[ -d "${DEPLOY_CONTEXT_DIR}/cluster-scoped-on-behalf" ]]; then
+    mkdir -p "${stage}/${PROJECT_NAME}-cluster-scoped-on-behalf"
+    cp -R "${DEPLOY_CONTEXT_DIR}/cluster-scoped-on-behalf/." \
+          "${stage}/${PROJECT_NAME}-cluster-scoped-on-behalf/"
+  fi
+
+  # Validate what is about to ship. This is the FINAL tree: the patch stage
+  # consumed every patch several directories ago and left the working copies
+  # behind for provenance, so a patch surviving to here is a pipeline fault
+  # rather than anything the author did, and says so.
+  local stage_failed=false
+  if ! manifest_tree_validate "${stage}/${PROJECT_NAME}"; then
+    stage_failed=true
+  fi
+  local staged_manifests="${MANIFEST_TREE_MANIFEST_COUNT}"
+  assert_no_patches_survive "${stage}/${PROJECT_NAME}" "${MANIFEST_TREE_PATCH_COUNT}"
+  if [[ -d "${stage}/${PROJECT_NAME}-cluster-scoped-on-behalf" ]]; then
+    if ! manifest_tree_validate "${stage}/${PROJECT_NAME}-cluster-scoped-on-behalf"; then
+      stage_failed=true
+    fi
+    assert_no_patches_survive "${stage}/${PROJECT_NAME}-cluster-scoped-on-behalf" \
+      "${MANIFEST_TREE_PATCH_COUNT}"
+  fi
+  if ${stage_failed}; then
+    manifest_rules_explain
+    exit 1
+  fi
+
+  (cd "${stage}" && zip -q -r -X "${OLDPWD}/${ZIP_DIR}/${CONTENTS_ZIP_NAME}" .)
+  log "  Created: ${ZIP_DIR}/${CONTENTS_ZIP_NAME}"
+  log_compression_ratio "${stage}" "${ZIP_DIR}/${CONTENTS_ZIP_NAME}" "Environment contents"
+
+  # The delegated set ALSO publishes as its own zip, rides in the manifests
+  # artifact, and is how the run-platform parent collects it without
+  # unpacking a whole contents zip. Single <project>/ root, same
+  # self-labelling convention as the manifests zip. Env builds only: an
+  # RP's on-behalf dir holds its CHILDREN's sets (staged into its own
+  # image), never a delegation of its own - RPs hold cluster admin and
+  # never defer upwards.
+  if [[ "${RUN_BUILD_KIND}" == "environment" && -d "${DEPLOY_CONTEXT_DIR}/cluster-scoped-on-behalf" ]]; then
+    local on_behalf_stage="${PACKAGE_BASE}/on-behalf-zip-stage"
+    mkdir -p "${on_behalf_stage}/${PROJECT_NAME}"
+    cp -R "${DEPLOY_CONTEXT_DIR}/cluster-scoped-on-behalf/." "${on_behalf_stage}/${PROJECT_NAME}/"
+    (cd "${on_behalf_stage}" && zip -q -r -X "${OLDPWD}/${ZIP_DIR}/${ON_BEHALF_ZIP_NAME}" .)
+    log "  Created: ${ZIP_DIR}/${ON_BEHALF_ZIP_NAME}"
+  fi
+  # Counts come from the validation above rather than a second walk; the
+  # on-behalf tree's own count was left in the same var by its pass.
+  local on_behalf_manifests="${MANIFEST_TREE_MANIFEST_COUNT}"
+  if [[ -d "${stage}/${PROJECT_NAME}-cluster-scoped-on-behalf" ]]; then
+    log "  Environment contents zip contains ${staged_manifests} manifests and ${on_behalf_manifests} delegated cluster-scoped manifests."
+  else
+    log "  Environment contents zip contains ${staged_manifests} manifests."
+  fi
+}
+
+step_consumption_report() {
+  log ""
+  log "[3/5] Consumption report zip..."
+
+  # The report itself was generated by kubernetes-run-consumption-report
+  # (a separate step, before the lineage record that embeds it). This
+  # step only packages it for publication.
+  local report_file="${OUTPUT_SUB_PATH}/run-consumption-report/${REPORT_NAME}"
+  if [[ ! -f "${report_file}" ]]; then
+    log_error "Consumption report not found: ${report_file}"
+    log_error "Did kubernetes-run-consumption-report run first?"
+    exit 1
+  fi
+
+  # The report zip is the substitution-inputs inspection surface: the
+  # report yaml at the root, plus the stacked final config the set was
+  # substituted against and the encrypted secret values used to hash and
+  # gate it, each in a suffixed folder.
+  local stage="${PACKAGE_BASE}/report-zip-stage"
+  mkdir -p "${stage}"
+  cp "${report_file}" "${stage}/"
+  if [[ -n "${ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH:-}" && -d "${ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH}" ]]; then
+    mkdir -p "${stage}/${PROJECT_NAME}-config"
+    cp -R "${ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH}/." "${stage}/${PROJECT_NAME}-config/"
+  fi
+  if [[ "${RUN_BUILD_KIND}" == "environment" && -d "${SECRETS_SUB_PATH}" ]]; then
+    mkdir -p "${stage}/${PROJECT_NAME}-secrets"
+    cp -R "${SECRETS_SUB_PATH}/." "${stage}/${PROJECT_NAME}-secrets/"
+  fi
+  (cd "${stage}" && zip -q -r -X "${OLDPWD}/${ZIP_DIR}/${REPORT_ZIP_NAME}" .)
+
+  log "  Created: ${ZIP_DIR}/${REPORT_ZIP_NAME}"
+  local config_count secret_count
+  config_count=0
+  if [[ -d "${stage}/${PROJECT_NAME}-config" ]]; then
+    config_count=$(find "${stage}/${PROJECT_NAME}-config" -type f | grep -c . || true)
+  fi
+  secret_count=0
+  if [[ -d "${stage}/${PROJECT_NAME}-secrets" ]]; then
+    secret_count=$(find "${stage}/${PROJECT_NAME}-secrets" -type f | grep -c . || true)
+  fi
+  log "  Consumption report zip contains ${config_count} config entries and ${secret_count} secret values."
+}
+
+# The provenance zip: how the shipped manifests came to be, for the build that
+# has to be explained later rather than the one being deployed now.
+#
+# One rich set rather than a copy per stage. The checksummed tree is the last
+# one holding everything, manifests and the patches that shaped them together,
+# so it plus the patch working directories plus the config layers is the whole
+# story. Duplication between them is accepted deliberately: these are small
+# text files, and a rule about which stage a file "really" belongs to would be
+# more code and more ways to be wrong about the one file someone is chasing.
+#
+# Nothing at runtime reads this, which is why it ships as a zip in the
+# artifacts image rather than as a directory in the deploy image.
+step_provenance_zip() {
+  log ""
+  log "[4/5] Workload contents provenance..."
+
+  local candidates=(
+    manifests-checksummed
+    manifests-patch-working
+    config-in-repo
+    config-builtins
+    config-defaults
+    config-final
+  )
+  local present=() dir
+  for dir in "${candidates[@]}"; do
+    [[ -d "${STAGE_BASE}/${dir}" ]] && present+=("${dir}")
+  done
+
+  if [[ ${#present[@]} -eq 0 ]]; then
+    log "  No stage directories to record."
+    return 0
+  fi
+
+  mkdir -p "${ZIP_DIR}"
+  (cd "${STAGE_BASE}" && zip -q -r -X "${OLDPWD}/${ZIP_DIR}/${PROVENANCE_ZIP_NAME}" \
+    "${present[@]}")
+  log "  Created: ${ZIP_DIR}/${PROVENANCE_ZIP_NAME}"
+  log "  Stages:  ${present[*]}"
+
+  local before after ratio
+  before=0
+  for dir in "${present[@]}"; do
+    before=$((before + $(find "${STAGE_BASE}/${dir}" -type f -exec cat {} + 2>/dev/null | wc -c | tr -d ' ')))
+  done
+  after=$(wc -c < "${ZIP_DIR}/${PROVENANCE_ZIP_NAME}" | tr -d ' ')
+  ratio=$(awk -v b="${before}" -v a="${after}" \
+    'BEGIN { if (a > 0) printf "%.1f", b / a; else printf "n/a" }')
+  log "  Provenance compression:"
+  log "    Before: $(printf '%12s' "${before}") bytes"
+  log "    Zip:    $(printf '%12s' "${after}") bytes"
+  log "    Ratio:  $(printf '%12s' "${ratio}"):1"
+}
+
+step_artifacts_image() {
+  log ""
+  log "[5/5] Artifacts wrapper image..."
+  # Zips are platform-agnostic; the shared FROM scratch packaging util
+  # builds BOTH architectures, always (no platform choice by design),
+  # generates the Dockerfile, and registers the per-arch URIs plus the
+  # manifest-list URI for the consolidated push.
+  mkdir -p "${ARTIFACTS_CONTEXT_DIR}"
+  cp "${ZIP_DIR}/${CONTENTS_ZIP_NAME}" "${ZIP_DIR}/${REPORT_ZIP_NAME}" "${ARTIFACTS_CONTEXT_DIR}/"
+  if [[ -f "${ZIP_DIR}/${PROVENANCE_ZIP_NAME}" ]]; then
+    cp "${ZIP_DIR}/${PROVENANCE_ZIP_NAME}" "${ARTIFACTS_CONTEXT_DIR}/"
+  fi
+  "${SCRIPT_DIR}/../util/docker-package-multi-arch" \
+    "${ARTIFACTS_CONTEXT_DIR}" "${ARTIFACTS_IMAGE_URI}"
+}
+
+main() {
+  log "=== Kubernetes Run Package ==="
+  log "Project:     ${PROJECT_NAME}"
+  log "Version:     ${VERSION}"
+  log "Kind:        ${RUN_BUILD_KIND}"
+  log "Tree:        ${ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH}"
+  log "Deploy mode: ${ENV_DEPLOY_MODE}"
+  log "=============================="
+
+  if [[ ! -d "${ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH}" ]]; then
+    log_error "Manifest tree not found: ${ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH}"
+    exit 1
+  fi
+
+  step_deploy_image
+  step_contents_zip
+  step_consumption_report
+  step_provenance_zip
+  step_artifacts_image
+
+  log ""
+  output_var "RUN_DEPLOY_IMAGE_URI" "${DEPLOY_IMAGE_URI}"
+  output_var "RUN_ARTIFACTS_IMAGE_URI" "${ARTIFACTS_IMAGE_URI}"
+  output_var "RUN_CONTENTS_ZIP_FILE" "${ZIP_DIR}/${CONTENTS_ZIP_NAME}"
+  output_var "RUN_CONSUMPTION_REPORT_ZIP_FILE" "${ZIP_DIR}/${REPORT_ZIP_NAME}"
+  if [[ -f "${ZIP_DIR}/${PROVENANCE_ZIP_NAME}" ]]; then
+    output_var "RUN_PROVENANCE_ZIP_FILE" "${ZIP_DIR}/${PROVENANCE_ZIP_NAME}"
+  fi
+  # Only emitted when the delegation carve-out actually produced a set, so
+  # downstream presence of the var IS the signal to publish it.
+  if [[ -f "${ZIP_DIR}/${ON_BEHALF_ZIP_NAME}" ]]; then
+    output_var "RUN_CLUSTER_SCOPED_ON_BEHALF_ZIP_FILE" "${ZIP_DIR}/${ON_BEHALF_ZIP_NAME}"
+  fi
+}
+
+main "$@"

@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+#
+# Reference script: kubernetes-run-platform-meta-environment workflow
+#
+# Builds a run-platform (run-platform-*): the RP variant of the environment
+# flow per RpFlow.md. Same two sub-flows as kubernetes-run-environment -
+# Section 1 (env image) before Section 2 (contents) - with the RP
+# differences: managed run-* children are staged (and seed-partition tagged
+# as seed-only), checksum_secrets never runs (RP carries no *.template.yaml),
+# and the platform aggregates its children's delegated cluster-scoped
+# on-behalf sets.
+#
+# All variables can be overridden via environment.
+#
+# CI providers can wrap each script call to expose individual
+# build step pass/fail status in their UI.
+#
+set -euo pipefail
+
+# shellcheck source=../lib/setup-local-context.bash
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/setup-local-context.bash"
+
+run_step "validate-tooling"
+run_step "load-project-kaptainpm-docker-logins"
+run_step "docker-registry-logins"
+run_step "kaptain-init"
+export BUILD_KIND="${REFERENCE_SCRIPT_NAME}"
+run_step "load-final-kaptainpm-yaml"
+run_step "hook-pre-build"
+run_step "basic-quality-checks"
+run_step "docker-registry-logins"
+run_step "docker-platform-setup"
+run_step "hook-pre-tagging-tests"
+run_step "versions-and-naming"
+run_step "hook-post-versions-and-naming"
+run_step "change-source-note-write"
+run_step "release-change-data-generate"
+run_step "release-change-data-oci-package"
+run_step "hook-pre-package-prepare"
+
+# --- Deploy-manifests set (RpFlow.md, same shape as EnvFlow 1.x) ---
+# A bone-stock app build of the manifests that deploy the platform's
+# image: the staging step, then the stock pipeline via thin wrappers that
+# pin the deploy-manifests dirs inside their own processes only - individually
+# CI-visible, and the inbound env landscape reaches the workload contents untouched.
+# Standard artifact names; kaptain-out/manifests/* belongs to this block
+# exclusively.
+run_step "kubernetes-run-image-deploy-manifests"
+run_step "kubernetes-run-image-deploy-manifests-package-prepare"
+run_step "kubernetes-run-image-deploy-manifests-substitute"
+run_step "kubernetes-run-image-deploy-manifests-contract-generate"
+run_step "kubernetes-run-image-deploy-manifests-lineage-data-generate"
+run_step "kubernetes-run-image-deploy-manifests-package"
+run_step "kubernetes-run-image-deploy-manifests-repo-provider-package"
+
+# --- Platform workload contents (RpFlow.md 2.x), bespoke ---
+# The platform's own pipeline over the aggregated contents (managed
+# run-* children consumed verbatim as finished sets): aggregate/
+# substitute/gate, finalise, consumption report, platform record,
+# package, validate the built image.
+run_step "kubernetes-run-aggregate"
+# TODO: Add pre-sub validation
+run_step "kubernetes-run-substitute"
+# TODO: Add post-sub validation
+run_step "kubernetes-run-finalise"
+run_step "kubernetes-run-consumption-report"
+run_step "kubernetes-lineage-data-generate"
+run_step "kubernetes-run-package"
+run_step "kubernetes-run-deploy-image-validate"
+
+run_step "hook-post-package-tests"
+run_step "docker-multi-tag"
+run_step "git-push-tag"
+run_step "kubernetes-manifests-repo-provider-publish"
+run_step "docker-push-all"
+run_step "hook-post-build"
+
+# CI provider: release file preparation, release creation
+
+print_build_complete

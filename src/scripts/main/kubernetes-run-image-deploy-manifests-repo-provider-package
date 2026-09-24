@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+#
+# kubernetes-run-image-deploy-manifests-repo-provider-package - Thin
+# wrapper: the stock kubernetes-manifests-repo-provider-package pinned at
+# the deploy-manifests block's dirs (see
+# lib/run-image-deploy-manifests-context.bash). Exists so the stage is an
+# individually visible CI step while the pinned inputs die with this
+# process and never touch the wider build landscape.
+#
+# Unlike its deploy-manifests siblings this step runs AFTER the workload contents in env
+# builds, because the manifests artifact carries the delegated
+# cluster-scoped zip that only exists once kubernetes-run-package has done
+# the carve-out. RUN_CLUSTER_SCOPED_ON_BEHALF_ZIP_FILE is set by that step
+# only when a set was actually carved, so an absent var means nothing to
+# ship - and an RP build can never set it (see the carve-out's kind gate).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=src/scripts/defaults/platform.bash
+source "${SCRIPT_DIR}/../defaults/platform.bash"
+# shellcheck source=src/scripts/lib/log.bash
+source "${SCRIPT_DIR}/../lib/log.bash"
+# shellcheck source=src/scripts/defaults/output-sub-path.bash
+source "${SCRIPT_DIR}/../defaults/output-sub-path.bash"
+# shellcheck source=src/scripts/defaults/environments.bash
+source "${SCRIPT_DIR}/../defaults/environments.bash"
+# shellcheck source=src/scripts/lib/run-image-deploy-manifests-context.bash
+source "${SCRIPT_DIR}/../lib/run-image-deploy-manifests-context.bash"
+
+if [[ -n "${RUN_CLUSTER_SCOPED_ON_BEHALF_ZIP_FILE:-}" ]]; then
+  export ADDITIONAL_ZIP_FILES="${RUN_CLUSTER_SCOPED_ON_BEHALF_ZIP_FILE}"
+fi
+
+exec "${SCRIPT_DIR}/kubernetes-manifests-repo-provider-package"

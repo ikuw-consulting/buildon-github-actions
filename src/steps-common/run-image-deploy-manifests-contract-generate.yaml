@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+- name: Generate deploy-manifests contract
+  id: run-idm-contract-generate
+  uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-image-deploy-manifests-contract-generate
+  with:
+    project-name: ${{ steps.versions.outputs.project-name }}
+    version: ${{ steps.versions.outputs.version }}
+    build-kind: ${WORKFLOW_NAME}
+    metadata-description: ${{ steps.kpm.outputs.METADATA_DESCRIPTION }}
+    output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+    token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+    token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+    env-deploy-source-base-path: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH }}

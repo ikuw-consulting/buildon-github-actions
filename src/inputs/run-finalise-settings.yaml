@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+#
+# Finalise-step settings (signoff gate + resource checksum pass). Empty
+# values fall through to the script defaults in
+# src/scripts/defaults/environments.bash.
+signoffs-sub-path:
+  description: 'Directory containing sensitive-resource signoff files (relative)'
+  required: false
+  type: string
+  default: ''
+signoffs-kinds-file:
+  description: 'File NAME (versioned) of the sensitive-Kind list in fixed src/data/signoff-kinds/'
+  required: false
+  type: string
+  default: ''
+trusted-contributors-only:
+  description: 'true disables the signoff gate entirely (master disable for trusted-contributor-only repos)'
+  required: false
+  type: string
+  default: ''
+checksum-length:
+  description: 'Resource checksum suffix length in Base32 chars'
+  required: false
+  type: string
+  default: ''
+checksum-order-file:
+  description: 'File NAME (versioned) of the ordered-kinds list in fixed src/data/resource-order/'
+  required: false
+  type: string
+  default: ''
+checksum-secrets-timing:
+  description: 'build (default) | deploy - when the Secret checksum markers resolve'
+  required: false
+  type: string
+  default: ''

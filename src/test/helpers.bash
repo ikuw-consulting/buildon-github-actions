@@ -220,6 +220,7 @@ assert_var_equals() {
 #   MOCK_DOCKER_PULL_FAILS=true             - pull returns failure (default: succeeds)
 #   MOCK_DOCKER_IMAGE_INSPECT_EXISTS=false  - image inspect returns failure (default: succeeds)
 #   MOCK_DOCKER_IMAGE_EXISTS=false          - image exists returns failure (default: succeeds)
+#   MOCK_DOCKER_RUN_OUTPUT=<text>           - run prints this on stdout (default: nothing)
 #   MOCK_DOCKER_LOCAL_MANIFEST_EXISTS=true  - manifest exists returns success (default: fails)
 setup_mock_docker() {
   export MOCK_DOCKER_CALLS=$(create_test_dir "mock-docker")/calls.log
@@ -261,6 +262,10 @@ if [[ "$1" == "pull" ]]; then
   fi
   exit 0
 fi
+if [[ "$1" == "run" && -n "${MOCK_DOCKER_RUN_OUTPUT:-}" ]]; then
+  printf '%s\n' "${MOCK_DOCKER_RUN_OUTPUT}"
+  exit 0
+fi
 exit 0
 MOCKDOCKER
   chmod +x "$MOCK_BIN_DIR/docker"
@@ -268,6 +273,18 @@ MOCKDOCKER
   cp "$MOCK_BIN_DIR/docker" "$MOCK_BIN_DIR/podman"
   chmod +x "$MOCK_BIN_DIR/podman"
   export PATH="$MOCK_BIN_DIR:$PATH"
+}
+
+# Mock docker whose `run` lists the decryption providers the env deploy base
+# image ships, as lib/secret-encryption-types.bash reads them.
+setup_mock_decryption_providers() {
+  setup_mock_docker
+  export IMAGE_BUILD_COMMAND="docker"
+  export MOCK_DOCKER_RUN_OUTPUT="decrypt-age
+decrypt-sha256.aes256
+decrypt-sha256.aes256.100k
+decrypt-sha256.aes256.10k
+decrypt-sha256.aes256.600k"
 }
 
 # Clean up mock docker - NO-OP, files left for diagnostics

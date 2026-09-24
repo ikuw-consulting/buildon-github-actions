@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+- name: Substitute run aggregate
+  id: run-substitute
+  uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-substitute
+  with:
+    project-name: ${{ steps.versions.outputs.project-name }}
+    environment-short-name: ${{ steps.run-aggregate.outputs.environment-short-name }}
+    output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+    token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+    token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+    config-sub-path: ${{ steps.kpm.outputs.CONFIG_SUB_PATH }}
+    config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+    token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+    secrets-sub-path: ${{ steps.kpm.outputs.SECRETS_SUB_PATH }}
+    fail-on-unreferenced-config-or-secrets: ${{ steps.kpm.outputs.ENV_FAIL_ON_UNREFERENCED_CONFIG_OR_SECRETS }}
+    image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+    env-deploy-base-image-registry: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_REGISTRY }}
+    env-deploy-base-image-include-namespace: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_INCLUDE_NAMESPACE }}
+    env-deploy-base-image-namespace: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_NAMESPACE }}
+    env-deploy-base-image-family: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_FAMILY }}
+    env-deploy-base-image-version: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_VERSION }}

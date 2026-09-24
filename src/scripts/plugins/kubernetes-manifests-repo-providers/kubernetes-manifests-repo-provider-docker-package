@@ -15,6 +15,16 @@
 #   REPO_PROVIDER_VERSION   - Tag for the image (required, e.g., 1.2.3-manifests)
 #   MANIFESTS_ZIP_SUB_PATH      - Path to the zip file location (required)
 #   MANIFESTS_ZIP_FILE_NAME      - Filename of the zip (required)
+#   CONTRACT_ZIP_SUB_PATH        - Path to the contract zip location
+#                                  (required - consumers resolve a bundle
+#                                  through its contract, so an artifact
+#                                  without one is unusable downstream)
+#   CONTRACT_ZIP_FILE_NAME       - Filename of the contract zip (required)
+#   ADDITIONAL_ZIP_FILES         - Optional side artefacts to ship in the
+#                                  image alongside the manifests zip, one
+#                                  absolute path per line, copied verbatim
+#                                  (provider-agnostic: no knowledge of what
+#                                  any of them are)
 #   OUTPUT_SUB_PATH         - Build output directory (default: kaptain-out)
 #   MANIFESTS_PACKAGING_BASE_IMAGE - Base image for manifest packaging (default: scratch)
 #
@@ -48,8 +58,15 @@ tag="${REPO_PROVIDER_VERSION:?REPO_PROVIDER_VERSION (tag) is required}"
 # =============================================================================
 MANIFESTS_ZIP_SUB_PATH="${MANIFESTS_ZIP_SUB_PATH:?MANIFESTS_ZIP_SUB_PATH is required}"
 MANIFESTS_ZIP_FILE_NAME="${MANIFESTS_ZIP_FILE_NAME:?MANIFESTS_ZIP_FILE_NAME is required}"
-CONTRACT_ZIP_SUB_PATH="${CONTRACT_ZIP_SUB_PATH:-}"
-CONTRACT_ZIP_FILE_NAME="${CONTRACT_ZIP_FILE_NAME:-}"
+CONTRACT_ZIP_SUB_PATH="${CONTRACT_ZIP_SUB_PATH:?CONTRACT_ZIP_SUB_PATH is required}"
+CONTRACT_ZIP_FILE_NAME="${CONTRACT_ZIP_FILE_NAME:?CONTRACT_ZIP_FILE_NAME is required}"
+# Side artefacts to ship alongside the manifests zip, one absolute path per
+# line. Deliberately opaque: the provider copies them verbatim and never
+# needs to know what any of them mean, so new artefact kinds (the
+# delegated cluster-scoped set, and whatever comes next) need no plugin
+# change and cannot be silently dropped by a provider that has not been
+# taught about them.
+ADDITIONAL_ZIP_FILES="${ADDITIONAL_ZIP_FILES:-}"
 # shellcheck source=src/scripts/defaults/manifests-repo-provider.bash
 source "${SCRIPT_DIR}/../../defaults/manifests-repo-provider.bash"
 # shellcheck source=src/scripts/lib/output-var.bash
@@ -73,9 +90,13 @@ main() {
   log "Target: ${image_uri}"
   log "==========================================================="
 
-  # Validate zip exists
+  # Validate zips exist
   if [[ ! -f "${MANIFESTS_ZIP_SUB_PATH}/${MANIFESTS_ZIP_FILE_NAME}" ]]; then
     log_error "Manifests zip not found: ${MANIFESTS_ZIP_SUB_PATH}/${MANIFESTS_ZIP_FILE_NAME}"
+    exit 1
+  fi
+  if [[ ! -f "${CONTRACT_ZIP_SUB_PATH}/${CONTRACT_ZIP_FILE_NAME}" ]]; then
+    log_error "Contract zip not found: ${CONTRACT_ZIP_SUB_PATH}/${CONTRACT_ZIP_FILE_NAME}"
     exit 1
   fi
 
@@ -89,14 +110,26 @@ main() {
   # Copy zip(s) to publish dir
   cp "${MANIFESTS_ZIP_SUB_PATH}/${MANIFESTS_ZIP_FILE_NAME}" "${PUBLISH_SUB_PATH}/"
 
-  # Include contract zip if available
-  if [[ -n "${CONTRACT_ZIP_FILE_NAME}" && -n "${CONTRACT_ZIP_SUB_PATH}" ]]; then
-    if [[ -f "${CONTRACT_ZIP_SUB_PATH}/${CONTRACT_ZIP_FILE_NAME}" ]]; then
-      log "Including contract zip: ${CONTRACT_ZIP_FILE_NAME}"
-      cp "${CONTRACT_ZIP_SUB_PATH}/${CONTRACT_ZIP_FILE_NAME}" "${PUBLISH_SUB_PATH}/"
-    else
-      log "Contract zip not found, skipping: ${CONTRACT_ZIP_SUB_PATH}/${CONTRACT_ZIP_FILE_NAME}"
-    fi
+  # Contract zip is REQUIRED, not best-effort: consumers resolve a bundle
+  # through its contract, so an artifact published without one is unusable
+  # downstream and the failure surfaces far from the build that caused it.
+  log "Including contract zip: ${CONTRACT_ZIP_FILE_NAME}"
+  cp "${CONTRACT_ZIP_SUB_PATH}/${CONTRACT_ZIP_FILE_NAME}" "${PUBLISH_SUB_PATH}/"
+
+  # Side artefacts, copied verbatim. Missing files are a hard failure: the
+  # caller only lists a path when it produced that artefact, so an absent
+  # one means the build lied about what it made.
+  if [[ -n "${ADDITIONAL_ZIP_FILES}" ]]; then
+    local extra
+    while IFS= read -r extra; do
+      [[ -z "${extra}" ]] && continue
+      if [[ ! -f "${extra}" ]]; then
+        log_error "Additional zip listed but not found: ${extra}"
+        exit 1
+      fi
+      log "Including additional zip: $(basename "${extra}")"
+      cp "${extra}" "${PUBLISH_SUB_PATH}/"
+    done <<< "${ADDITIONAL_ZIP_FILES}"
   fi
 
   # Delegate to multi-arch packager
