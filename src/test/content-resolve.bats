@@ -487,3 +487,61 @@ EOF
 teardown() {
   dump_bats_result
 }
+
+# --- content_validate_bundle: deploy-time context tokens ----------------------
+# Kaptain writes ${Environment}, ${ProductName} and siblings into every bundle's
+# labels and lineage; the product or environment build that deploys the bundle
+# resolves them. A contract cannot declare them, so the undeclared-token check
+# must exempt exactly that family and nothing else.
+
+# Helper: lay out <root>/{contracts,defaults,manifests}/<project>/ with a
+# contract in the given name style and one manifest using the given tokens.
+make_bundle_dirs() {
+  local root="$1" project="$2" name_style="$3"
+  shift 3
+  mkdir -p "${root}/contracts/${project}" "${root}/defaults/${project}" "${root}/manifests/${project}"
+  printf '%s\n' \
+    'apiVersion: kaptain.org/manifests-contract/1.2' \
+    'kind: kubernetes-bundle' \
+    'tokens:' \
+    '  delimiterStyle: shell' \
+    "  nameStyle: ${name_style}" \
+    'compatibility:' \
+    '  automaticConversion: []' \
+    '  repackageRequired: []' > "${root}/contracts/${project}/contract.yaml"
+  {
+    printf '%s\n' 'apiVersion: v1' 'kind: ConfigMap' 'metadata:' '  name: lineage' 'data:'
+    local i=0 token
+    for token in "$@"; do
+      printf '  k%s: "${%s}"\n' "${i}" "${token}"
+      i=$((i + 1))
+    done
+  } > "${root}/manifests/${project}/lineage.yaml"
+}
+
+@test "content_validate_bundle: accepts the deploy-time context family undeclared" {
+  local root="${TEST_DIR}/deploy-time"
+  make_bundle_dirs "${root}" app PascalCase \
+    Environment EnvironmentName EnvironmentShortName EnvironmentType ProductName ProductShortName
+  run content_validate_bundle app "${root}/contracts" "${root}/defaults" "${root}/manifests"
+  [ "$status" -eq 0 ]
+}
+
+@test "content_validate_bundle: still rejects a real config token left undeclared" {
+  local root="${TEST_DIR}/undeclared"
+  make_bundle_dirs "${root}" app PascalCase Environment ProductName DatabaseUrl
+  run content_validate_bundle app "${root}/contracts" "${root}/defaults" "${root}/manifests"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"not declared in contract .config.required"* ]]
+  [[ "$output" == *"DatabaseUrl"* ]]
+  # Only the real token is reported; the deploy-time ones are not.
+  [[ "$output" != *"  Environment"* ]]
+  [[ "$output" != *"  ProductName"* ]]
+}
+
+@test "content_validate_bundle: exempts the deploy-time family in the bundle's own name style" {
+  local root="${TEST_DIR}/upper-snake"
+  make_bundle_dirs "${root}" app UPPER_SNAKE ENVIRONMENT PRODUCT_NAME
+  run content_validate_bundle app "${root}/contracts" "${root}/defaults" "${root}/manifests"
+  [ "$status" -eq 0 ]
+}
