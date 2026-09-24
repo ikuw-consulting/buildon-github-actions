@@ -45,16 +45,37 @@
 # strenv reads any environment variable, and either can be written straight
 # into a manifest that is then packaged and pushed.
 #
-# yq has no dynamic function dispatch, so a name cannot be computed at runtime
-# and a literal check is robust rather than a speed bump. merge-yaml is exempt:
-# its content is data that is never evaluated, and scanning it would reject a
-# ConfigMap holding `env: production` or a key called `load`.
-# Matched as the CALL form, with the opening paren, so a manifest key legitimately
-# named 'env' is not mistaken for the operator that reads the environment. Listed
-# longest first because the shorter names are substrings of the longer ones, and
-# each match is stripped before the next is looked for, so a violation is named
-# as what it actually is rather than as whatever prefix matched first.
-MANIFEST_PATCH_BANNED_OPERATORS=('load_str(' 'loadJson(' 'strenv(' 'load(' 'env(' '$ENV')
+# Matched as a pattern, not as literal strings. yq accepts whitespace between an
+# operator and its parenthesis (`load_str ("f")`), and its file readers are a
+# family (load, load_str, load_props, load_xml, load_base64, loadJson, ...), so
+# a list of exact spellings let `load_str (` and `load_props(` straight through.
+# Covered: any load* call, env( and strenv( calls, $ENV, and envsubst, which
+# reads the environment with no argument at all. A preceding '.' or identifier
+# character means a key, not an operator, so `.metadata.labels.env = "prod"` and
+# a key named `load` are still allowed. A string literal that merely contains
+# one of these names is rejected too - fail-safe, and trivially reworded.
+# merge-yaml is exempt: its content is data that is never evaluated.
+MANIFEST_PATCH_BANNED_PATTERN='(^|[^A-Za-z0-9_.$])(load[A-Za-z0-9_]*|strenv|env)[[:space:]]*\(|\$ENV([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_.$])envsubst([^A-Za-z0-9_]|$)'
+
+# Defence in depth, where yq supports it (4.45+; Kaptain's floor is older): the
+# expression types run with yq's own file and env operators disabled, so an
+# operator this pattern has not anticipated still cannot read the host.
+# merge-yaml cannot take these flags - it merges through load() - and does not
+# need them, because its patch is never evaluated as an expression. Probed once,
+# on the first expression patch, so a build with no patches never pays for it.
+MANIFEST_PATCH_YQ_SANDBOX_FLAGS=()
+MANIFEST_PATCH_YQ_SANDBOX_PROBED=false
+
+# Internal: fill MANIFEST_PATCH_YQ_SANDBOX_FLAGS on first use.
+manifest_patch_probe_sandbox() {
+  ${MANIFEST_PATCH_YQ_SANDBOX_PROBED} && return 0
+  MANIFEST_PATCH_YQ_SANDBOX_PROBED=true
+  case "$(yq --help 2>/dev/null)" in
+    *--security-disable-file-ops*)
+      MANIFEST_PATCH_YQ_SANDBOX_FLAGS=(--security-disable-file-ops --security-disable-env-ops)
+      ;;
+  esac
+}
 
 # Internal: normalised checksum of a manifest, the baseline a patch is
 # measured against. Formatting-only differences are invisible to it by
@@ -86,19 +107,18 @@ manifest_patch_shape_ok() {
 # Usage: manifest_patch_check_operators <patch-file> <label>
 manifest_patch_check_operators() {
   local patch="${1}" label="${2}"
-  local op content clean=true
+  local content op clean=true
 
-  content=$(cat "${patch}")
-  for op in "${MANIFEST_PATCH_BANNED_OPERATORS[@]}"; do
-    case "${content}" in
-      *"${op}"*)
-        log_error "  ${label}: uses '${op}', which reads outside the patch"
-        clean=false
-        # Strip so a shorter operator that is a substring of this one is not
-        # reported a second time for the same occurrence.
-        content="${content//"${op}"/}"
-        ;;
-    esac
+  # In-process regex, no subprocess per patch. Each match is named by trimming
+  # its boundary character and everything from the first non-name character
+  # (the parenthesis, whitespace), then consumed so the next one is found.
+  content=$(<"${patch}")
+  while [[ "${content}" =~ ${MANIFEST_PATCH_BANNED_PATTERN} ]]; do
+    op="${BASH_REMATCH[0]#[!A-Za-z\$]}"
+    op="${op%%[!A-Za-z0-9_\$]*}"
+    log_error "  ${label}: uses '${op}', which reads outside the patch"
+    clean=false
+    content="${content#*"${BASH_REMATCH[0]}"}"
   done
 
   if ! ${clean}; then
@@ -129,7 +149,7 @@ manifest_patch_apply_one() {
         return 1
       fi
       manifest_patch_step "${manifest}" "${label}" "${sandbox}" "${seq}" "" \
-        "$(cat "${patch}")"
+        "$(cat "${patch}")" sandboxed
       ;;
     expression-list)
       manifest_patch_check_operators "${patch}" "${label}" || return 1
@@ -141,7 +161,7 @@ manifest_patch_apply_one() {
         esac
         [[ -z "${expression//[[:space:]]/}" ]] && continue
         manifest_patch_step "${manifest}" "${label} line ${line_no}" \
-          "${sandbox}" "${seq}" "${line_no}" "${expression}" || return 1
+          "${sandbox}" "${seq}" "${line_no}" "${expression}" sandboxed || return 1
         applied=$((applied + 1))
       done < "${patch}"
       if [[ "${applied}" -eq 0 ]]; then
@@ -156,9 +176,15 @@ manifest_patch_apply_one() {
 # the shape check. Every rule in the header is enforced here so no type can
 # skip one.
 #
-# Usage: manifest_patch_step <manifest> <label> <sandbox> <seq> <line-or-empty> <expression>
+# Usage: manifest_patch_step <manifest> <label> <sandbox> <seq> <line-or-empty> <expression> [sandboxed]
+# 'sandboxed' applies MANIFEST_PATCH_YQ_SANDBOX_FLAGS; the expression types pass it.
 manifest_patch_step() {
   local manifest="${1}" label="${2}" sandbox="${3}" seq="${4}" line="${5}" expression="${6}"
+  local -a yq_flags=()
+  if [[ "${7:-}" == "sandboxed" ]]; then
+    manifest_patch_probe_sandbox
+    yq_flags=(${MANIFEST_PATCH_YQ_SANDBOX_FLAGS[@]+"${MANIFEST_PATCH_YQ_SANDBOX_FLAGS[@]}"})
+  fi
   local before_name
   before_name="before-$(printf '%03d' "${seq}")"
   [[ -n "${line}" ]] && before_name="${before_name}-line-$(printf '%03d' "${line}")"
@@ -171,7 +197,7 @@ manifest_patch_step() {
 
   local tmp="${manifest}.applying"
   cp "${manifest}" "${tmp}"
-  if ! yq e -i "${expression}" "${tmp}" 2>"${sandbox}/${before_name}.stderr"; then
+  if ! yq e -i ${yq_flags[@]+"${yq_flags[@]}"} "${expression}" "${tmp}" 2>"${sandbox}/${before_name}.stderr"; then
     log_error "  ${label}: yq rejected the expression"
     while IFS= read -r line; do log_error "    ${line}"; done < "${sandbox}/${before_name}.stderr"
     rm -f "${tmp}"
