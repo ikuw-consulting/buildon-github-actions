@@ -72,13 +72,11 @@ inputs:
     required: false
     default: ''
   contract-zip-sub-path:
-    description: 'Directory containing the contract zip (optional)'
-    required: false
-    default: ''
+    description: 'Directory containing the contract zip (required - consumers resolve a bundle through its contract)'
+    required: true
   contract-zip-file-name:
-    description: 'Filename of the contract zip (optional)'
-    required: false
-    default: ''
+    description: 'Filename of the contract zip (required)'
+    required: true
   # Container runtime
   image-build-command:
     description: 'Container runtime command (podman or docker)'

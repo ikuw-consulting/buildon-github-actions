@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: 'Kubernetes Run Aggregate'
+description: 'Workload-contents aggregate for env and RP builds (kind derived from the project-name prefix): resolves spec.contents uniformly, includes the own deploy-manifests set self-referencing, folds local manifests, and ends at the assembled normalised tree'
+
+inputs:
+  # Action-specific inputs
+  project-name:
+    description: 'Run name (run-* for environments, run-platform-* for platforms)'
+    required: true
+  version:
+    description: 'Version'
+    required: true
+  local-manifests-sub-path:
+    description: 'Local run manifests dir (relative)'
+    required: false
+    default: 'src/kubernetes'
+  is-release:
+    description: 'When true, content version ranges resolve to release-only versions'
+    required: false
+    default: 'false'
+
+  # INJECT-INPUT: output-sub-path
+  # INJECT-INPUT: token-substitution
+  # INJECT-INPUT: docker-build
+  # INJECT-INPUT: image-build-command
+  # INJECT-INPUT: run-environment-settings
+  # The cleanup policy ConfigMap is emitted here, pre-substitution: it is a
+  # pure projection of the loaded KaptainPM values, so it belongs in the
+  # tree before the substitution pass rather than being injected later.
+  # INJECT-INPUT: run-clean-up-settings
+
+outputs:
+  environment-name:
+    description: 'Environment name (PROJECT_NAME verbatim, both kinds)'
+    value: ${{ steps.run-aggregate.outputs.ENVIRONMENT_NAME }}
+  environment-short-name:
+    description: 'Environment short name (kind prefix stripped)'
+    value: ${{ steps.run-aggregate.outputs.ENVIRONMENT_SHORT_NAME }}
+  environment-workload-contents-file:
+    description: 'Path to the markdown bullet list of spec.contents entries'
+    value: ${{ steps.run-aggregate.outputs.ENVIRONMENT_WORKLOAD_CONTENTS_FILE }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Aggregate run contents
+      id: run-aggregate
+      shell: bash
+      env:
+        BUILD_MODE: build_server
+        BUILD_PLATFORM: github-actions
+        BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        PROJECT_NAME: ${{ inputs.project-name }}
+        VERSION: ${{ inputs.version }}
+        MANIFESTS_SUB_PATH: ${{ inputs.local-manifests-sub-path }}
+        OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
+        TOKEN_DELIMITER_STYLE: ${{ inputs.token-delimiter-style }}
+        TOKEN_NAME_STYLE: ${{ inputs.token-name-style }}
+        CONFIG_SUB_PATH: ${{ inputs.config-sub-path }}
+        CONFIG_VALUE_TRAILING_NEWLINE: ${{ inputs.config-value-trailing-newline }}
+        TOKEN_SUBSTITUTION_PASSES: ${{ inputs.token-substitution-passes }}
+        SECRETS_SUB_PATH: ${{ inputs.secrets-sub-path }}
+        ENV_ALLOW_LOCAL_MANIFESTS_OVERRIDE: ${{ inputs.allow-local-manifests-override }}
+        DOCKER_TARGET_REGISTRY: ${{ inputs.docker-target-registry }}
+        DOCKER_TARGET_NAMESPACE: ${{ inputs.docker-target-namespace }}
+        IMAGE_BUILD_COMMAND: ${{ inputs.image-build-command }}
+        IS_RELEASE: ${{ inputs.is-release }}
+        ENV_CLEAN_UP: ${{ inputs.clean-up }}
+      run: "${{ github.action_path }}/../../scripts/main/kubernetes-run-aggregate"

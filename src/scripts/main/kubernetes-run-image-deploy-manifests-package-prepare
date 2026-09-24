@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+#
+# kubernetes-run-image-deploy-manifests-package-prepare - Thin wrapper: the
+# stock kubernetes-manifests-package-prepare pinned at the deploy-manifests
+# block's dirs (see lib/run-image-deploy-manifests-context.bash). Exists so
+# the stage is an individually visible CI step while the pinned inputs die
+# with this process and never touch the wider build landscape.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=src/scripts/defaults/platform.bash
+source "${SCRIPT_DIR}/../defaults/platform.bash"
+# shellcheck source=src/scripts/lib/log.bash
+source "${SCRIPT_DIR}/../lib/log.bash"
+# shellcheck source=src/scripts/defaults/output-sub-path.bash
+source "${SCRIPT_DIR}/../defaults/output-sub-path.bash"
+# shellcheck source=src/scripts/defaults/environments.bash
+source "${SCRIPT_DIR}/../defaults/environments.bash"
+# shellcheck source=src/scripts/lib/run-image-deploy-manifests-context.bash
+source "${SCRIPT_DIR}/../lib/run-image-deploy-manifests-context.bash"
+
+exec "${SCRIPT_DIR}/kubernetes-manifests-package-prepare"

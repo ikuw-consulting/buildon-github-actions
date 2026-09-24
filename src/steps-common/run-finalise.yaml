@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+- name: Finalise run workload tree
+  id: run-finalise
+  uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-finalise
+  with:
+    project-name: ${{ steps.versions.outputs.project-name }}
+    version: ${{ steps.versions.outputs.version }}
+    environment-workload-contents-sub-path: ${{ steps.run-substitute.outputs.environment-workload-contents-sub-path }}
+    output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+    token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+    token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+    secrets-sub-path: ${{ steps.kpm.outputs.SECRETS_SUB_PATH }}
+    signoffs-sub-path: ${{ steps.kpm.outputs.MANIFESTS_SIGNOFFS_SUB_PATH }}
+    signoffs-kinds-file: ${{ steps.kpm.outputs.MANIFESTS_SIGNOFFS_KINDS_FILE }}
+    trusted-contributors-only: ${{ steps.kpm.outputs.MANIFESTS_TRUSTED_CONTRIBUTORS_ONLY }}
+    checksum-length: ${{ steps.kpm.outputs.RESOURCE_CHECKSUM_LENGTH }}
+    checksum-order-file: ${{ steps.kpm.outputs.MANIFESTS_CHECKSUM_ORDER_FILE }}
+    checksum-secrets-timing: ${{ steps.kpm.outputs.ENV_CHECKSUM_SECRETS_TIMING }}

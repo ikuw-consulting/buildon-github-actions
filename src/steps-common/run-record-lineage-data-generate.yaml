@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+# The run's ENVIRONMENT RECORD lineage pass (the second of the two - the
+# inner app record ran inside the deploy-manifests block). Direct stock
+# invocation with no env-build-section: for the run build kinds an unset
+# section defaults to the record flavour.
+- name: Generate environment record lineage data ConfigMap
+  id: run-record-lineage-data-generate
+  uses: ./.github/buildon-github-actions/src/actions/kubernetes-lineage-data-generate
+  with:
+    project-name: ${{ steps.versions.outputs.project-name }}
+    version: ${{ steps.versions.outputs.version }}
+    build-kind: ${WORKFLOW_NAME}
+    git-sha: ${{ github.sha }}
+    environment-workload-contents-sub-path: ${{ steps.run-substitute.outputs.environment-workload-contents-sub-path }}
+    environment-workload-contents-config-sub-path: ${{ steps.run-substitute.outputs.environment-workload-contents-config-sub-path }}
+    output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+    token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+    token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+    config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+    token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}

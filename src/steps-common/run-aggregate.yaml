@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+- name: Aggregate run contents
+  id: run-aggregate
+  uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-aggregate
+  with:
+    project-name: ${{ steps.versions.outputs.project-name }}
+    version: ${{ steps.versions.outputs.version }}
+    local-manifests-sub-path: ${{ steps.kpm.outputs.MANIFESTS_SUB_PATH }}
+    is-release: ${{ steps.versions.outputs.is-release }}
+    clean-up: ${{ steps.kpm.outputs.ENV_CLEAN_UP }}
+    output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+    token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+    token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+    config-sub-path: ${{ steps.kpm.outputs.CONFIG_SUB_PATH }}
+    config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+    token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+    secrets-sub-path: ${{ steps.kpm.outputs.SECRETS_SUB_PATH }}
+    allow-local-manifests-override: ${{ steps.kpm.outputs.ENV_ALLOW_LOCAL_MANIFESTS_OVERRIDE }}
+    docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+    docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+    image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}

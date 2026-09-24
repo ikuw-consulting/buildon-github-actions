@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+#
+# The whole cleanUp block as one JSON value, exactly as configured.
+#
+# One input rather than a field-per-var fan-out: the structure IS the
+# interface the deploy scripts consume from the cleanup policy ConfigMap,
+# so flattening it here only to rebuild it downstream would be two
+# opportunities to diverge and a new input for every field the schema ever
+# gains. The nested parts - matcher lists, overseen-namespace entries -
+# could not survive flattening anyway.
+#
+# Empty falls through to the safe defaults (preview only, remove nothing),
+# applied structurally where the policy document is built in
+# kubernetes-run-aggregate.
+clean-up:
+  description: 'The whole spec.main.<kind>.cleanUp block as JSON, from load-final-kaptainpm-yaml'
+  required: false
+  type: string
+  default: ''

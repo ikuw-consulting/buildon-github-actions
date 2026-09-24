@@ -1,0 +1,2513 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: Kubernetes Run Environment
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: 'GitHub Actions runner label (or JSON array of labels) the job runs on'
+        required: false
+        type: string
+        default: ubuntu-24.04
+    secrets:
+      docker-registry-logins-secrets:
+        description: 'JSON object of secrets for docker-registry-logins (e.g., {"DOCKER_USER": "x", "DOCKER_PASS": "y"})'
+        required: false
+    outputs:
+      # Version outputs
+      version:
+        description: 'The generated version'
+        value: ${{ jobs.build.outputs.version }}
+      version-major:
+        description: 'Major version number'
+        value: ${{ jobs.build.outputs.version-major }}
+      version-minor:
+        description: 'Minor version number'
+        value: ${{ jobs.build.outputs.version-minor }}
+      version-patch:
+        description: 'Patch version number'
+        value: ${{ jobs.build.outputs.version-patch }}
+      version-2-part:
+        description: 'Version padded/truncated to 2 parts'
+        value: ${{ jobs.build.outputs.version-2-part }}
+      version-3-part:
+        description: 'Version padded/truncated to 3 parts'
+        value: ${{ jobs.build.outputs.version-3-part }}
+      version-4-part:
+        description: 'Version padded/truncated to 4 parts'
+        value: ${{ jobs.build.outputs.version-4-part }}
+      docker-tag:
+        description: 'Tag for Docker images'
+        value: ${{ jobs.build.outputs.docker-tag }}
+      docker-image-name:
+        description: 'Docker image name'
+        value: ${{ jobs.build.outputs.docker-image-name }}
+      git-tag:
+        description: 'Tag for git'
+        value: ${{ jobs.build.outputs.git-tag }}
+      project-name:
+        description: 'The repository/project name'
+        value: ${{ jobs.build.outputs.project-name }}
+      is-release:
+        description: 'Whether this is a release build'
+        value: ${{ jobs.build.outputs.is-release }}
+      environment-name:
+        description: 'Environment name (PROJECT_NAME verbatim)'
+        value: ${{ jobs.build.outputs.environment-name }}
+      environment-short-name:
+        description: 'Environment short name (run- prefix stripped)'
+        value: ${{ jobs.build.outputs.environment-short-name }}
+      # Deploy-manifests outputs
+      manifests-uri:
+        description: 'Reference to the published deploy-manifests set (format depends on repo provider)'
+        value: ${{ jobs.build.outputs.manifests-uri }}
+      manifests-published:
+        description: 'Whether the deploy-manifests set was published'
+        value: ${{ jobs.build.outputs.manifests-published }}
+      # Run package outputs
+      run-deploy-image-uri:
+        description: 'The deploy image URI (standard project image name)'
+        value: ${{ jobs.build.outputs.run-deploy-image-uri }}
+      run-artifacts-image-uri:
+        description: 'The artifacts wrapper image URI'
+        value: ${{ jobs.build.outputs.run-artifacts-image-uri }}
+jobs:
+  build:
+    name: Build & Publish
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: write
+      packages: write
+      checks: write
+    outputs:
+      version: ${{ steps.versions.outputs.version }}
+      version-major: ${{ steps.versions.outputs.version-major }}
+      version-minor: ${{ steps.versions.outputs.version-minor }}
+      version-patch: ${{ steps.versions.outputs.version-patch }}
+      version-2-part: ${{ steps.versions.outputs.version-2-part }}
+      version-3-part: ${{ steps.versions.outputs.version-3-part }}
+      version-4-part: ${{ steps.versions.outputs.version-4-part }}
+      docker-tag: ${{ steps.versions.outputs.docker-tag }}
+      docker-image-name: ${{ steps.versions.outputs.docker-image-name }}
+      git-tag: ${{ steps.versions.outputs.git-tag }}
+      project-name: ${{ steps.versions.outputs.project-name }}
+      is-release: ${{ steps.versions.outputs.is-release }}
+      environment-name: ${{ steps.run-aggregate.outputs.environment-name }}
+      environment-short-name: ${{ steps.run-aggregate.outputs.environment-short-name }}
+      manifests-uri: ${{ steps.manifest-repo-provider-publish.outputs.manifests-uri }}
+      manifests-published: ${{ steps.manifest-repo-provider-publish.outputs.manifests-published }}
+      run-deploy-image-uri: ${{ steps.run-package.outputs.run-deploy-image-uri }}
+      run-artifacts-image-uri: ${{ steps.run-package.outputs.run-artifacts-image-uri }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Parse workflow ref
+        id: parse
+        run: |
+          # Extract caller's workflow file path from github.workflow_ref
+          # Format: owner/repo/.github/workflows/file.yaml@ref
+          workflow_path="${GITHUB_WORKFLOW_REF%%@*}"
+          workflow_file=".github/workflows/${workflow_path##*/}"
+
+          echo "Resolving ref for reusable workflow: kubernetes-run-environment.yaml"
+          echo "Caller workflow: $workflow_file"
+
+          # Check for local call (dogfooding) - uses: ./.github/workflows/...
+          if grep -q 'uses:[[:space:]]*\./.github/workflows/kubernetes-run-environment\.yaml[[:space:]]*$' "$workflow_file" || \
+             grep -q 'uses:[[:space:]]*\./.github/workflows/kubernetes-run-environment\.yaml[[:space:]]*#' "$workflow_file"; then
+            echo "Local workflow call detected (dogfooding)"
+            echo "ref=LOCAL" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Find all uses lines that call this workflow and extract refs
+          refs=$(grep -o 'buildon-github-actions/.github/workflows/kubernetes-run-environment\.yaml@[^[:space:]"'"'"']*' "$workflow_file" | sed 's/.*@//')
+
+          if [ -z "$refs" ]; then
+            echo "::error::Could not find buildon-github-actions ref in $workflow_file"
+            exit 1
+          fi
+
+          # Check all refs are identical
+          unique_refs=$(echo "$refs" | sort -u)
+          ref_count=$(echo "$unique_refs" | wc -l | tr -d ' ')
+          echo "Found $ref_count unique ref(s): $(echo "$unique_refs" | tr '\n' ' ')"
+
+          if [ "$ref_count" -gt 1 ]; then
+            echo "::error::Multiple different refs found in $workflow_file: $(echo "$unique_refs" | tr '\n' ' ')"
+            exit 1
+          fi
+
+          echo "Resolved ref: $unique_refs"
+          echo "ref=$unique_refs" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
+
+      - name: Checkout actions
+        if: steps.parse.outputs.ref != 'LOCAL' && success()
+        uses: actions/checkout@v5.0.1
+        with:
+          repository: kube-kaptain/buildon-github-actions
+          ref: ${{ steps.parse.outputs.ref }}
+          path: .github/buildon-github-actions
+
+      - name: Link local actions
+        if: steps.parse.outputs.ref == 'LOCAL' && success()
+        run: |
+          echo "Linking local actions for dogfooding"
+          ln -s "$(pwd)" .github/buildon-github-actions
+
+      # === Validate Tooling ===
+      - name: Start check - Validate Tooling
+        id: check-validate-tooling
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Validate Tooling'
+      - name: Validate tooling
+        id: validate-tooling
+        uses: ./.github/buildon-github-actions/src/actions/validate-tooling
+      - name: Pass check - Validate Tooling
+        if: success() && steps.check-validate-tooling.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-validate-tooling.outputs.check-run-id }}
+      - name: Fail check - Validate Tooling
+        if: failure() && steps.check-validate-tooling.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-validate-tooling.outputs.check-run-id }}
+
+      # === Load Project KaptainPM Docker Logins ===
+      - name: Start check - Load Project KaptainPM Docker Logins
+        id: check-load-project-kpm
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Load Project KaptainPM Docker Logins'
+      - name: Load project KaptainPM docker logins
+        id: load-project-kpm
+        shell: bash
+        env:
+          BUILD_MODE: build_server
+          BUILD_PLATFORM: github-actions
+          BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        run: ./.github/buildon-github-actions/src/scripts/main/load-project-kaptainpm-docker-logins
+      - name: Pass check - Load Project KaptainPM Docker Logins
+        if: success() && steps.check-load-project-kpm.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-load-project-kpm.outputs.check-run-id }}
+      - name: Fail check - Load Project KaptainPM Docker Logins
+        if: failure() && steps.check-load-project-kpm.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-load-project-kpm.outputs.check-run-id }}
+
+      # === Pre-Init Docker Registry Logins ===
+      - name: Start check - Pre-Init Docker Registry Logins
+        id: check-docker-registry-logins-pre-init
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Pre-Init Docker Registry Logins'
+      # Pre-init login for layer image pulls during kaptain-init
+      # Config comes from project root KaptainPM.yaml via load-project-kpm step
+      # GHCR merge handled by the action internally
+      - name: Docker registry logins (pre-init)
+        id: docker-registry-logins-pre-init
+        uses: ./.github/buildon-github-actions/src/actions/docker-registry-logins
+        with:
+          config: ${{ steps.load-project-kpm.outputs.DOCKER_REGISTRY_LOGINS }}
+          secrets-json: ${{ secrets.docker-registry-logins-secrets }}
+          output-sub-path: kaptain-out
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+      - name: Pass check - Pre-Init Docker Registry Logins
+        if: success() && steps.check-docker-registry-logins-pre-init.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-docker-registry-logins-pre-init.outputs.check-run-id }}
+      - name: Fail check - Pre-Init Docker Registry Logins
+        if: failure() && steps.check-docker-registry-logins-pre-init.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-docker-registry-logins-pre-init.outputs.check-run-id }}
+
+      # === Kaptain Init ===
+      - name: Start check - Kaptain Init
+        id: check-kaptain-init
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Kaptain Init'
+      # GH-specific registry/namespace defaults, consumed by BOTH kaptain-init (layer
+      # resolution) and load-final-kaptainpm-yaml (authoritative DOCKER_TARGET_*
+      # outputs). File values win inside the scripts; targetIncludeNamespace=false
+      # disregards the namespace default entirely. Do not inline a second copy.
+      - name: Prepare registry defaults
+        id: registry-defaults
+        shell: bash
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          echo "registry=ghcr.io" >> "$GITHUB_OUTPUT"
+          echo "namespace=${OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Kaptain init
+        id: kaptain-init
+        shell: bash
+        env:
+          BUILD_MODE: build_server
+          BUILD_PLATFORM: github-actions
+          BUILD_PLATFORM_LOG_PROVIDER: github-actions
+          IMAGE_BUILD_COMMAND: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          SCHEMA_VALIDATION_COMMAND: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
+          DOCKER_TARGET_REGISTRY: ${{ steps.registry-defaults.outputs.registry }}
+          DOCKER_TARGET_NAMESPACE: ${{ steps.registry-defaults.outputs.namespace }}
+        run: ./.github/buildon-github-actions/src/scripts/main/kaptain-init
+      - name: Pass check - Kaptain Init
+        if: success() && steps.check-kaptain-init.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-kaptain-init.outputs.check-run-id }}
+      - name: Fail check - Kaptain Init
+        if: failure() && steps.check-kaptain-init.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-kaptain-init.outputs.check-run-id }}
+
+      # === Load Final KaptainPM YAML ===
+      - name: Start check - Load Final KaptainPM YAML
+        id: check-load-final-kpm
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Load Final KaptainPM YAML'
+      - name: Load final KaptainPM YAML
+        id: kpm
+        shell: bash
+        env:
+          BUILD_MODE: build_server
+          BUILD_PLATFORM: github-actions
+          BUILD_PLATFORM_LOG_PROVIDER: github-actions
+          BUILD_KIND: kubernetes-run-environment
+          # Platform registry/namespace defaults (spec values win inside the script;
+          # targetIncludeNamespace=false disregards the namespace entirely). The
+          # DOCKER_TARGET_* outputs of this step are authoritative for the whole
+          # workflow - there is no later resolution step.
+          DOCKER_TARGET_REGISTRY: ${{ steps.registry-defaults.outputs.registry }}
+          DOCKER_TARGET_NAMESPACE: ${{ steps.registry-defaults.outputs.namespace }}
+        run: ./.github/buildon-github-actions/src/scripts/main/load-final-kaptainpm-yaml
+      - name: Pass check - Load Final KaptainPM YAML
+        if: success() && steps.check-load-final-kpm.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-load-final-kpm.outputs.check-run-id }}
+      - name: Fail check - Load Final KaptainPM YAML
+        if: failure() && steps.check-load-final-kpm.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-load-final-kpm.outputs.check-run-id }}
+
+
+      # === Pre-Build ===
+      - name: Start check - Pre-Build
+        if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && success()
+        id: check-pre-build
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Pre-Build'
+      - name: Run pre-build
+        if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && success()
+        id: pre-build
+        uses: ./.github/buildon-github-actions/src/actions/hook-pre-build
+        with:
+          build-kind: kubernetes-run-environment
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
+          build-scripts-repo-root: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
+          docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
+          strip-repository-name-prefix: ${{ steps.kpm.outputs.STRIP_REPOSITORY_NAME_PREFIX }}
+          # === Workflow Inputs ===
+          # Build output
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
+
+          # Docker registry logins
+          docker-registry-logins: ${{ steps.kpm.outputs.DOCKER_REGISTRY_LOGINS }}
+          # Docker build options
+          dockerfile-sub-path: ${{ steps.kpm.outputs.DOCKERFILE_SUB_PATH }}
+          dockerfile-squash: ${{ steps.kpm.outputs.DOCKERFILE_SQUASH }}
+          dockerfile-no-cache: ${{ steps.kpm.outputs.DOCKERFILE_NO_CACHE }}
+          # Docker target config (from early resolver)
+          docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+          docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+          # Docker push targets
+          docker-push-targets: ${{ steps.kpm.outputs.DOCKER_PUSH_TARGETS }}
+
+          # Manifests source
+          manifests-sub-path: ${{ steps.kpm.outputs.MANIFESTS_SUB_PATH }}
+          # Manifests packaging
+          manifests-repo-provider-type: ${{ steps.kpm.outputs.MANIFESTS_REPO_PROVIDER_TYPE }}
+          manifests-packaging-base-image: ${{ steps.kpm.outputs.MANIFESTS_PACKAGING_BASE_IMAGE }}
+
+          # Kubernetes Generation
+          kubernetes-global-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_GLOBAL_ADDITIONAL_LABELS }}
+          kubernetes-global-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_GLOBAL_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes ConfigMap Generation
+          kubernetes-configmap-sub-path: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_SUB_PATH }}
+          kubernetes-configmap-name-checksum-injection: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_NAME_CHECKSUM_INJECTION }}
+          kubernetes-configmap-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_ADDITIONAL_LABELS }}
+          kubernetes-configmap-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes Secret template generation
+          kubernetes-secret-template-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_SUB_PATH }}
+          kubernetes-secret-template-name-checksum-injection: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_NAME_CHECKSUM_INJECTION }}
+          kubernetes-secret-template-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_ADDITIONAL_LABELS }}
+          kubernetes-secret-template-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes ServiceAccount generation
+          kubernetes-serviceaccount-generation-enabled: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_GENERATION_ENABLED }}
+          kubernetes-serviceaccount-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_NAME_SUFFIX }}
+          kubernetes-serviceaccount-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_COMBINED_SUB_PATH }}
+          kubernetes-serviceaccount-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_ADDITIONAL_LABELS }}
+          kubernetes-serviceaccount-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes Workload generation
+          kubernetes-workload-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_TYPE }}
+          kubernetes-workload-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_NAME_SUFFIX }}
+          kubernetes-workload-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_COMBINED_SUB_PATH }}
+          kubernetes-workload-env-sub-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ENV_SUB_PATH }}
+          kubernetes-workload-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ADDITIONAL_LABELS }}
+          kubernetes-workload-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ADDITIONAL_ANNOTATIONS }}
+          kubernetes-workload-container-port: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_CONTAINER_PORT }}
+          kubernetes-workload-image-reference-style: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_IMAGE_REFERENCE_STYLE }}
+          kubernetes-workload-readonly-root-filesystem: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_READONLY_ROOT_FILESYSTEM }}
+          kubernetes-workload-seccomp-profile: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_SECCOMP_PROFILE }}
+          kubernetes-workload-automount-service-account-token: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_AUTOMOUNT_SERVICE_ACCOUNT_TOKEN }}
+          kubernetes-workload-image-pull-secrets: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_IMAGE_PULL_SECRETS }}
+          kubernetes-workload-resources-memory: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_MEMORY }}
+          kubernetes-workload-resources-cpu-request: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_CPU_REQUEST }}
+          kubernetes-workload-resources-cpu-limit: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_CPU_LIMIT }}
+          kubernetes-workload-configmap-mount-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_CONFIGMAP_MOUNT_PATH }}
+          kubernetes-workload-secret-mount-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_SECRET_MOUNT_PATH }}
+          kubernetes-workload-termination-grace-period-seconds: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_TERMINATION_GRACE_PERIOD_SECONDS }}
+          kubernetes-workload-prestop-command: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PRESTOP_COMMAND }}
+          kubernetes-workload-affinity-strategy: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_AFFINITY_STRATEGY }}
+          kubernetes-workload-probe-liveness-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_CHECK_TYPE }}
+          kubernetes-workload-probe-readiness-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_CHECK_TYPE }}
+          kubernetes-workload-probe-startup-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_CHECK_TYPE }}
+          kubernetes-workload-probe-liveness-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_HTTP_PATH }}
+          kubernetes-workload-probe-readiness-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_HTTP_PATH }}
+          kubernetes-workload-probe-startup-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_HTTP_PATH }}
+          kubernetes-workload-replicas: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_REPLICAS }}
+          kubernetes-workload-revision-history-limit: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_REVISION_HISTORY_LIMIT }}
+          # Kubernetes Service generation
+          kubernetes-service-generation-enabled: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_GENERATION_ENABLED }}
+          kubernetes-service-type: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_TYPE }}
+          kubernetes-service-port: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_PORT }}
+          kubernetes-service-target-port: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_TARGET_PORT }}
+          kubernetes-service-protocol: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_PROTOCOL }}
+          kubernetes-service-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_NAME_SUFFIX }}
+          kubernetes-service-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_COMBINED_SUB_PATH }}
+          kubernetes-service-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_ADDITIONAL_LABELS }}
+          kubernetes-service-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_ADDITIONAL_ANNOTATIONS }}
+
+          # Token substitution
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          token-name-validation: ${{ steps.kpm.outputs.TOKEN_NAME_VALIDATION }}
+          token-builtin-mode: ${{ steps.kpm.outputs.TOKEN_BUILTIN_MODE }}
+          config-sub-path: ${{ steps.kpm.outputs.CONFIG_SUB_PATH }}
+          config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+          token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+
+          # Naming, Versions, and Tags calculation
+          release-branch: ${{ steps.kpm.outputs.RELEASE_BRANCH }}
+          additional-release-branches: ${{ steps.kpm.outputs.ADDITIONAL_RELEASE_BRANCHES }}
+          tag-version-max-parts: ${{ steps.kpm.outputs.TAG_VERSION_MAX_PARTS }}
+          tag-version-calculation-strategy: ${{ steps.kpm.outputs.TAG_VERSION_CALCULATION_STRATEGY }}
+          tag-version-pattern-type: ${{ steps.kpm.outputs.TAG_VERSION_PATTERN_TYPE }}
+          tag-version-prefix-parts: ${{ steps.kpm.outputs.TAG_VERSION_PREFIX_PARTS }}
+          tag-version-source-sub-path: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_SUB_PATH }}
+          tag-version-source-file-name: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_FILE_NAME }}
+          tag-version-source-custom-pattern: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_CUSTOM_PATTERN }}
+          tag-version-source-two-sub-path: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_SUB_PATH }}
+          tag-version-source-two-file-name: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_FILE_NAME }}
+          tag-version-source-two-pattern: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_PATTERN }}
+          tag-version-source-two-prefix-parts: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_PREFIX_PARTS }}
+
+          # Quality check options
+          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
+          qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
+          qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
+          qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
+          qc-require-conventional-commits: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_COMMITS }}
+          qc-block-conventional-commits: ${{ steps.kpm.outputs.QC_BLOCK_CONVENTIONAL_COMMITS }}
+
+          # Hook script paths
+          hook-pre-build-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH }}
+          hook-pre-tagging-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH }}
+          hook-pre-docker-prepare-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_DOCKER_PREPARE_SCRIPT_SUB_PATH }}
+          hook-post-docker-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_DOCKER_TESTS_SCRIPT_SUB_PATH }}
+          hook-pre-package-prepare-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH }}
+          hook-post-package-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH }}
+          hook-post-versions-and-naming-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH }}
+          hook-post-build-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH }}
+
+          # GitHub release
+          github-release-enabled: ${{ steps.kpm.outputs.GITHUB_RELEASE_ENABLED }}
+          github-release-substituted-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_SUBSTITUTED_FILES }}
+          github-release-verbatim-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_VERBATIM_FILES }}
+          github-release-notes: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES }}
+          github-release-notes-file: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES_FILE }}
+          github-release-add-version-to-filenames: ${{ steps.kpm.outputs.GITHUB_RELEASE_ADD_VERSION_TO_FILENAMES }}
+      - name: Pass check - Pre-Build
+        if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && success() && steps.check-pre-build.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-pre-build.outputs.check-run-id }}
+      - name: Fail check - Pre-Build
+        if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && failure() && steps.check-pre-build.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-pre-build.outputs.check-run-id }}
+
+      # === Basic Quality Checks ===
+      - name: Start check - Basic Quality Checks
+        if: github.event_name == 'pull_request' && success()
+        id: check-basic-quality
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Basic Quality Checks'
+      - name: Basic quality checks
+        if: github.event_name == 'pull_request' && success()
+        id: quality
+        uses: ./.github/buildon-github-actions/src/actions/basic-quality-checks
+        with:
+          release-branch: ${{ steps.kpm.outputs.RELEASE_BRANCH }}
+          additional-release-branches: ${{ steps.kpm.outputs.ADDITIONAL_RELEASE_BRANCHES }}
+          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
+          qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
+          qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
+          qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
+          qc-require-conventional-commits: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_COMMITS }}
+          qc-block-conventional-commits: ${{ steps.kpm.outputs.QC_BLOCK_CONVENTIONAL_COMMITS }}
+          build-kind: kubernetes-run-environment
+      - name: Pass check - Basic Quality Checks
+        if: github.event_name == 'pull_request' && success() && steps.check-basic-quality.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-basic-quality.outputs.check-run-id }}
+      - name: Fail check - Basic Quality Checks
+        if: github.event_name == 'pull_request' && failure() && steps.check-basic-quality.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-basic-quality.outputs.check-run-id }}
+
+      # === Docker Registry Logins ===
+      - name: Start check - Docker Registry Logins
+        id: check-docker-registry-logins
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Docker Registry Logins'
+      # Only run if a registry was resolved (skip if not configured)
+      - name: Docker registry logins
+        id: docker-registry-logins
+        if: steps.kpm.outputs.DOCKER_TARGET_REGISTRY != '' && success()
+        uses: ./.github/buildon-github-actions/src/actions/docker-registry-logins
+        with:
+          config: ${{ steps.kpm.outputs.DOCKER_REGISTRY_LOGINS }}
+          secrets-json: ${{ secrets.docker-registry-logins-secrets }}
+          docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+      - name: Pass check - Docker Registry Logins
+        if: success() && steps.check-docker-registry-logins.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-docker-registry-logins.outputs.check-run-id }}
+      - name: Fail check - Docker Registry Logins
+        if: failure() && steps.check-docker-registry-logins.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-docker-registry-logins.outputs.check-run-id }}
+
+      # === Docker Platform Setup ===
+      - name: Start check - Docker Platform Setup
+        id: check-docker-platform-setup
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Docker Platform Setup'
+      - name: Docker platform setup
+        id: docker-platform-setup
+        uses: ./.github/buildon-github-actions/src/actions/docker-platform-setup
+        with:
+          docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+      - name: Pass check - Docker Platform Setup
+        if: success() && steps.check-docker-platform-setup.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-docker-platform-setup.outputs.check-run-id }}
+      - name: Fail check - Docker Platform Setup
+        if: failure() && steps.check-docker-platform-setup.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-docker-platform-setup.outputs.check-run-id }}
+
+      # === Pre-tagging Tests ===
+      - name: Start check - Pre-tagging Tests
+        if: steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH != '' && success()
+        id: check-pre-tagging
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Pre-tagging Tests'
+      - name: Run pre-tagging tests
+        if: steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH != '' && success()
+        id: pre-tagging-tests
+        uses: ./.github/buildon-github-actions/src/actions/hook-pre-tagging-tests
+        with:
+          build-kind: kubernetes-run-environment
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
+          build-scripts-repo-root: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
+          docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
+          strip-repository-name-prefix: ${{ steps.kpm.outputs.STRIP_REPOSITORY_NAME_PREFIX }}
+          # === Workflow Inputs ===
+          # Build output
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
+
+          # Docker registry logins
+          docker-registry-logins: ${{ steps.kpm.outputs.DOCKER_REGISTRY_LOGINS }}
+          # Docker build options
+          dockerfile-sub-path: ${{ steps.kpm.outputs.DOCKERFILE_SUB_PATH }}
+          dockerfile-squash: ${{ steps.kpm.outputs.DOCKERFILE_SQUASH }}
+          dockerfile-no-cache: ${{ steps.kpm.outputs.DOCKERFILE_NO_CACHE }}
+          # Docker target config (from early resolver)
+          docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+          docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+          # Docker push targets
+          docker-push-targets: ${{ steps.kpm.outputs.DOCKER_PUSH_TARGETS }}
+
+          # Manifests source
+          manifests-sub-path: ${{ steps.kpm.outputs.MANIFESTS_SUB_PATH }}
+          # Manifests packaging
+          manifests-repo-provider-type: ${{ steps.kpm.outputs.MANIFESTS_REPO_PROVIDER_TYPE }}
+          manifests-packaging-base-image: ${{ steps.kpm.outputs.MANIFESTS_PACKAGING_BASE_IMAGE }}
+
+          # Kubernetes Generation
+          kubernetes-global-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_GLOBAL_ADDITIONAL_LABELS }}
+          kubernetes-global-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_GLOBAL_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes ConfigMap Generation
+          kubernetes-configmap-sub-path: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_SUB_PATH }}
+          kubernetes-configmap-name-checksum-injection: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_NAME_CHECKSUM_INJECTION }}
+          kubernetes-configmap-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_ADDITIONAL_LABELS }}
+          kubernetes-configmap-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes Secret template generation
+          kubernetes-secret-template-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_SUB_PATH }}
+          kubernetes-secret-template-name-checksum-injection: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_NAME_CHECKSUM_INJECTION }}
+          kubernetes-secret-template-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_ADDITIONAL_LABELS }}
+          kubernetes-secret-template-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes ServiceAccount generation
+          kubernetes-serviceaccount-generation-enabled: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_GENERATION_ENABLED }}
+          kubernetes-serviceaccount-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_NAME_SUFFIX }}
+          kubernetes-serviceaccount-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_COMBINED_SUB_PATH }}
+          kubernetes-serviceaccount-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_ADDITIONAL_LABELS }}
+          kubernetes-serviceaccount-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes Workload generation
+          kubernetes-workload-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_TYPE }}
+          kubernetes-workload-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_NAME_SUFFIX }}
+          kubernetes-workload-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_COMBINED_SUB_PATH }}
+          kubernetes-workload-env-sub-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ENV_SUB_PATH }}
+          kubernetes-workload-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ADDITIONAL_LABELS }}
+          kubernetes-workload-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ADDITIONAL_ANNOTATIONS }}
+          kubernetes-workload-container-port: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_CONTAINER_PORT }}
+          kubernetes-workload-image-reference-style: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_IMAGE_REFERENCE_STYLE }}
+          kubernetes-workload-readonly-root-filesystem: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_READONLY_ROOT_FILESYSTEM }}
+          kubernetes-workload-seccomp-profile: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_SECCOMP_PROFILE }}
+          kubernetes-workload-automount-service-account-token: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_AUTOMOUNT_SERVICE_ACCOUNT_TOKEN }}
+          kubernetes-workload-image-pull-secrets: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_IMAGE_PULL_SECRETS }}
+          kubernetes-workload-resources-memory: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_MEMORY }}
+          kubernetes-workload-resources-cpu-request: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_CPU_REQUEST }}
+          kubernetes-workload-resources-cpu-limit: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_CPU_LIMIT }}
+          kubernetes-workload-configmap-mount-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_CONFIGMAP_MOUNT_PATH }}
+          kubernetes-workload-secret-mount-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_SECRET_MOUNT_PATH }}
+          kubernetes-workload-termination-grace-period-seconds: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_TERMINATION_GRACE_PERIOD_SECONDS }}
+          kubernetes-workload-prestop-command: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PRESTOP_COMMAND }}
+          kubernetes-workload-affinity-strategy: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_AFFINITY_STRATEGY }}
+          kubernetes-workload-probe-liveness-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_CHECK_TYPE }}
+          kubernetes-workload-probe-readiness-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_CHECK_TYPE }}
+          kubernetes-workload-probe-startup-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_CHECK_TYPE }}
+          kubernetes-workload-probe-liveness-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_HTTP_PATH }}
+          kubernetes-workload-probe-readiness-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_HTTP_PATH }}
+          kubernetes-workload-probe-startup-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_HTTP_PATH }}
+          kubernetes-workload-replicas: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_REPLICAS }}
+          kubernetes-workload-revision-history-limit: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_REVISION_HISTORY_LIMIT }}
+          # Kubernetes Service generation
+          kubernetes-service-generation-enabled: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_GENERATION_ENABLED }}
+          kubernetes-service-type: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_TYPE }}
+          kubernetes-service-port: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_PORT }}
+          kubernetes-service-target-port: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_TARGET_PORT }}
+          kubernetes-service-protocol: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_PROTOCOL }}
+          kubernetes-service-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_NAME_SUFFIX }}
+          kubernetes-service-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_COMBINED_SUB_PATH }}
+          kubernetes-service-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_ADDITIONAL_LABELS }}
+          kubernetes-service-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_ADDITIONAL_ANNOTATIONS }}
+
+          # Token substitution
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          token-name-validation: ${{ steps.kpm.outputs.TOKEN_NAME_VALIDATION }}
+          token-builtin-mode: ${{ steps.kpm.outputs.TOKEN_BUILTIN_MODE }}
+          config-sub-path: ${{ steps.kpm.outputs.CONFIG_SUB_PATH }}
+          config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+          token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+
+          # Naming, Versions, and Tags calculation
+          release-branch: ${{ steps.kpm.outputs.RELEASE_BRANCH }}
+          additional-release-branches: ${{ steps.kpm.outputs.ADDITIONAL_RELEASE_BRANCHES }}
+          tag-version-max-parts: ${{ steps.kpm.outputs.TAG_VERSION_MAX_PARTS }}
+          tag-version-calculation-strategy: ${{ steps.kpm.outputs.TAG_VERSION_CALCULATION_STRATEGY }}
+          tag-version-pattern-type: ${{ steps.kpm.outputs.TAG_VERSION_PATTERN_TYPE }}
+          tag-version-prefix-parts: ${{ steps.kpm.outputs.TAG_VERSION_PREFIX_PARTS }}
+          tag-version-source-sub-path: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_SUB_PATH }}
+          tag-version-source-file-name: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_FILE_NAME }}
+          tag-version-source-custom-pattern: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_CUSTOM_PATTERN }}
+          tag-version-source-two-sub-path: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_SUB_PATH }}
+          tag-version-source-two-file-name: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_FILE_NAME }}
+          tag-version-source-two-pattern: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_PATTERN }}
+          tag-version-source-two-prefix-parts: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_PREFIX_PARTS }}
+
+          # Quality check options
+          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
+          qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
+          qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
+          qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
+          qc-require-conventional-commits: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_COMMITS }}
+          qc-block-conventional-commits: ${{ steps.kpm.outputs.QC_BLOCK_CONVENTIONAL_COMMITS }}
+
+          # Hook script paths
+          hook-pre-build-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH }}
+          hook-pre-tagging-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH }}
+          hook-pre-docker-prepare-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_DOCKER_PREPARE_SCRIPT_SUB_PATH }}
+          hook-post-docker-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_DOCKER_TESTS_SCRIPT_SUB_PATH }}
+          hook-pre-package-prepare-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH }}
+          hook-post-package-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH }}
+          hook-post-versions-and-naming-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH }}
+          hook-post-build-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH }}
+
+          # GitHub release
+          github-release-enabled: ${{ steps.kpm.outputs.GITHUB_RELEASE_ENABLED }}
+          github-release-substituted-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_SUBSTITUTED_FILES }}
+          github-release-verbatim-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_VERBATIM_FILES }}
+          github-release-notes: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES }}
+          github-release-notes-file: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES_FILE }}
+          github-release-add-version-to-filenames: ${{ steps.kpm.outputs.GITHUB_RELEASE_ADD_VERSION_TO_FILENAMES }}
+      - name: Pass check - Pre-tagging Tests
+        if: steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH != '' && success() && steps.check-pre-tagging.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-pre-tagging.outputs.check-run-id }}
+      - name: Fail check - Pre-tagging Tests
+        if: steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH != '' && failure() && steps.check-pre-tagging.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-pre-tagging.outputs.check-run-id }}
+
+      # === Versions & Naming ===
+      - name: Start check - Versions & Naming
+        id: check-versions
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Versions & Naming'
+      - name: Generate versions and naming
+        id: versions
+        uses: ./.github/buildon-github-actions/src/actions/versions-and-naming
+        with:
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          strip-repository-name-prefix: ${{ steps.kpm.outputs.STRIP_REPOSITORY_NAME_PREFIX }}
+          release-branch: ${{ steps.kpm.outputs.RELEASE_BRANCH }}
+          additional-release-branches: ${{ steps.kpm.outputs.ADDITIONAL_RELEASE_BRANCHES }}
+          tag-version-max-parts: ${{ steps.kpm.outputs.TAG_VERSION_MAX_PARTS }}
+          tag-version-calculation-strategy: ${{ steps.kpm.outputs.TAG_VERSION_CALCULATION_STRATEGY }}
+          tag-version-pattern-type: ${{ steps.kpm.outputs.TAG_VERSION_PATTERN_TYPE }}
+          tag-version-prefix-parts: ${{ steps.kpm.outputs.TAG_VERSION_PREFIX_PARTS }}
+          dockerfile-sub-path: ${{ steps.kpm.outputs.DOCKERFILE_SUB_PATH }}
+          tag-version-source-sub-path: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_SUB_PATH }}
+          tag-version-source-file-name: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_FILE_NAME }}
+          tag-version-source-custom-pattern: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_CUSTOM_PATTERN }}
+          tag-version-source-two-sub-path: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_SUB_PATH }}
+          tag-version-source-two-file-name: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_FILE_NAME }}
+          tag-version-source-two-pattern: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_PATTERN }}
+          tag-version-source-two-prefix-parts: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_PREFIX_PARTS }}
+          tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
+      - name: Pass check - Versions & Naming
+        if: success() && steps.check-versions.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-versions.outputs.check-run-id }}
+      - name: Fail check - Versions & Naming
+        if: failure() && steps.check-versions.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-versions.outputs.check-run-id }}
+
+      # === Post-Versions-and-Naming ===
+      - name: Start check - Post-Versions-and-Naming
+        if: steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH != '' && success()
+        id: check-post-versions-and-naming
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Post-Versions-and-Naming'
+      - name: Run post-versions-and-naming
+        if: steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH != '' && success()
+        id: post-versions-and-naming
+        uses: ./.github/buildon-github-actions/src/actions/hook-post-versions-and-naming
+        with:
+          build-kind: kubernetes-run-environment
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
+          build-scripts-repo-root: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
+          docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
+          # === Workflow Inputs ===
+          # Build output
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
+
+          # Docker registry logins
+          docker-registry-logins: ${{ steps.kpm.outputs.DOCKER_REGISTRY_LOGINS }}
+          # Docker build options
+          dockerfile-sub-path: ${{ steps.kpm.outputs.DOCKERFILE_SUB_PATH }}
+          dockerfile-squash: ${{ steps.kpm.outputs.DOCKERFILE_SQUASH }}
+          dockerfile-no-cache: ${{ steps.kpm.outputs.DOCKERFILE_NO_CACHE }}
+          # Docker target config (from early resolver)
+          docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+          docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+          # Docker push targets
+          docker-push-targets: ${{ steps.kpm.outputs.DOCKER_PUSH_TARGETS }}
+
+          # Manifests source
+          manifests-sub-path: ${{ steps.kpm.outputs.MANIFESTS_SUB_PATH }}
+          # Manifests packaging
+          manifests-repo-provider-type: ${{ steps.kpm.outputs.MANIFESTS_REPO_PROVIDER_TYPE }}
+          manifests-packaging-base-image: ${{ steps.kpm.outputs.MANIFESTS_PACKAGING_BASE_IMAGE }}
+
+          # Kubernetes Generation
+          kubernetes-global-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_GLOBAL_ADDITIONAL_LABELS }}
+          kubernetes-global-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_GLOBAL_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes ConfigMap Generation
+          kubernetes-configmap-sub-path: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_SUB_PATH }}
+          kubernetes-configmap-name-checksum-injection: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_NAME_CHECKSUM_INJECTION }}
+          kubernetes-configmap-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_ADDITIONAL_LABELS }}
+          kubernetes-configmap-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes Secret template generation
+          kubernetes-secret-template-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_SUB_PATH }}
+          kubernetes-secret-template-name-checksum-injection: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_NAME_CHECKSUM_INJECTION }}
+          kubernetes-secret-template-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_ADDITIONAL_LABELS }}
+          kubernetes-secret-template-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes ServiceAccount generation
+          kubernetes-serviceaccount-generation-enabled: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_GENERATION_ENABLED }}
+          kubernetes-serviceaccount-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_NAME_SUFFIX }}
+          kubernetes-serviceaccount-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_COMBINED_SUB_PATH }}
+          kubernetes-serviceaccount-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_ADDITIONAL_LABELS }}
+          kubernetes-serviceaccount-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes Workload generation
+          kubernetes-workload-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_TYPE }}
+          kubernetes-workload-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_NAME_SUFFIX }}
+          kubernetes-workload-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_COMBINED_SUB_PATH }}
+          kubernetes-workload-env-sub-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ENV_SUB_PATH }}
+          kubernetes-workload-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ADDITIONAL_LABELS }}
+          kubernetes-workload-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ADDITIONAL_ANNOTATIONS }}
+          kubernetes-workload-container-port: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_CONTAINER_PORT }}
+          kubernetes-workload-image-reference-style: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_IMAGE_REFERENCE_STYLE }}
+          kubernetes-workload-readonly-root-filesystem: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_READONLY_ROOT_FILESYSTEM }}
+          kubernetes-workload-seccomp-profile: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_SECCOMP_PROFILE }}
+          kubernetes-workload-automount-service-account-token: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_AUTOMOUNT_SERVICE_ACCOUNT_TOKEN }}
+          kubernetes-workload-image-pull-secrets: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_IMAGE_PULL_SECRETS }}
+          kubernetes-workload-resources-memory: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_MEMORY }}
+          kubernetes-workload-resources-cpu-request: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_CPU_REQUEST }}
+          kubernetes-workload-resources-cpu-limit: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_CPU_LIMIT }}
+          kubernetes-workload-configmap-mount-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_CONFIGMAP_MOUNT_PATH }}
+          kubernetes-workload-secret-mount-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_SECRET_MOUNT_PATH }}
+          kubernetes-workload-termination-grace-period-seconds: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_TERMINATION_GRACE_PERIOD_SECONDS }}
+          kubernetes-workload-prestop-command: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PRESTOP_COMMAND }}
+          kubernetes-workload-affinity-strategy: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_AFFINITY_STRATEGY }}
+          kubernetes-workload-probe-liveness-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_CHECK_TYPE }}
+          kubernetes-workload-probe-readiness-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_CHECK_TYPE }}
+          kubernetes-workload-probe-startup-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_CHECK_TYPE }}
+          kubernetes-workload-probe-liveness-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_HTTP_PATH }}
+          kubernetes-workload-probe-readiness-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_HTTP_PATH }}
+          kubernetes-workload-probe-startup-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_HTTP_PATH }}
+          kubernetes-workload-replicas: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_REPLICAS }}
+          kubernetes-workload-revision-history-limit: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_REVISION_HISTORY_LIMIT }}
+          # Kubernetes Service generation
+          kubernetes-service-generation-enabled: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_GENERATION_ENABLED }}
+          kubernetes-service-type: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_TYPE }}
+          kubernetes-service-port: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_PORT }}
+          kubernetes-service-target-port: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_TARGET_PORT }}
+          kubernetes-service-protocol: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_PROTOCOL }}
+          kubernetes-service-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_NAME_SUFFIX }}
+          kubernetes-service-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_COMBINED_SUB_PATH }}
+          kubernetes-service-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_ADDITIONAL_LABELS }}
+          kubernetes-service-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_ADDITIONAL_ANNOTATIONS }}
+
+          # Token substitution
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          token-name-validation: ${{ steps.kpm.outputs.TOKEN_NAME_VALIDATION }}
+          token-builtin-mode: ${{ steps.kpm.outputs.TOKEN_BUILTIN_MODE }}
+          config-sub-path: ${{ steps.kpm.outputs.CONFIG_SUB_PATH }}
+          config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+          token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+
+          # Naming, Versions, and Tags calculation
+          release-branch: ${{ steps.kpm.outputs.RELEASE_BRANCH }}
+          additional-release-branches: ${{ steps.kpm.outputs.ADDITIONAL_RELEASE_BRANCHES }}
+          tag-version-max-parts: ${{ steps.kpm.outputs.TAG_VERSION_MAX_PARTS }}
+          tag-version-calculation-strategy: ${{ steps.kpm.outputs.TAG_VERSION_CALCULATION_STRATEGY }}
+          tag-version-pattern-type: ${{ steps.kpm.outputs.TAG_VERSION_PATTERN_TYPE }}
+          tag-version-prefix-parts: ${{ steps.kpm.outputs.TAG_VERSION_PREFIX_PARTS }}
+          tag-version-source-sub-path: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_SUB_PATH }}
+          tag-version-source-file-name: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_FILE_NAME }}
+          tag-version-source-custom-pattern: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_CUSTOM_PATTERN }}
+          tag-version-source-two-sub-path: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_SUB_PATH }}
+          tag-version-source-two-file-name: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_FILE_NAME }}
+          tag-version-source-two-pattern: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_PATTERN }}
+          tag-version-source-two-prefix-parts: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_PREFIX_PARTS }}
+
+          # Quality check options
+          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
+          qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
+          qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
+          qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
+          qc-require-conventional-commits: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_COMMITS }}
+          qc-block-conventional-commits: ${{ steps.kpm.outputs.QC_BLOCK_CONVENTIONAL_COMMITS }}
+
+          # Hook script paths
+          hook-pre-build-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH }}
+          hook-pre-tagging-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH }}
+          hook-pre-docker-prepare-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_DOCKER_PREPARE_SCRIPT_SUB_PATH }}
+          hook-post-docker-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_DOCKER_TESTS_SCRIPT_SUB_PATH }}
+          hook-pre-package-prepare-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH }}
+          hook-post-package-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH }}
+          hook-post-versions-and-naming-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH }}
+          hook-post-build-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH }}
+
+          # GitHub release
+          github-release-enabled: ${{ steps.kpm.outputs.GITHUB_RELEASE_ENABLED }}
+          github-release-substituted-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_SUBSTITUTED_FILES }}
+          github-release-verbatim-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_VERBATIM_FILES }}
+          github-release-notes: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES }}
+          github-release-notes-file: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES_FILE }}
+          github-release-add-version-to-filenames: ${{ steps.kpm.outputs.GITHUB_RELEASE_ADD_VERSION_TO_FILENAMES }}
+
+          # === Step Outputs ===
+          # Version outputs (from versions-and-naming)
+          version: ${{ steps.versions.outputs.version }}
+          version-major: ${{ steps.versions.outputs.version-major }}
+          version-minor: ${{ steps.versions.outputs.version-minor }}
+          version-patch: ${{ steps.versions.outputs.version-patch }}
+          version-2-part: ${{ steps.versions.outputs.version-2-part }}
+          version-3-part: ${{ steps.versions.outputs.version-3-part }}
+          version-4-part: ${{ steps.versions.outputs.version-4-part }}
+          version-dns-safe: ${{ steps.versions.outputs.version-dns-safe }}
+          version-2-part-dns-safe: ${{ steps.versions.outputs.version-2-part-dns-safe }}
+          version-3-part-dns-safe: ${{ steps.versions.outputs.version-3-part-dns-safe }}
+          version-4-part-dns-safe: ${{ steps.versions.outputs.version-4-part-dns-safe }}
+          docker-tag: ${{ steps.versions.outputs.docker-tag }}
+          docker-image-name: ${{ steps.versions.outputs.docker-image-name }}
+          git-tag: ${{ steps.versions.outputs.git-tag }}
+          project-name: ${{ steps.versions.outputs.project-name }}
+          is-release: ${{ steps.versions.outputs.is-release }}
+      - name: Pass check - Post-Versions-and-Naming
+        if: steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH != '' && success() && steps.check-post-versions-and-naming.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-post-versions-and-naming.outputs.check-run-id }}
+      - name: Fail check - Post-Versions-and-Naming
+        if: steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH != '' && failure() && steps.check-post-versions-and-naming.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-post-versions-and-naming.outputs.check-run-id }}
+
+      # === Change Source Note ===
+      - name: Start check - Change Source Note
+        if: steps.versions.outputs.is-release != 'true' && success()
+        id: check-change-source-note
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Change Source Note'
+      - name: Write change source note
+        id: change-source-note-write
+        if: steps.versions.outputs.is-release != 'true' && steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED == 'true' && success()
+        uses: ./.github/buildon-github-actions/src/actions/change-source-note-write
+      - name: Pass check - Change Source Note
+        if: steps.versions.outputs.is-release != 'true' && success() && steps.check-change-source-note.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-change-source-note.outputs.check-run-id }}
+      - name: Fail check - Change Source Note
+        if: steps.versions.outputs.is-release != 'true' && failure() && steps.check-change-source-note.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-change-source-note.outputs.check-run-id }}
+
+      # === Release Change Data Generate ===
+      - name: Start check - Release Change Data Generate
+        id: check-release-change-data-generate
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Release Change Data Generate'
+      - name: Generate release change data
+        id: release-change-data-generate
+        uses: ./.github/buildon-github-actions/src/actions/release-change-data-generate
+        with:
+          version: ${{ steps.versions.outputs.version }}
+          project-name: ${{ steps.versions.outputs.project-name }}
+          git-tag: ${{ steps.versions.outputs.git-tag }}
+          repository-owner: ${{ steps.versions.outputs.repository-owner }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          change-source-note-enabled: ${{ steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED }}
+      - name: Pass check - Release Change Data Generate
+        if: success() && steps.check-release-change-data-generate.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-release-change-data-generate.outputs.check-run-id }}
+      - name: Fail check - Release Change Data Generate
+        if: failure() && steps.check-release-change-data-generate.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-release-change-data-generate.outputs.check-run-id }}
+
+      # === Release Change Data OCI Package ===
+      - name: Start check - Release Change Data OCI Package
+        id: check-release-change-data-oci-package
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Release Change Data OCI Package'
+      - name: Package release change data as OCI image
+        id: release-change-data-oci-package
+        uses: ./.github/buildon-github-actions/src/actions/release-change-data-oci-package
+        with:
+          version: ${{ steps.versions.outputs.version }}
+          docker-tag: ${{ steps.versions.outputs.docker-tag }}
+          docker-image-name: ${{ steps.versions.outputs.docker-image-name }}
+          docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+          docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+          project-name: ${{ steps.versions.outputs.project-name }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
+      - name: Pass check - Release Change Data OCI Package
+        if: success() && steps.check-release-change-data-oci-package.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-release-change-data-oci-package.outputs.check-run-id }}
+      - name: Fail check - Release Change Data OCI Package
+        if: failure() && steps.check-release-change-data-oci-package.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-release-change-data-oci-package.outputs.check-run-id }}
+
+      # === Pre-package Prepare ===
+      - name: Start check - Pre-package Prepare
+        if: steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH != '' && success()
+        id: check-pre-package-prepare
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Pre-package Prepare'
+      - name: Run pre-package prepare
+        if: steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH != '' && success()
+        id: pre-package-prepare
+        uses: ./.github/buildon-github-actions/src/actions/hook-pre-package-prepare
+        with:
+          build-kind: kubernetes-run-environment
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
+          build-scripts-repo-root: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
+          docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
+          # === Workflow Inputs ===
+          # Build output
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
+
+          # Docker registry logins
+          docker-registry-logins: ${{ steps.kpm.outputs.DOCKER_REGISTRY_LOGINS }}
+          # Docker build options
+          dockerfile-sub-path: ${{ steps.kpm.outputs.DOCKERFILE_SUB_PATH }}
+          dockerfile-squash: ${{ steps.kpm.outputs.DOCKERFILE_SQUASH }}
+          dockerfile-no-cache: ${{ steps.kpm.outputs.DOCKERFILE_NO_CACHE }}
+          # Docker target config (from early resolver)
+          docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+          docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+          # Docker push targets
+          docker-push-targets: ${{ steps.kpm.outputs.DOCKER_PUSH_TARGETS }}
+
+          # Manifests source
+          manifests-sub-path: ${{ steps.kpm.outputs.MANIFESTS_SUB_PATH }}
+          # Manifests packaging
+          manifests-repo-provider-type: ${{ steps.kpm.outputs.MANIFESTS_REPO_PROVIDER_TYPE }}
+          manifests-packaging-base-image: ${{ steps.kpm.outputs.MANIFESTS_PACKAGING_BASE_IMAGE }}
+
+          # Kubernetes Generation
+          kubernetes-global-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_GLOBAL_ADDITIONAL_LABELS }}
+          kubernetes-global-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_GLOBAL_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes ConfigMap Generation
+          kubernetes-configmap-sub-path: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_SUB_PATH }}
+          kubernetes-configmap-name-checksum-injection: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_NAME_CHECKSUM_INJECTION }}
+          kubernetes-configmap-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_ADDITIONAL_LABELS }}
+          kubernetes-configmap-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes Secret template generation
+          kubernetes-secret-template-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_SUB_PATH }}
+          kubernetes-secret-template-name-checksum-injection: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_NAME_CHECKSUM_INJECTION }}
+          kubernetes-secret-template-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_ADDITIONAL_LABELS }}
+          kubernetes-secret-template-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes ServiceAccount generation
+          kubernetes-serviceaccount-generation-enabled: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_GENERATION_ENABLED }}
+          kubernetes-serviceaccount-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_NAME_SUFFIX }}
+          kubernetes-serviceaccount-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_COMBINED_SUB_PATH }}
+          kubernetes-serviceaccount-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_ADDITIONAL_LABELS }}
+          kubernetes-serviceaccount-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes Workload generation
+          kubernetes-workload-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_TYPE }}
+          kubernetes-workload-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_NAME_SUFFIX }}
+          kubernetes-workload-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_COMBINED_SUB_PATH }}
+          kubernetes-workload-env-sub-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ENV_SUB_PATH }}
+          kubernetes-workload-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ADDITIONAL_LABELS }}
+          kubernetes-workload-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ADDITIONAL_ANNOTATIONS }}
+          kubernetes-workload-container-port: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_CONTAINER_PORT }}
+          kubernetes-workload-image-reference-style: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_IMAGE_REFERENCE_STYLE }}
+          kubernetes-workload-readonly-root-filesystem: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_READONLY_ROOT_FILESYSTEM }}
+          kubernetes-workload-seccomp-profile: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_SECCOMP_PROFILE }}
+          kubernetes-workload-automount-service-account-token: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_AUTOMOUNT_SERVICE_ACCOUNT_TOKEN }}
+          kubernetes-workload-image-pull-secrets: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_IMAGE_PULL_SECRETS }}
+          kubernetes-workload-resources-memory: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_MEMORY }}
+          kubernetes-workload-resources-cpu-request: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_CPU_REQUEST }}
+          kubernetes-workload-resources-cpu-limit: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_CPU_LIMIT }}
+          kubernetes-workload-configmap-mount-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_CONFIGMAP_MOUNT_PATH }}
+          kubernetes-workload-secret-mount-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_SECRET_MOUNT_PATH }}
+          kubernetes-workload-termination-grace-period-seconds: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_TERMINATION_GRACE_PERIOD_SECONDS }}
+          kubernetes-workload-prestop-command: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PRESTOP_COMMAND }}
+          kubernetes-workload-affinity-strategy: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_AFFINITY_STRATEGY }}
+          kubernetes-workload-probe-liveness-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_CHECK_TYPE }}
+          kubernetes-workload-probe-readiness-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_CHECK_TYPE }}
+          kubernetes-workload-probe-startup-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_CHECK_TYPE }}
+          kubernetes-workload-probe-liveness-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_HTTP_PATH }}
+          kubernetes-workload-probe-readiness-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_HTTP_PATH }}
+          kubernetes-workload-probe-startup-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_HTTP_PATH }}
+          kubernetes-workload-replicas: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_REPLICAS }}
+          kubernetes-workload-revision-history-limit: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_REVISION_HISTORY_LIMIT }}
+          # Kubernetes Service generation
+          kubernetes-service-generation-enabled: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_GENERATION_ENABLED }}
+          kubernetes-service-type: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_TYPE }}
+          kubernetes-service-port: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_PORT }}
+          kubernetes-service-target-port: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_TARGET_PORT }}
+          kubernetes-service-protocol: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_PROTOCOL }}
+          kubernetes-service-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_NAME_SUFFIX }}
+          kubernetes-service-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_COMBINED_SUB_PATH }}
+          kubernetes-service-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_ADDITIONAL_LABELS }}
+          kubernetes-service-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_ADDITIONAL_ANNOTATIONS }}
+
+          # Token substitution
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          token-name-validation: ${{ steps.kpm.outputs.TOKEN_NAME_VALIDATION }}
+          token-builtin-mode: ${{ steps.kpm.outputs.TOKEN_BUILTIN_MODE }}
+          config-sub-path: ${{ steps.kpm.outputs.CONFIG_SUB_PATH }}
+          config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+          token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+
+          # Naming, Versions, and Tags calculation
+          release-branch: ${{ steps.kpm.outputs.RELEASE_BRANCH }}
+          additional-release-branches: ${{ steps.kpm.outputs.ADDITIONAL_RELEASE_BRANCHES }}
+          tag-version-max-parts: ${{ steps.kpm.outputs.TAG_VERSION_MAX_PARTS }}
+          tag-version-calculation-strategy: ${{ steps.kpm.outputs.TAG_VERSION_CALCULATION_STRATEGY }}
+          tag-version-pattern-type: ${{ steps.kpm.outputs.TAG_VERSION_PATTERN_TYPE }}
+          tag-version-prefix-parts: ${{ steps.kpm.outputs.TAG_VERSION_PREFIX_PARTS }}
+          tag-version-source-sub-path: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_SUB_PATH }}
+          tag-version-source-file-name: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_FILE_NAME }}
+          tag-version-source-custom-pattern: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_CUSTOM_PATTERN }}
+          tag-version-source-two-sub-path: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_SUB_PATH }}
+          tag-version-source-two-file-name: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_FILE_NAME }}
+          tag-version-source-two-pattern: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_PATTERN }}
+          tag-version-source-two-prefix-parts: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_PREFIX_PARTS }}
+
+          # Quality check options
+          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
+          qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
+          qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
+          qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
+          qc-require-conventional-commits: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_COMMITS }}
+          qc-block-conventional-commits: ${{ steps.kpm.outputs.QC_BLOCK_CONVENTIONAL_COMMITS }}
+
+          # Hook script paths
+          hook-pre-build-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH }}
+          hook-pre-tagging-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH }}
+          hook-pre-docker-prepare-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_DOCKER_PREPARE_SCRIPT_SUB_PATH }}
+          hook-post-docker-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_DOCKER_TESTS_SCRIPT_SUB_PATH }}
+          hook-pre-package-prepare-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH }}
+          hook-post-package-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH }}
+          hook-post-versions-and-naming-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH }}
+          hook-post-build-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH }}
+
+          # GitHub release
+          github-release-enabled: ${{ steps.kpm.outputs.GITHUB_RELEASE_ENABLED }}
+          github-release-substituted-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_SUBSTITUTED_FILES }}
+          github-release-verbatim-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_VERBATIM_FILES }}
+          github-release-notes: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES }}
+          github-release-notes-file: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES_FILE }}
+          github-release-add-version-to-filenames: ${{ steps.kpm.outputs.GITHUB_RELEASE_ADD_VERSION_TO_FILENAMES }}
+
+          # === Step Outputs ===
+          # Version outputs (from versions-and-naming)
+          version: ${{ steps.versions.outputs.version }}
+          version-major: ${{ steps.versions.outputs.version-major }}
+          version-minor: ${{ steps.versions.outputs.version-minor }}
+          version-patch: ${{ steps.versions.outputs.version-patch }}
+          version-2-part: ${{ steps.versions.outputs.version-2-part }}
+          version-3-part: ${{ steps.versions.outputs.version-3-part }}
+          version-4-part: ${{ steps.versions.outputs.version-4-part }}
+          version-dns-safe: ${{ steps.versions.outputs.version-dns-safe }}
+          version-2-part-dns-safe: ${{ steps.versions.outputs.version-2-part-dns-safe }}
+          version-3-part-dns-safe: ${{ steps.versions.outputs.version-3-part-dns-safe }}
+          version-4-part-dns-safe: ${{ steps.versions.outputs.version-4-part-dns-safe }}
+          docker-tag: ${{ steps.versions.outputs.docker-tag }}
+          docker-image-name: ${{ steps.versions.outputs.docker-image-name }}
+          git-tag: ${{ steps.versions.outputs.git-tag }}
+          project-name: ${{ steps.versions.outputs.project-name }}
+          is-release: ${{ steps.versions.outputs.is-release }}
+          # Docker outputs (from docker-build - empty in manifests-only workflows)
+          docker-target-image-full-uri: ${{ steps.docker-build.outputs.docker-target-image-full-uri }}
+      - name: Pass check - Pre-package Prepare
+        if: steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH != '' && success() && steps.check-pre-package-prepare.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-pre-package-prepare.outputs.check-run-id }}
+      - name: Fail check - Pre-package Prepare
+        if: steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH != '' && failure() && steps.check-pre-package-prepare.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-pre-package-prepare.outputs.check-run-id }}
+
+      # --- Environment workload contents ---
+      #
+      # FIRST in an environment build, which is the opposite of the
+      # run-platform order. An environment does not self-include: it is
+      # seeded by a run-platform, so its deployer manifests are applied BY
+      # that run-platform and it has no reason to carry them in its own
+      # content. That leaves the workload contents with no dependency on the
+      # deploy-manifests set at all. A run-platform does self-include, to
+      # seed the cluster with its own deployer, so there the deploy-manifests
+      # set has to come first.
+
+      # === Aggregate Environment ===
+      - name: Start check - Aggregate Environment
+        id: check-run-aggregate
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Aggregate Environment'
+      - name: Aggregate run contents
+        id: run-aggregate
+        uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-aggregate
+        with:
+          project-name: ${{ steps.versions.outputs.project-name }}
+          version: ${{ steps.versions.outputs.version }}
+          local-manifests-sub-path: ${{ steps.kpm.outputs.MANIFESTS_SUB_PATH }}
+          is-release: ${{ steps.versions.outputs.is-release }}
+          clean-up: ${{ steps.kpm.outputs.ENV_CLEAN_UP }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          config-sub-path: ${{ steps.kpm.outputs.CONFIG_SUB_PATH }}
+          config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+          token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+          secrets-sub-path: ${{ steps.kpm.outputs.SECRETS_SUB_PATH }}
+          allow-local-manifests-override: ${{ steps.kpm.outputs.ENV_ALLOW_LOCAL_MANIFESTS_OVERRIDE }}
+          docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+          docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+      - name: Pass check - Aggregate Environment
+        if: success() && steps.check-run-aggregate.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-run-aggregate.outputs.check-run-id }}
+      - name: Fail check - Aggregate Environment
+        if: failure() && steps.check-run-aggregate.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-run-aggregate.outputs.check-run-id }}
+
+      # === Substitute Run Aggregate ===
+      - name: Start check - Substitute Run Aggregate
+        id: check-run-substitute
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Substitute Run Aggregate'
+      - name: Substitute run aggregate
+        id: run-substitute
+        uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-substitute
+        with:
+          project-name: ${{ steps.versions.outputs.project-name }}
+          environment-short-name: ${{ steps.run-aggregate.outputs.environment-short-name }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          config-sub-path: ${{ steps.kpm.outputs.CONFIG_SUB_PATH }}
+          config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+          token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+          secrets-sub-path: ${{ steps.kpm.outputs.SECRETS_SUB_PATH }}
+          fail-on-unreferenced-config-or-secrets: ${{ steps.kpm.outputs.ENV_FAIL_ON_UNREFERENCED_CONFIG_OR_SECRETS }}
+      - name: Pass check - Substitute Run Aggregate
+        if: success() && steps.check-run-substitute.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-run-substitute.outputs.check-run-id }}
+      - name: Fail check - Substitute Run Aggregate
+        if: failure() && steps.check-run-substitute.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-run-substitute.outputs.check-run-id }}
+
+      # === Finalise Workload Tree ===
+      - name: Start check - Finalise Workload Tree
+        id: check-run-finalise
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Finalise Workload Tree'
+      - name: Finalise run workload tree
+        id: run-finalise
+        uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-finalise
+        with:
+          project-name: ${{ steps.versions.outputs.project-name }}
+          version: ${{ steps.versions.outputs.version }}
+          environment-workload-contents-sub-path: ${{ steps.run-substitute.outputs.environment-workload-contents-sub-path }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          secrets-sub-path: ${{ steps.kpm.outputs.SECRETS_SUB_PATH }}
+          signoffs-sub-path: ${{ steps.kpm.outputs.MANIFESTS_SIGNOFFS_SUB_PATH }}
+          signoffs-kinds-file: ${{ steps.kpm.outputs.MANIFESTS_SIGNOFFS_KINDS_FILE }}
+          trusted-contributors-only: ${{ steps.kpm.outputs.MANIFESTS_TRUSTED_CONTRIBUTORS_ONLY }}
+          checksum-length: ${{ steps.kpm.outputs.RESOURCE_CHECKSUM_LENGTH }}
+          checksum-order-file: ${{ steps.kpm.outputs.MANIFESTS_CHECKSUM_ORDER_FILE }}
+          checksum-secrets-timing: ${{ steps.kpm.outputs.ENV_CHECKSUM_SECRETS_TIMING }}
+      - name: Pass check - Finalise Workload Tree
+        if: success() && steps.check-run-finalise.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-run-finalise.outputs.check-run-id }}
+      - name: Fail check - Finalise Workload Tree
+        if: failure() && steps.check-run-finalise.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-run-finalise.outputs.check-run-id }}
+
+      # === Consumption Report ===
+      - name: Start check - Consumption Report
+        id: check-run-consumption-report
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Consumption Report'
+      - name: Generate consumption report
+        id: run-consumption-report
+        uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-consumption-report
+        with:
+          project-name: ${{ steps.versions.outputs.project-name }}
+          version: ${{ steps.versions.outputs.version }}
+          environment-workload-contents-sub-path: ${{ steps.run-substitute.outputs.environment-workload-contents-sub-path }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+      - name: Pass check - Consumption Report
+        if: success() && steps.check-run-consumption-report.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-run-consumption-report.outputs.check-run-id }}
+      - name: Fail check - Consumption Report
+        if: failure() && steps.check-run-consumption-report.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-run-consumption-report.outputs.check-run-id }}
+
+      # === Environment Record Lineage Data ===
+      - name: Start check - Environment Record Lineage Data
+        id: check-run-record-lineage
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Environment Record Lineage Data'
+      # The run's ENVIRONMENT RECORD lineage pass (the second of the two - the
+      # inner app record ran inside the deploy-manifests block). Direct stock
+      # invocation with no env-build-section: for the run build kinds an unset
+      # section defaults to the record flavour.
+      - name: Generate environment record lineage data ConfigMap
+        id: run-record-lineage-data-generate
+        uses: ./.github/buildon-github-actions/src/actions/kubernetes-lineage-data-generate
+        with:
+          project-name: ${{ steps.versions.outputs.project-name }}
+          version: ${{ steps.versions.outputs.version }}
+          build-kind: kubernetes-run-environment
+          git-sha: ${{ github.sha }}
+          environment-workload-contents-sub-path: ${{ steps.run-substitute.outputs.environment-workload-contents-sub-path }}
+          environment-workload-contents-config-sub-path: ${{ steps.run-substitute.outputs.environment-workload-contents-config-sub-path }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+          token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+      - name: Pass check - Environment Record Lineage Data
+        if: success() && steps.check-run-record-lineage.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-run-record-lineage.outputs.check-run-id }}
+      - name: Fail check - Environment Record Lineage Data
+        if: failure() && steps.check-run-record-lineage.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-run-record-lineage.outputs.check-run-id }}
+
+      # === Package Run ===
+      - name: Start check - Package Run
+        id: check-run-package
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Package Run'
+      - name: Package run
+        id: run-package
+        uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-package
+        with:
+          project-name: ${{ steps.versions.outputs.project-name }}
+          version: ${{ steps.versions.outputs.version }}
+          environment-workload-contents-sub-path: ${{ steps.run-substitute.outputs.environment-workload-contents-sub-path }}
+          environment-workload-contents-config-sub-path: ${{ steps.run-substitute.outputs.environment-workload-contents-config-sub-path }}
+          docker-image-name: ${{ steps.versions.outputs.docker-image-name }}
+          docker-tag: ${{ steps.versions.outputs.docker-tag }}
+          docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
+          docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+          docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+          docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          secrets-sub-path: ${{ steps.kpm.outputs.SECRETS_SUB_PATH }}
+          env-deploy-mode: ${{ steps.kpm.outputs.ENV_DEPLOY_MODE }}
+          cluster-scoped-delegation: ${{ steps.kpm.outputs.ENV_CLUSTER_SCOPED_DELEGATION }}
+          cluster-scoped-kinds-file: ${{ steps.kpm.outputs.MANIFESTS_CLUSTER_SCOPED_KINDS_FILE }}
+          env-deploy-base-image-registry: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_REGISTRY }}
+          env-deploy-base-image-include-namespace: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_INCLUDE_NAMESPACE }}
+          env-deploy-base-image-namespace: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_NAMESPACE }}
+          env-deploy-base-image-family: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_FAMILY }}
+          env-deploy-base-image-version: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_VERSION }}
+      - name: Pass check - Package Run
+        if: success() && steps.check-run-package.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-run-package.outputs.check-run-id }}
+      - name: Fail check - Package Run
+        if: failure() && steps.check-run-package.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-run-package.outputs.check-run-id }}
+
+      # === Validate Deploy Image ===
+      - name: Start check - Validate Deploy Image
+        id: check-run-deploy-image-validate
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Validate Deploy Image'
+      - name: Validate deploy image
+        id: run-deploy-image-validate
+        uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-deploy-image-validate
+        with:
+          run-deploy-image-uri: ${{ steps.run-package.outputs.run-deploy-image-uri }}
+          docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+      - name: Pass check - Validate Deploy Image
+        if: success() && steps.check-run-deploy-image-validate.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-run-deploy-image-validate.outputs.check-run-id }}
+      - name: Fail check - Validate Deploy Image
+        if: failure() && steps.check-run-deploy-image-validate.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-run-deploy-image-validate.outputs.check-run-id }}
+
+      # --- Deploy-manifests set ---
+      #
+      # LAST in an environment build: the manifests image also carries the
+      # delegated cluster-scoped zip, which only exists once run-package has
+      # carved it out. The run-platform workflow runs this block first - it
+      # never delegates upwards, so it has nothing to wait for.
+      # === Stage Deploy-Image Manifests ===
+      - name: Start check - Stage Deploy-Image Manifests
+        id: check-run-idm
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Stage Deploy-Image Manifests'
+      - name: Stage deploy-image manifests
+        id: run-image-deploy-manifests
+        uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-image-deploy-manifests
+        with:
+          project-name: ${{ steps.versions.outputs.project-name }}
+          version: ${{ steps.versions.outputs.version }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          env-deploy-source-base-path: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH }}
+          generate-ideal-environment-deploy-manifests: ${{ steps.kpm.outputs.ENV_GENERATE_IDEAL_ENVIRONMENT_DEPLOY_MANIFESTS }}
+          image-deploy-manifests-apply-mode: ${{ steps.kpm.outputs.ENV_IMAGE_DEPLOY_MANIFESTS_APPLY_MODE }}
+          env-deploy-mode: ${{ steps.kpm.outputs.ENV_DEPLOY_MODE }}
+          image-auto-update-provider: ${{ steps.kpm.outputs.ENV_IMAGE_AUTO_UPDATE_PROVIDER }}
+          image-auto-update-policy: ${{ steps.kpm.outputs.ENV_IMAGE_AUTO_UPDATE_POLICY }}
+          image-auto-update-trigger: ${{ steps.kpm.outputs.ENV_IMAGE_AUTO_UPDATE_TRIGGER }}
+          image-auto-update-poll-schedule: ${{ steps.kpm.outputs.ENV_IMAGE_AUTO_UPDATE_POLL_SCHEDULE }}
+          image-auto-update-field-manager-strategy: ${{ steps.kpm.outputs.ENV_IMAGE_AUTO_UPDATE_FIELD_MANAGER_STRATEGY }}
+          cluster-scoped-delegation: ${{ steps.kpm.outputs.ENV_CLUSTER_SCOPED_DELEGATION }}
+      - name: Pass check - Stage Deploy-Image Manifests
+        if: success() && steps.check-run-idm.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-run-idm.outputs.check-run-id }}
+      - name: Fail check - Stage Deploy-Image Manifests
+        if: failure() && steps.check-run-idm.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-run-idm.outputs.check-run-id }}
+
+      # === Prepare Deploy-Manifests ===
+      - name: Start check - Prepare Deploy-Manifests
+        id: check-run-idm-package-prepare
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Prepare Deploy-Manifests'
+      - name: Prepare deploy-manifests for packaging
+        id: run-idm-package-prepare
+        uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-image-deploy-manifests-package-prepare
+        with:
+          project-name: ${{ steps.versions.outputs.project-name }}
+          version: ${{ steps.versions.outputs.version }}
+          version-major: ${{ steps.versions.outputs.version-major }}
+          version-minor: ${{ steps.versions.outputs.version-minor }}
+          version-patch: ${{ steps.versions.outputs.version-patch }}
+          version-2-part: ${{ steps.versions.outputs.version-2-part }}
+          version-3-part: ${{ steps.versions.outputs.version-3-part }}
+          version-4-part: ${{ steps.versions.outputs.version-4-part }}
+          version-dns-safe: ${{ steps.versions.outputs.version-dns-safe }}
+          version-2-part-dns-safe: ${{ steps.versions.outputs.version-2-part-dns-safe }}
+          version-3-part-dns-safe: ${{ steps.versions.outputs.version-3-part-dns-safe }}
+          version-4-part-dns-safe: ${{ steps.versions.outputs.version-4-part-dns-safe }}
+          git-tag: ${{ steps.versions.outputs.git-tag }}
+          docker-tag: ${{ steps.versions.outputs.docker-tag }}
+          docker-image-name: ${{ steps.versions.outputs.docker-image-name }}
+          docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+          docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+          is-release: ${{ steps.versions.outputs.is-release }}
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          token-name-validation: ${{ steps.kpm.outputs.TOKEN_NAME_VALIDATION }}
+          allow-builtin-token-override: ${{ steps.kpm.outputs.ALLOW_BUILTIN_TOKEN_OVERRIDE }}
+          config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+          token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          env-deploy-source-base-path: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH }}
+      - name: Pass check - Prepare Deploy-Manifests
+        if: success() && steps.check-run-idm-package-prepare.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-run-idm-package-prepare.outputs.check-run-id }}
+      - name: Fail check - Prepare Deploy-Manifests
+        if: failure() && steps.check-run-idm-package-prepare.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-run-idm-package-prepare.outputs.check-run-id }}
+
+      # === Substitute Deploy-Manifests ===
+      - name: Start check - Substitute Deploy-Manifests
+        id: check-run-idm-substitute
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Substitute Deploy-Manifests'
+      - name: Substitute deploy-manifests
+        id: run-idm-substitute
+        uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-image-deploy-manifests-substitute
+        with:
+          project-name: ${{ steps.versions.outputs.project-name }}
+          version: ${{ steps.versions.outputs.version }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+          token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+          env-deploy-source-base-path: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH }}
+      - name: Pass check - Substitute Deploy-Manifests
+        if: success() && steps.check-run-idm-substitute.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-run-idm-substitute.outputs.check-run-id }}
+      - name: Fail check - Substitute Deploy-Manifests
+        if: failure() && steps.check-run-idm-substitute.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-run-idm-substitute.outputs.check-run-id }}
+
+      # === Generate Deploy-Manifests Contract ===
+      - name: Start check - Generate Deploy-Manifests Contract
+        id: check-run-idm-contract
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Generate Deploy-Manifests Contract'
+      - name: Generate deploy-manifests contract
+        id: run-idm-contract-generate
+        uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-image-deploy-manifests-contract-generate
+        with:
+          project-name: ${{ steps.versions.outputs.project-name }}
+          version: ${{ steps.versions.outputs.version }}
+          build-kind: kubernetes-run-environment
+          metadata-description: ${{ steps.kpm.outputs.METADATA_DESCRIPTION }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          env-deploy-source-base-path: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH }}
+      - name: Pass check - Generate Deploy-Manifests Contract
+        if: success() && steps.check-run-idm-contract.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-run-idm-contract.outputs.check-run-id }}
+      - name: Fail check - Generate Deploy-Manifests Contract
+        if: failure() && steps.check-run-idm-contract.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-run-idm-contract.outputs.check-run-id }}
+
+      # === Generate Deploy-Manifests Lineage Data ===
+      - name: Start check - Generate Deploy-Manifests Lineage Data
+        id: check-run-idm-lineage
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Generate Deploy-Manifests Lineage Data'
+      - name: Generate deploy-manifests lineage data ConfigMap
+        id: run-idm-lineage-data-generate
+        uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-image-deploy-manifests-lineage-data-generate
+        with:
+          project-name: ${{ steps.versions.outputs.project-name }}
+          version: ${{ steps.versions.outputs.version }}
+          build-kind: kubernetes-run-environment
+          git-sha: ${{ github.sha }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+          token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+          env-deploy-source-base-path: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH }}
+      - name: Pass check - Generate Deploy-Manifests Lineage Data
+        if: success() && steps.check-run-idm-lineage.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-run-idm-lineage.outputs.check-run-id }}
+      - name: Fail check - Generate Deploy-Manifests Lineage Data
+        if: failure() && steps.check-run-idm-lineage.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-run-idm-lineage.outputs.check-run-id }}
+
+      # === Package Deploy-Manifests ===
+      - name: Start check - Package Deploy-Manifests
+        id: check-run-idm-package
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Package Deploy-Manifests'
+      - name: Package deploy-manifests
+        id: run-idm-package
+        uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-image-deploy-manifests-package
+        with:
+          project-name: ${{ steps.versions.outputs.project-name }}
+          version: ${{ steps.versions.outputs.version }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          env-deploy-source-base-path: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH }}
+      - name: Pass check - Package Deploy-Manifests
+        if: success() && steps.check-run-idm-package.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-run-idm-package.outputs.check-run-id }}
+      - name: Fail check - Package Deploy-Manifests
+        if: failure() && steps.check-run-idm-package.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-run-idm-package.outputs.check-run-id }}
+
+      # === Package Deploy-Manifests for Repo Provider ===
+      - name: Start check - Package Deploy-Manifests for Repo Provider
+        id: check-run-idm-repo-provider-package
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Package Deploy-Manifests for Repo Provider'
+      # id manifest-repo-provider-package on purpose: the shared
+      # manifest-repo-provider-publish block references that id, so the stock
+      # publish step works unchanged in the run workflows.
+      - name: Package deploy-manifests for repo provider
+        id: manifest-repo-provider-package
+        uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-image-deploy-manifests-repo-provider-package
+        with:
+          project-name: ${{ steps.versions.outputs.project-name }}
+          version: ${{ steps.versions.outputs.version }}
+          manifests-zip-sub-path: ${{ steps.run-idm-package.outputs.manifests-zip-sub-path }}
+          manifests-zip-file-name: ${{ steps.run-idm-package.outputs.manifests-zip-file-name }}
+          contract-zip-sub-path: ${{ steps.run-idm-contract-generate.outputs.contract-zip-sub-path }}
+          contract-zip-file-name: ${{ steps.run-idm-contract-generate.outputs.contract-zip-file-name }}
+          # Env workflow only: this block is injected AFTER run-package there, so
+          # the delegated zip exists. The run-platform workflow injects it in
+          # deploy-manifests order where run-package has not run yet, which
+          # empty - correct, since an RP never delegates upwards.
+          cluster-scoped-on-behalf-zip-file: ${{ steps.run-package.outputs.run-cluster-scoped-on-behalf-zip-file }}
+          docker-image-name: ${{ steps.versions.outputs.docker-image-name }}
+          docker-tag: ${{ steps.versions.outputs.docker-tag }}
+          docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+          docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+          docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
+          manifests-repo-provider-type: ${{ steps.kpm.outputs.MANIFESTS_REPO_PROVIDER_TYPE }}
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          env-deploy-source-base-path: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH }}
+      - name: Pass check - Package Deploy-Manifests for Repo Provider
+        if: success() && steps.check-run-idm-repo-provider-package.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-run-idm-repo-provider-package.outputs.check-run-id }}
+      - name: Fail check - Package Deploy-Manifests for Repo Provider
+        if: failure() && steps.check-run-idm-repo-provider-package.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-run-idm-repo-provider-package.outputs.check-run-id }}
+
+      # === Post-package Tests ===
+      - name: Start check - Post-package Tests
+        if: steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH != '' && success()
+        id: check-post-package
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Post-package Tests'
+      - name: Run post-package tests
+        if: steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH != '' && success()
+        id: post-package-tests
+        uses: ./.github/buildon-github-actions/src/actions/hook-post-package-tests
+        with:
+          build-kind: kubernetes-run-environment
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
+          build-scripts-repo-root: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
+          docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
+          # === Workflow Inputs ===
+          # Build output
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
+
+          # Docker registry logins
+          docker-registry-logins: ${{ steps.kpm.outputs.DOCKER_REGISTRY_LOGINS }}
+          # Docker build options
+          dockerfile-sub-path: ${{ steps.kpm.outputs.DOCKERFILE_SUB_PATH }}
+          dockerfile-squash: ${{ steps.kpm.outputs.DOCKERFILE_SQUASH }}
+          dockerfile-no-cache: ${{ steps.kpm.outputs.DOCKERFILE_NO_CACHE }}
+          # Docker target config (from early resolver)
+          docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+          docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+          # Docker push targets
+          docker-push-targets: ${{ steps.kpm.outputs.DOCKER_PUSH_TARGETS }}
+
+          # Manifests source
+          manifests-sub-path: ${{ steps.kpm.outputs.MANIFESTS_SUB_PATH }}
+          # Manifests packaging
+          manifests-repo-provider-type: ${{ steps.kpm.outputs.MANIFESTS_REPO_PROVIDER_TYPE }}
+          manifests-packaging-base-image: ${{ steps.kpm.outputs.MANIFESTS_PACKAGING_BASE_IMAGE }}
+
+          # Kubernetes Generation
+          kubernetes-global-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_GLOBAL_ADDITIONAL_LABELS }}
+          kubernetes-global-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_GLOBAL_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes ConfigMap Generation
+          kubernetes-configmap-sub-path: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_SUB_PATH }}
+          kubernetes-configmap-name-checksum-injection: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_NAME_CHECKSUM_INJECTION }}
+          kubernetes-configmap-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_ADDITIONAL_LABELS }}
+          kubernetes-configmap-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes Secret template generation
+          kubernetes-secret-template-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_SUB_PATH }}
+          kubernetes-secret-template-name-checksum-injection: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_NAME_CHECKSUM_INJECTION }}
+          kubernetes-secret-template-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_ADDITIONAL_LABELS }}
+          kubernetes-secret-template-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes ServiceAccount generation
+          kubernetes-serviceaccount-generation-enabled: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_GENERATION_ENABLED }}
+          kubernetes-serviceaccount-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_NAME_SUFFIX }}
+          kubernetes-serviceaccount-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_COMBINED_SUB_PATH }}
+          kubernetes-serviceaccount-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_ADDITIONAL_LABELS }}
+          kubernetes-serviceaccount-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes Workload generation
+          kubernetes-workload-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_TYPE }}
+          kubernetes-workload-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_NAME_SUFFIX }}
+          kubernetes-workload-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_COMBINED_SUB_PATH }}
+          kubernetes-workload-env-sub-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ENV_SUB_PATH }}
+          kubernetes-workload-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ADDITIONAL_LABELS }}
+          kubernetes-workload-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ADDITIONAL_ANNOTATIONS }}
+          kubernetes-workload-container-port: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_CONTAINER_PORT }}
+          kubernetes-workload-image-reference-style: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_IMAGE_REFERENCE_STYLE }}
+          kubernetes-workload-readonly-root-filesystem: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_READONLY_ROOT_FILESYSTEM }}
+          kubernetes-workload-seccomp-profile: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_SECCOMP_PROFILE }}
+          kubernetes-workload-automount-service-account-token: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_AUTOMOUNT_SERVICE_ACCOUNT_TOKEN }}
+          kubernetes-workload-image-pull-secrets: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_IMAGE_PULL_SECRETS }}
+          kubernetes-workload-resources-memory: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_MEMORY }}
+          kubernetes-workload-resources-cpu-request: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_CPU_REQUEST }}
+          kubernetes-workload-resources-cpu-limit: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_CPU_LIMIT }}
+          kubernetes-workload-configmap-mount-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_CONFIGMAP_MOUNT_PATH }}
+          kubernetes-workload-secret-mount-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_SECRET_MOUNT_PATH }}
+          kubernetes-workload-termination-grace-period-seconds: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_TERMINATION_GRACE_PERIOD_SECONDS }}
+          kubernetes-workload-prestop-command: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PRESTOP_COMMAND }}
+          kubernetes-workload-affinity-strategy: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_AFFINITY_STRATEGY }}
+          kubernetes-workload-probe-liveness-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_CHECK_TYPE }}
+          kubernetes-workload-probe-readiness-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_CHECK_TYPE }}
+          kubernetes-workload-probe-startup-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_CHECK_TYPE }}
+          kubernetes-workload-probe-liveness-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_HTTP_PATH }}
+          kubernetes-workload-probe-readiness-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_HTTP_PATH }}
+          kubernetes-workload-probe-startup-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_HTTP_PATH }}
+          kubernetes-workload-replicas: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_REPLICAS }}
+          kubernetes-workload-revision-history-limit: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_REVISION_HISTORY_LIMIT }}
+          # Kubernetes Service generation
+          kubernetes-service-generation-enabled: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_GENERATION_ENABLED }}
+          kubernetes-service-type: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_TYPE }}
+          kubernetes-service-port: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_PORT }}
+          kubernetes-service-target-port: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_TARGET_PORT }}
+          kubernetes-service-protocol: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_PROTOCOL }}
+          kubernetes-service-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_NAME_SUFFIX }}
+          kubernetes-service-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_COMBINED_SUB_PATH }}
+          kubernetes-service-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_ADDITIONAL_LABELS }}
+          kubernetes-service-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_ADDITIONAL_ANNOTATIONS }}
+
+          # Token substitution
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          token-name-validation: ${{ steps.kpm.outputs.TOKEN_NAME_VALIDATION }}
+          token-builtin-mode: ${{ steps.kpm.outputs.TOKEN_BUILTIN_MODE }}
+          config-sub-path: ${{ steps.kpm.outputs.CONFIG_SUB_PATH }}
+          config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+          token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+
+          # Naming, Versions, and Tags calculation
+          release-branch: ${{ steps.kpm.outputs.RELEASE_BRANCH }}
+          additional-release-branches: ${{ steps.kpm.outputs.ADDITIONAL_RELEASE_BRANCHES }}
+          tag-version-max-parts: ${{ steps.kpm.outputs.TAG_VERSION_MAX_PARTS }}
+          tag-version-calculation-strategy: ${{ steps.kpm.outputs.TAG_VERSION_CALCULATION_STRATEGY }}
+          tag-version-pattern-type: ${{ steps.kpm.outputs.TAG_VERSION_PATTERN_TYPE }}
+          tag-version-prefix-parts: ${{ steps.kpm.outputs.TAG_VERSION_PREFIX_PARTS }}
+          tag-version-source-sub-path: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_SUB_PATH }}
+          tag-version-source-file-name: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_FILE_NAME }}
+          tag-version-source-custom-pattern: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_CUSTOM_PATTERN }}
+          tag-version-source-two-sub-path: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_SUB_PATH }}
+          tag-version-source-two-file-name: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_FILE_NAME }}
+          tag-version-source-two-pattern: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_PATTERN }}
+          tag-version-source-two-prefix-parts: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_PREFIX_PARTS }}
+
+          # Quality check options
+          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
+          qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
+          qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
+          qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
+          qc-require-conventional-commits: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_COMMITS }}
+          qc-block-conventional-commits: ${{ steps.kpm.outputs.QC_BLOCK_CONVENTIONAL_COMMITS }}
+
+          # Hook script paths
+          hook-pre-build-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH }}
+          hook-pre-tagging-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH }}
+          hook-pre-docker-prepare-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_DOCKER_PREPARE_SCRIPT_SUB_PATH }}
+          hook-post-docker-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_DOCKER_TESTS_SCRIPT_SUB_PATH }}
+          hook-pre-package-prepare-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH }}
+          hook-post-package-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH }}
+          hook-post-versions-and-naming-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH }}
+          hook-post-build-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH }}
+
+          # GitHub release
+          github-release-enabled: ${{ steps.kpm.outputs.GITHUB_RELEASE_ENABLED }}
+          github-release-substituted-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_SUBSTITUTED_FILES }}
+          github-release-verbatim-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_VERBATIM_FILES }}
+          github-release-notes: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES }}
+          github-release-notes-file: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES_FILE }}
+          github-release-add-version-to-filenames: ${{ steps.kpm.outputs.GITHUB_RELEASE_ADD_VERSION_TO_FILENAMES }}
+
+          # === Step Outputs ===
+          # Version outputs (from versions-and-naming)
+          version: ${{ steps.versions.outputs.version }}
+          version-major: ${{ steps.versions.outputs.version-major }}
+          version-minor: ${{ steps.versions.outputs.version-minor }}
+          version-patch: ${{ steps.versions.outputs.version-patch }}
+          version-2-part: ${{ steps.versions.outputs.version-2-part }}
+          version-3-part: ${{ steps.versions.outputs.version-3-part }}
+          version-4-part: ${{ steps.versions.outputs.version-4-part }}
+          version-dns-safe: ${{ steps.versions.outputs.version-dns-safe }}
+          version-2-part-dns-safe: ${{ steps.versions.outputs.version-2-part-dns-safe }}
+          version-3-part-dns-safe: ${{ steps.versions.outputs.version-3-part-dns-safe }}
+          version-4-part-dns-safe: ${{ steps.versions.outputs.version-4-part-dns-safe }}
+          docker-tag: ${{ steps.versions.outputs.docker-tag }}
+          docker-image-name: ${{ steps.versions.outputs.docker-image-name }}
+          git-tag: ${{ steps.versions.outputs.git-tag }}
+          project-name: ${{ steps.versions.outputs.project-name }}
+          is-release: ${{ steps.versions.outputs.is-release }}
+          # Docker outputs (from docker-build - empty in manifests-only workflows)
+          docker-target-image-full-uri: ${{ steps.docker-build.outputs.docker-target-image-full-uri }}
+          # Manifest outputs (from manifest-package)
+          manifests-zip-file-name: ${{ steps.manifest-package.outputs.manifests-zip-file-name }}
+          # Manifest repo provider outputs (from manifest-repo-provider-package)
+          manifests-uri: ${{ steps.manifest-repo-provider-package.outputs.manifests-uri }}
+      - name: Pass check - Post-package Tests
+        if: steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH != '' && success() && steps.check-post-package.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-post-package.outputs.check-run-id }}
+      - name: Fail check - Post-package Tests
+        if: steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH != '' && failure() && steps.check-post-package.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-post-package.outputs.check-run-id }}
+
+      # === Docker Multi-Tag ===
+      - name: Start check - Docker Multi-Tag
+        if: steps.kpm.outputs.DOCKER_PUSH_TARGETS != '' && success()
+        id: check-docker-multi-tag
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Docker Multi-Tag'
+      - name: Tag images for additional registries
+        id: docker-multi-tag
+        if: steps.kpm.outputs.DOCKER_PUSH_TARGETS != '' && success()
+        uses: ./.github/buildon-github-actions/src/actions/docker-multi-tag
+        with:
+          docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
+          docker-push-targets: ${{ steps.kpm.outputs.DOCKER_PUSH_TARGETS }}
+          docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+          docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+      - name: Pass check - Docker Multi-Tag
+        if: steps.kpm.outputs.DOCKER_PUSH_TARGETS != '' && success() && steps.check-docker-multi-tag.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-docker-multi-tag.outputs.check-run-id }}
+      - name: Fail check - Docker Multi-Tag
+        if: steps.kpm.outputs.DOCKER_PUSH_TARGETS != '' && failure() && steps.check-docker-multi-tag.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-docker-multi-tag.outputs.check-run-id }}
+
+      # === GitHub Release Prepare ===
+      - name: Start check - GitHub Release Prepare
+        if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && success()
+        id: check-github-release-prepare
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → GitHub Release Prepare'
+      - name: Resolve internal release files
+        id: resolve-internal-release-files
+        if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && success()
+        shell: bash
+        run: |
+          echo "verbatim-files=" >> "${GITHUB_OUTPUT}"
+          echo "substituted-files=" >> "${GITHUB_OUTPUT}"
+          echo "raw-files=" >> "${GITHUB_OUTPUT}"
+
+      - name: Prepare release files
+        id: github-release-prepare
+        if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && success()
+        uses: ./.github/buildon-github-actions/src/actions/github-release-prepare
+        with:
+          github-release-substituted-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_SUBSTITUTED_FILES }}
+          github-release-verbatim-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_VERBATIM_FILES }}
+          github-release-raw-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_RAW_FILES }}
+          internal-verbatim-files: >-
+            ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}/release-change-data/release-change-data.yaml,
+            ${{ steps.resolve-internal-release-files.outputs.verbatim-files }}
+          internal-substituted-files: ${{ steps.resolve-internal-release-files.outputs.substituted-files }}
+          internal-raw-files: >-
+            ${{ steps.run-package.outputs.run-contents-zip-file }},
+            ${{ steps.run-package.outputs.run-consumption-report-zip-file }},
+            ${{ steps.run-idm-package.outputs.manifests-zip-sub-path }}/${{ steps.run-idm-package.outputs.manifests-zip-file-name }},
+            ${{ steps.run-idm-contract-generate.outputs.contract-zip-sub-path }}/${{ steps.run-idm-contract-generate.outputs.contract-zip-file-name }},
+            ${{ steps.resolve-internal-release-files.outputs.raw-files }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          version: ${{ steps.versions.outputs.version }}
+          version-major: ${{ steps.versions.outputs.version-major }}
+          version-minor: ${{ steps.versions.outputs.version-minor }}
+          version-patch: ${{ steps.versions.outputs.version-patch }}
+          version-2-part: ${{ steps.versions.outputs.version-2-part }}
+          version-3-part: ${{ steps.versions.outputs.version-3-part }}
+          version-4-part: ${{ steps.versions.outputs.version-4-part }}
+          version-dns-safe: ${{ steps.versions.outputs.version-dns-safe }}
+          version-2-part-dns-safe: ${{ steps.versions.outputs.version-2-part-dns-safe }}
+          version-3-part-dns-safe: ${{ steps.versions.outputs.version-3-part-dns-safe }}
+          version-4-part-dns-safe: ${{ steps.versions.outputs.version-4-part-dns-safe }}
+          git-tag: ${{ steps.versions.outputs.git-tag }}
+          project-name: ${{ steps.versions.outputs.project-name }}
+          docker-tag: ${{ steps.versions.outputs.docker-tag }}
+          docker-image-name: ${{ steps.versions.outputs.docker-image-name }}
+          is-release: ${{ steps.versions.outputs.is-release }}
+          github-release-add-version-to-filenames: ${{ steps.kpm.outputs.GITHUB_RELEASE_ADD_VERSION_TO_FILENAMES }}
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          token-name-validation: ${{ steps.kpm.outputs.TOKEN_NAME_VALIDATION }}
+          config-sub-path: ${{ steps.kpm.outputs.CONFIG_SUB_PATH }}
+          allow-builtin-token-override: ${{ steps.kpm.outputs.ALLOW_BUILTIN_TOKEN_OVERRIDE }}
+          config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+          token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+          docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+          docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+          manifests-zip-file-name: ${{ steps.run-idm-package.outputs.manifests-zip-file-name }}
+      - name: Pass check - GitHub Release Prepare
+        if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && success() && steps.check-github-release-prepare.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-github-release-prepare.outputs.check-run-id }}
+      - name: Fail check - GitHub Release Prepare
+        if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && failure() && steps.check-github-release-prepare.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-github-release-prepare.outputs.check-run-id }}
+
+      # === Git Tag Push ===
+      - name: Start check - Git Tag Push
+        if: steps.versions.outputs.is-release == 'true' && success()
+        id: check-git-push-tag
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Git Tag Push'
+      - name: Push git tag
+        if: steps.versions.outputs.is-release == 'true' && success()
+        uses: ./.github/buildon-github-actions/src/actions/git-push-tag
+        with:
+          git-tag: ${{ steps.versions.outputs.git-tag }}
+          is-release: ${{ steps.versions.outputs.is-release }}
+      - name: Pass check - Git Tag Push
+        if: steps.versions.outputs.is-release == 'true' && success() && steps.check-git-push-tag.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-git-push-tag.outputs.check-run-id }}
+      - name: Fail check - Git Tag Push
+        if: steps.versions.outputs.is-release == 'true' && failure() && steps.check-git-push-tag.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-git-push-tag.outputs.check-run-id }}
+
+      # === Manifest Repo Provider Publish ===
+      - name: Start check - Publish Deploy-Manifests via Repo Provider
+        if: steps.versions.outputs.is-release == 'true' && success()
+        id: check-manifest-repo-provider-publish
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Publish Deploy-Manifests via Repo Provider'
+      - name: Publish manifests via repo provider
+        id: manifest-repo-provider-publish
+        if: steps.versions.outputs.is-release == 'true' && success()
+        uses: ./.github/buildon-github-actions/src/actions/kubernetes-manifests-repo-provider-publish
+        with:
+          manifests-repo-provider-type: ${{ steps.kpm.outputs.MANIFESTS_REPO_PROVIDER_TYPE }}
+          manifests-uri: ${{ steps.manifest-repo-provider-package.outputs.manifests-uri }}
+          manifests-zip-sub-path: ${{ steps.manifest-repo-provider-package.outputs.manifests-zip-sub-path }}
+          manifests-zip-file-name: ${{ steps.manifest-repo-provider-package.outputs.manifests-zip-file-name }}
+          version: ${{ steps.manifest-repo-provider-package.outputs.version }}
+          is-release: ${{ steps.versions.outputs.is-release }}
+          repo-provider-url: ${{ steps.manifest-repo-provider-package.outputs.repo-provider-url }}
+          repo-provider-namespace: ${{ steps.manifest-repo-provider-package.outputs.repo-provider-namespace }}
+          repo-provider-name: ${{ steps.manifest-repo-provider-package.outputs.repo-provider-name }}
+          repo-provider-version: ${{ steps.manifest-repo-provider-package.outputs.repo-provider-version }}
+      - name: Pass check - Publish Deploy-Manifests via Repo Provider
+        if: steps.versions.outputs.is-release == 'true' && success() && steps.check-manifest-repo-provider-publish.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-manifest-repo-provider-publish.outputs.check-run-id }}
+      - name: Fail check - Publish Deploy-Manifests via Repo Provider
+        if: steps.versions.outputs.is-release == 'true' && failure() && steps.check-manifest-repo-provider-publish.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-manifest-repo-provider-publish.outputs.check-run-id }}
+
+      # === Docker Push All ===
+      - name: Start check - Docker Push All
+        if: steps.versions.outputs.is-release == 'true' && success()
+        id: check-docker-push-all
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Docker Push All'
+      - name: Push all images
+        id: docker-push-all
+        if: steps.versions.outputs.is-release == 'true' && success()
+        uses: ./.github/buildon-github-actions/src/actions/docker-push-all
+        with:
+          docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
+          is-release: ${{ steps.versions.outputs.is-release }}
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
+      - name: Pass check - Docker Push All
+        if: steps.versions.outputs.is-release == 'true' && success() && steps.check-docker-push-all.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-docker-push-all.outputs.check-run-id }}
+      - name: Fail check - Docker Push All
+        if: steps.versions.outputs.is-release == 'true' && failure() && steps.check-docker-push-all.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-docker-push-all.outputs.check-run-id }}
+
+      # === GitHub Release ===
+      - name: Start check - GitHub Release
+        if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true' && success()
+        id: check-github-release
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → GitHub Release'
+      - name: Compute release notes
+        id: release-notes
+        if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true' && success()
+        shell: bash
+        env:
+          BUILD_MODE: build_server
+          BUILD_PLATFORM: github-actions
+          BUILD_PLATFORM_LOG_PROVIDER: github-actions
+          USER_NOTES: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES }}
+          USER_NOTES_FILE: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES_FILE }}
+          VERSION: ${{ steps.versions.outputs.version }}
+          PROJECT_NAME: ${{ steps.versions.outputs.project-name }}
+          RUN_DEPLOY_IMAGE_URI: ${{ steps.run-package.outputs.run-deploy-image-uri }}
+          RUN_ARTIFACTS_IMAGE_URI: ${{ steps.run-package.outputs.run-artifacts-image-uri }}
+          RUN_CONTENTS_ZIP_FILE: ${{ steps.run-package.outputs.run-contents-zip-file }}
+          RUN_CONSUMPTION_REPORT_ZIP_FILE: ${{ steps.run-package.outputs.run-consumption-report-zip-file }}
+          MANIFESTS_URI: ${{ steps.manifest-repo-provider-publish.outputs.manifests-uri }}
+          MANIFESTS_ZIP_FILE_NAME: ${{ steps.run-idm-package.outputs.manifests-zip-file-name }}
+          CONTRACT_ZIP_FILE_NAME: ${{ steps.run-idm-contract-generate.outputs.contract-zip-file-name }}
+          RELEASE_CHANGE_DATA_URI: ${{ steps.release-change-data-oci-package.outputs.release-change-data-image-uri }}
+          OUTPUT_SUB_PATH: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          ENV_WORKLOAD_CONTENTS_FILE: ${{ steps.run-aggregate.outputs.environment-workload-contents-file }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          display_name=$(./.github/buildon-github-actions/src/scripts/util/format-project-title "${PROJECT_NAME}")
+          echo "title=${VERSION} — ${display_name}" >> "${GITHUB_OUTPUT}"
+
+          if [[ -n "${USER_NOTES_FILE}" ]]; then
+            # Notes come from file, skip inline notes computation
+            echo "notes=" >> "${GITHUB_OUTPUT}"
+          elif [[ -n "${USER_NOTES}" ]]; then
+            # User provided notes override entirely
+            {
+              echo "notes<<NOTES_EOF"
+              echo "${USER_NOTES}"
+              echo "NOTES_EOF"
+            } >> "${GITHUB_OUTPUT}"
+          else
+            # Default run release format
+            release_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${VERSION}"
+            contents_zip_name=$(basename "${RUN_CONTENTS_ZIP_FILE}")
+            report_zip_name=$(basename "${RUN_CONSUMPTION_REPORT_ZIP_FILE}")
+            {
+              echo "notes<<NOTES_EOF"
+              echo "Automatic Kaptain run release for version ${VERSION} of ${PROJECT_NAME}. This release has the environment contents zip and consumption-report zip attached, alongside the deploy image (the applyable set baked at /kd/manifests with its env-var contract) and the deploy-manifests set for the consuming parent or bootstrap."
+              echo ""
+              echo "### Contents"
+              if [[ -s "${ENV_WORKLOAD_CONTENTS_FILE}" ]]; then
+                cat "${ENV_WORKLOAD_CONTENTS_FILE}"
+              else
+                echo "_(none)_"
+              fi
+              echo ""
+              echo "### Release Assets"
+              echo "* Environment Contents: [${contents_zip_name}](${release_url}/${contents_zip_name})"
+              echo "* Consumption Report: [${report_zip_name}](${release_url}/${report_zip_name})"
+              echo "* Deploy Manifests: [${MANIFESTS_ZIP_FILE_NAME}](${release_url}/${MANIFESTS_ZIP_FILE_NAME})"
+              echo "* Deploy Manifests Contract: [${CONTRACT_ZIP_FILE_NAME}](${release_url}/${CONTRACT_ZIP_FILE_NAME})"
+              echo "* Deploy Manifests Image: [${MANIFESTS_URI}](https://${MANIFESTS_URI})"
+              echo "* Deploy Image: [${RUN_DEPLOY_IMAGE_URI}](https://${RUN_DEPLOY_IMAGE_URI})"
+              echo "* Artifacts Image: [${RUN_ARTIFACTS_IMAGE_URI}](https://${RUN_ARTIFACTS_IMAGE_URI})"
+              echo "* Release Change Data: [release-change-data-${VERSION}.yaml](${release_url}/release-change-data-${VERSION}.yaml)"
+              echo "* Release Change Data Image: [${RELEASE_CHANGE_DATA_URI}](https://${RELEASE_CHANGE_DATA_URI})"
+              ./.github/buildon-github-actions/src/scripts/util/format-release-image-list "${OUTPUT_SUB_PATH}" "${VERSION}"
+              echo "NOTES_EOF"
+            } >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: GitHub Release
+        if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true' && success()
+        uses: ./.github/buildon-github-actions/src/actions/github-release
+        with:
+          github-release-enabled: ${{ steps.kpm.outputs.GITHUB_RELEASE_ENABLED }}
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          github-release-tag: ${{ steps.versions.outputs.version }}
+          github-release-notes: ${{ steps.release-notes.outputs.notes }}
+          github-release-notes-file: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES_FILE }}
+          github-release-title: ${{ steps.release-notes.outputs.title }}
+      - name: Pass check - GitHub Release
+        if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true' && success() && steps.check-github-release.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-github-release.outputs.check-run-id }}
+      - name: Fail check - GitHub Release
+        if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true' && failure() && steps.check-github-release.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-github-release.outputs.check-run-id }}
+
+      # === Post-Build ===
+      - name: Start check - Post-Build
+        if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && success()
+        id: check-post-build
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: start
+          check-name: 'Build & Publish → Post-Build'
+      - name: Run post-build
+        if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && success()
+        id: post-build
+        uses: ./.github/buildon-github-actions/src/actions/hook-post-build
+        with:
+          build-kind: kubernetes-run-environment
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
+          build-scripts-repo-root: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
+          docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
+          # === Workflow Inputs ===
+          # Build output
+          output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+          docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
+
+          # Docker registry logins
+          docker-registry-logins: ${{ steps.kpm.outputs.DOCKER_REGISTRY_LOGINS }}
+          # Docker build options
+          dockerfile-sub-path: ${{ steps.kpm.outputs.DOCKERFILE_SUB_PATH }}
+          dockerfile-squash: ${{ steps.kpm.outputs.DOCKERFILE_SQUASH }}
+          dockerfile-no-cache: ${{ steps.kpm.outputs.DOCKERFILE_NO_CACHE }}
+          # Docker target config (from early resolver)
+          docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+          docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+          # Docker push targets
+          docker-push-targets: ${{ steps.kpm.outputs.DOCKER_PUSH_TARGETS }}
+
+          # Manifests source
+          manifests-sub-path: ${{ steps.kpm.outputs.MANIFESTS_SUB_PATH }}
+          # Manifests packaging
+          manifests-repo-provider-type: ${{ steps.kpm.outputs.MANIFESTS_REPO_PROVIDER_TYPE }}
+          manifests-packaging-base-image: ${{ steps.kpm.outputs.MANIFESTS_PACKAGING_BASE_IMAGE }}
+
+          # Kubernetes Generation
+          kubernetes-global-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_GLOBAL_ADDITIONAL_LABELS }}
+          kubernetes-global-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_GLOBAL_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes ConfigMap Generation
+          kubernetes-configmap-sub-path: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_SUB_PATH }}
+          kubernetes-configmap-name-checksum-injection: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_NAME_CHECKSUM_INJECTION }}
+          kubernetes-configmap-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_ADDITIONAL_LABELS }}
+          kubernetes-configmap-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_CONFIGMAP_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes Secret template generation
+          kubernetes-secret-template-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_SUB_PATH }}
+          kubernetes-secret-template-name-checksum-injection: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_NAME_CHECKSUM_INJECTION }}
+          kubernetes-secret-template-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_ADDITIONAL_LABELS }}
+          kubernetes-secret-template-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SECRET_TEMPLATE_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes ServiceAccount generation
+          kubernetes-serviceaccount-generation-enabled: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_GENERATION_ENABLED }}
+          kubernetes-serviceaccount-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_NAME_SUFFIX }}
+          kubernetes-serviceaccount-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_COMBINED_SUB_PATH }}
+          kubernetes-serviceaccount-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_ADDITIONAL_LABELS }}
+          kubernetes-serviceaccount-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SERVICEACCOUNT_ADDITIONAL_ANNOTATIONS }}
+          # Kubernetes Workload generation
+          kubernetes-workload-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_TYPE }}
+          kubernetes-workload-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_NAME_SUFFIX }}
+          kubernetes-workload-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_COMBINED_SUB_PATH }}
+          kubernetes-workload-env-sub-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ENV_SUB_PATH }}
+          kubernetes-workload-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ADDITIONAL_LABELS }}
+          kubernetes-workload-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_ADDITIONAL_ANNOTATIONS }}
+          kubernetes-workload-container-port: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_CONTAINER_PORT }}
+          kubernetes-workload-image-reference-style: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_IMAGE_REFERENCE_STYLE }}
+          kubernetes-workload-readonly-root-filesystem: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_READONLY_ROOT_FILESYSTEM }}
+          kubernetes-workload-seccomp-profile: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_SECCOMP_PROFILE }}
+          kubernetes-workload-automount-service-account-token: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_AUTOMOUNT_SERVICE_ACCOUNT_TOKEN }}
+          kubernetes-workload-image-pull-secrets: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_IMAGE_PULL_SECRETS }}
+          kubernetes-workload-resources-memory: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_MEMORY }}
+          kubernetes-workload-resources-cpu-request: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_CPU_REQUEST }}
+          kubernetes-workload-resources-cpu-limit: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_RESOURCES_CPU_LIMIT }}
+          kubernetes-workload-configmap-mount-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_CONFIGMAP_MOUNT_PATH }}
+          kubernetes-workload-secret-mount-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_SECRET_MOUNT_PATH }}
+          kubernetes-workload-termination-grace-period-seconds: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_TERMINATION_GRACE_PERIOD_SECONDS }}
+          kubernetes-workload-prestop-command: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PRESTOP_COMMAND }}
+          kubernetes-workload-affinity-strategy: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_AFFINITY_STRATEGY }}
+          kubernetes-workload-probe-liveness-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_CHECK_TYPE }}
+          kubernetes-workload-probe-readiness-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_CHECK_TYPE }}
+          kubernetes-workload-probe-startup-check-type: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_CHECK_TYPE }}
+          kubernetes-workload-probe-liveness-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_HTTP_PATH }}
+          kubernetes-workload-probe-readiness-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_HTTP_PATH }}
+          kubernetes-workload-probe-startup-http-path: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_HTTP_PATH }}
+          kubernetes-workload-replicas: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_REPLICAS }}
+          kubernetes-workload-revision-history-limit: ${{ steps.kpm.outputs.KUBERNETES_WORKLOAD_REVISION_HISTORY_LIMIT }}
+          # Kubernetes Service generation
+          kubernetes-service-generation-enabled: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_GENERATION_ENABLED }}
+          kubernetes-service-type: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_TYPE }}
+          kubernetes-service-port: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_PORT }}
+          kubernetes-service-target-port: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_TARGET_PORT }}
+          kubernetes-service-protocol: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_PROTOCOL }}
+          kubernetes-service-name-suffix: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_NAME_SUFFIX }}
+          kubernetes-service-combined-sub-path: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_COMBINED_SUB_PATH }}
+          kubernetes-service-additional-labels: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_ADDITIONAL_LABELS }}
+          kubernetes-service-additional-annotations: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_ADDITIONAL_ANNOTATIONS }}
+
+          # Token substitution
+          token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+          token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+          token-name-validation: ${{ steps.kpm.outputs.TOKEN_NAME_VALIDATION }}
+          token-builtin-mode: ${{ steps.kpm.outputs.TOKEN_BUILTIN_MODE }}
+          config-sub-path: ${{ steps.kpm.outputs.CONFIG_SUB_PATH }}
+          config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+          token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+
+          # Naming, Versions, and Tags calculation
+          release-branch: ${{ steps.kpm.outputs.RELEASE_BRANCH }}
+          additional-release-branches: ${{ steps.kpm.outputs.ADDITIONAL_RELEASE_BRANCHES }}
+          tag-version-max-parts: ${{ steps.kpm.outputs.TAG_VERSION_MAX_PARTS }}
+          tag-version-calculation-strategy: ${{ steps.kpm.outputs.TAG_VERSION_CALCULATION_STRATEGY }}
+          tag-version-pattern-type: ${{ steps.kpm.outputs.TAG_VERSION_PATTERN_TYPE }}
+          tag-version-prefix-parts: ${{ steps.kpm.outputs.TAG_VERSION_PREFIX_PARTS }}
+          tag-version-source-sub-path: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_SUB_PATH }}
+          tag-version-source-file-name: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_FILE_NAME }}
+          tag-version-source-custom-pattern: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_CUSTOM_PATTERN }}
+          tag-version-source-two-sub-path: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_SUB_PATH }}
+          tag-version-source-two-file-name: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_FILE_NAME }}
+          tag-version-source-two-pattern: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_PATTERN }}
+          tag-version-source-two-prefix-parts: ${{ steps.kpm.outputs.TAG_VERSION_SOURCE_TWO_PREFIX_PARTS }}
+
+          # Quality check options
+          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
+          qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
+          qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
+          qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
+          qc-require-conventional-commits: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_COMMITS }}
+          qc-block-conventional-commits: ${{ steps.kpm.outputs.QC_BLOCK_CONVENTIONAL_COMMITS }}
+
+          # Hook script paths
+          hook-pre-build-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH }}
+          hook-pre-tagging-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH }}
+          hook-pre-docker-prepare-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_DOCKER_PREPARE_SCRIPT_SUB_PATH }}
+          hook-post-docker-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_DOCKER_TESTS_SCRIPT_SUB_PATH }}
+          hook-pre-package-prepare-script-sub-path: ${{ steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH }}
+          hook-post-package-tests-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH }}
+          hook-post-versions-and-naming-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH }}
+          hook-post-build-script-sub-path: ${{ steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH }}
+
+          # GitHub release
+          github-release-enabled: ${{ steps.kpm.outputs.GITHUB_RELEASE_ENABLED }}
+          github-release-substituted-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_SUBSTITUTED_FILES }}
+          github-release-verbatim-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_VERBATIM_FILES }}
+          github-release-notes: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES }}
+          github-release-notes-file: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES_FILE }}
+          github-release-add-version-to-filenames: ${{ steps.kpm.outputs.GITHUB_RELEASE_ADD_VERSION_TO_FILENAMES }}
+
+          # === Step Outputs ===
+          # Version outputs (from versions-and-naming)
+          version: ${{ steps.versions.outputs.version }}
+          version-major: ${{ steps.versions.outputs.version-major }}
+          version-minor: ${{ steps.versions.outputs.version-minor }}
+          version-patch: ${{ steps.versions.outputs.version-patch }}
+          version-2-part: ${{ steps.versions.outputs.version-2-part }}
+          version-3-part: ${{ steps.versions.outputs.version-3-part }}
+          version-4-part: ${{ steps.versions.outputs.version-4-part }}
+          version-dns-safe: ${{ steps.versions.outputs.version-dns-safe }}
+          version-2-part-dns-safe: ${{ steps.versions.outputs.version-2-part-dns-safe }}
+          version-3-part-dns-safe: ${{ steps.versions.outputs.version-3-part-dns-safe }}
+          version-4-part-dns-safe: ${{ steps.versions.outputs.version-4-part-dns-safe }}
+          docker-tag: ${{ steps.versions.outputs.docker-tag }}
+          docker-image-name: ${{ steps.versions.outputs.docker-image-name }}
+          git-tag: ${{ steps.versions.outputs.git-tag }}
+          project-name: ${{ steps.versions.outputs.project-name }}
+          is-release: ${{ steps.versions.outputs.is-release }}
+      - name: Pass check - Post-Build
+        if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && success() && steps.check-post-build.outputs.check-run-id != ''
+        continue-on-error: true
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: pass
+          check-run-id: ${{ steps.check-post-build.outputs.check-run-id }}
+      - name: Fail check - Post-Build
+        if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && failure() && steps.check-post-build.outputs.check-run-id != ''
+        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        with:
+          action: fail
+          check-run-id: ${{ steps.check-post-build.outputs.check-run-id }}

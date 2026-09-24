@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+- name: Prepare deploy-manifests for packaging
+  id: run-idm-package-prepare
+  uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-image-deploy-manifests-package-prepare
+  with:
+    project-name: ${{ steps.versions.outputs.project-name }}
+    version: ${{ steps.versions.outputs.version }}
+    version-major: ${{ steps.versions.outputs.version-major }}
+    version-minor: ${{ steps.versions.outputs.version-minor }}
+    version-patch: ${{ steps.versions.outputs.version-patch }}
+    version-2-part: ${{ steps.versions.outputs.version-2-part }}
+    version-3-part: ${{ steps.versions.outputs.version-3-part }}
+    version-4-part: ${{ steps.versions.outputs.version-4-part }}
+    version-dns-safe: ${{ steps.versions.outputs.version-dns-safe }}
+    version-2-part-dns-safe: ${{ steps.versions.outputs.version-2-part-dns-safe }}
+    version-3-part-dns-safe: ${{ steps.versions.outputs.version-3-part-dns-safe }}
+    version-4-part-dns-safe: ${{ steps.versions.outputs.version-4-part-dns-safe }}
+    git-tag: ${{ steps.versions.outputs.git-tag }}
+    docker-tag: ${{ steps.versions.outputs.docker-tag }}
+    docker-image-name: ${{ steps.versions.outputs.docker-image-name }}
+    docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
+    docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
+    is-release: ${{ steps.versions.outputs.is-release }}
+    token-delimiter-style: ${{ steps.kpm.outputs.TOKEN_DELIMITER_STYLE }}
+    token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
+    token-name-validation: ${{ steps.kpm.outputs.TOKEN_NAME_VALIDATION }}
+    allow-builtin-token-override: ${{ steps.kpm.outputs.ALLOW_BUILTIN_TOKEN_OVERRIDE }}
+    config-value-trailing-newline: ${{ steps.kpm.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+    token-substitution-passes: ${{ steps.kpm.outputs.TOKEN_SUBSTITUTION_PASSES }}
+    output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
+    env-deploy-source-base-path: ${{ steps.kpm.outputs.ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH }}

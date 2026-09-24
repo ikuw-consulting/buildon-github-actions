@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+#
+# Default sensitive-Kind list for the sensitive-resource signoff gate.
+# See lib/sensitive-resource-signoff.bash for the mechanism.
+#
+# One Kind per non-blank, non-comment line. A manifest containing any
+# document of a listed Kind requires a reviewed signoff file before the
+# build passes.
+#
+# Files under src/data/ live in a sub dir per data set and are named
+# <name>-<version>.txt. Each file is IMMUTABLE once published: content
+# never changes - fixes or additions land as a new version (kept forever)
+# and bad versions are removed outright, never edited. Builds pin a
+# specific file, so a given version always means the same bytes.
+#
+# Users select a file by name with the signoffsKindsFile setting
+# (MANIFESTS_SIGNOFFS_KINDS_FILE); the file is resolved in this fixed
+# directory, so extensions can ship additional lists here. The selected
+# file REPLACES this list entirely (no merge).
+
+# Ingress / routing - traffic redirection surface
+Ingress
+Gateway
+HTTPRoute
+GRPCRoute
+TLSRoute
+TCPRoute
+UDPRoute
+
+# RBAC - privilege escalation surface
+Role
+RoleBinding
+ClusterRole
+ClusterRoleBinding
+
+# Admission webhooks - cluster-wide interception surface
+MutatingWebhookConfiguration
+ValidatingWebhookConfiguration
+
+# Network segmentation
+NetworkPolicy

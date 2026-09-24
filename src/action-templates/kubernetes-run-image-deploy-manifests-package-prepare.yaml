@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: 'Kubernetes Run Image Deploy Manifests Package Prepare'
+description: 'Prepares the deploy-manifests set for packaging - the stock package-prepare pinned at the deploy-manifests block dirs by its wrapper script'
+
+inputs:
+  # Action-specific inputs (the The deploy-manifests dirs are pinned by the wrapper's
+  # context lib; local-override toggles do not apply to the staged set)
+  allow-local-defaults-override:
+    description: 'When true, local defaults override foreign additional-defaults on collision (warn)'
+    required: false
+    default: 'false'
+  allow-local-manifests-override:
+    description: 'When true, local manifests override foreign additional-manifests on collision (warn)'
+    required: false
+    default: 'false'
+
+  # INJECT-INPUT: versions-and-naming
+  # INJECT-INPUT: output-sub-path
+
+  # Action-specific optional inputs (passed from docker build)
+  docker-image-full-uri:
+    description: 'Full Docker image URI for variable substitution (optional)'
+    required: false
+    default: ''
+  docker-target-registry:
+    description: 'Target registry for variable substitution (optional)'
+    required: false
+    default: ''
+  docker-target-namespace:
+    description: 'Target namespace for variable substitution (optional)'
+    required: false
+    default: ''
+
+  # INJECT-INPUT: token-substitution
+  # INJECT-INPUT: run-environment-settings
+
+outputs:
+  manifests-zip-file-name:
+    description: 'Filename of the zip (computed from project-name and version)'
+    value: ${{ steps.prepare.outputs.MANIFESTS_ZIP_FILE_NAME }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Prepare deploy-manifests for packaging
+      id: prepare
+      shell: bash
+      env:
+        BUILD_MODE: build_server
+        BUILD_PLATFORM: github-actions
+        BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        ALLOW_LOCAL_DEFAULTS_OVERRIDE: ${{ inputs.allow-local-defaults-override }}
+        ALLOW_LOCAL_MANIFESTS_OVERRIDE: ${{ inputs.allow-local-manifests-override }}
+        PROJECT_NAME: ${{ inputs.project-name }}
+        VERSION: ${{ inputs.version }}
+        VERSION_MAJOR: ${{ inputs.version-major }}
+        VERSION_MINOR: ${{ inputs.version-minor }}
+        VERSION_PATCH: ${{ inputs.version-patch }}
+        VERSION_2_PART: ${{ inputs.version-2-part }}
+        VERSION_3_PART: ${{ inputs.version-3-part }}
+        VERSION_4_PART: ${{ inputs.version-4-part }}
+        VERSION_DNS_SAFE: ${{ inputs.version-dns-safe }}
+        VERSION_2_PART_DNS_SAFE: ${{ inputs.version-2-part-dns-safe }}
+        VERSION_3_PART_DNS_SAFE: ${{ inputs.version-3-part-dns-safe }}
+        VERSION_4_PART_DNS_SAFE: ${{ inputs.version-4-part-dns-safe }}
+        GIT_TAG: ${{ inputs.git-tag }}
+        OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
+        DOCKER_TAG: ${{ inputs.docker-tag }}
+        DOCKER_IMAGE_NAME: ${{ inputs.docker-image-name }}
+        DOCKER_IMAGE_FULL_URI: ${{ inputs.docker-image-full-uri }}
+        TARGET_REGISTRY: ${{ inputs.docker-target-registry }}
+        TARGET_NAMESPACE: ${{ inputs.docker-target-namespace }}
+        IS_RELEASE: ${{ inputs.is-release }}
+        TOKEN_DELIMITER_STYLE: ${{ inputs.token-delimiter-style }}
+        TOKEN_NAME_STYLE: ${{ inputs.token-name-style }}
+        TOKEN_NAME_VALIDATION: ${{ inputs.token-name-validation }}
+        ALLOW_BUILTIN_TOKEN_OVERRIDE: ${{ inputs.allow-builtin-token-override }}
+        CONFIG_VALUE_TRAILING_NEWLINE: ${{ inputs.config-value-trailing-newline }}
+        TOKEN_SUBSTITUTION_PASSES: ${{ inputs.token-substitution-passes }}
+        ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH: ${{ inputs.env-deploy-source-base-path }}
+      run: "${{ github.action_path }}/../../scripts/main/kubernetes-run-image-deploy-manifests-package-prepare"

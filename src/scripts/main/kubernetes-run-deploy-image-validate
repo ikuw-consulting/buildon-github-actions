@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+#
+# kubernetes-run-deploy-image-validate - Run the freshly built deploy
+# image's own validate-environment against the contract baked into it.
+#
+# A deliberately separate step AFTER all building is done, so a failure
+# here reads unambiguously as "the built image is bad" rather than "the
+# build broke". The deploy image carries validate-environment at /kd/bin
+# (on PATH, no ENTRYPOINT) and its required env-var contract as baked
+# ENV lines, so a bare run validates exactly what will ship: if this
+# passes, the image cannot boot misconfigured at deploy time for the
+# contract's portion of the surface.
+#
+# Multi-arch: when DOCKER_PLATFORM lists several platforms the per-arch
+# tags exist locally (the base URI is a manifest list, not always
+# runnable locally); the host-matching arch image is run natively, or
+# the first configured platform under emulation when the host arch is
+# not in the list.
+#
+# Inputs (env):
+#   RUN_DEPLOY_IMAGE_URI  - Required; the deploy image URI built by
+#                           kubernetes-run-package
+#   IMAGE_BUILD_COMMAND   - docker | podman (required)
+#   DOCKER_PLATFORM       - Platform(s) the image was built for
+#                           (default linux/amd64)
+#
+# Outputs: none. Exit status is the verdict.
+#
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=src/scripts/defaults/platform.bash
+source "${SCRIPT_DIR}/../defaults/platform.bash"
+# shellcheck source=src/scripts/lib/log.bash
+source "${SCRIPT_DIR}/../lib/log.bash"
+# shellcheck source=src/scripts/defaults/docker-common.bash
+source "${SCRIPT_DIR}/../defaults/docker-common.bash"
+
+RUN_DEPLOY_IMAGE_URI="${RUN_DEPLOY_IMAGE_URI:?RUN_DEPLOY_IMAGE_URI is required (from kubernetes-run-package)}"
+IMAGE_BUILD_COMMAND="${IMAGE_BUILD_COMMAND:?IMAGE_BUILD_COMMAND is required}"
+
+# Map the host machine to a docker platform string for arch matching.
+host_platform() {
+  case "$(uname -m)" in
+    arm64|aarch64)  echo "linux/arm64" ;;
+    x86_64|amd64)   echo "linux/amd64" ;;
+    *)              echo "" ;;
+  esac
+}
+
+main() {
+  log "=== Kubernetes Run Deploy Image Validate ==="
+  log "Image:     ${RUN_DEPLOY_IMAGE_URI}"
+  log "Platforms: ${DOCKER_PLATFORM}"
+  log "============================================"
+
+  local run_uri="${RUN_DEPLOY_IMAGE_URI}"
+  local platform_args=()
+  if [[ "${DOCKER_PLATFORM}" == *,* ]]; then
+    local platforms platform chosen=""
+    IFS=',' read -ra platforms <<< "${DOCKER_PLATFORM}"
+    local host
+    host=$(host_platform)
+    for platform in "${platforms[@]}"; do
+      if [[ "${platform}" == "${host}" ]]; then
+        chosen="${platform}"
+        break
+      fi
+    done
+    if [[ -z "${chosen}" ]]; then
+      chosen="${platforms[0]}"
+      log "Host arch ($(uname -m)) not among the configured platforms;"
+      log "validating the ${chosen} image under emulation."
+    fi
+    run_uri="${RUN_DEPLOY_IMAGE_URI}-${chosen//\//-}"
+    platform_args=(--platform "${chosen}")
+  fi
+
+  log ""
+  log "Running the image's baked validate-environment (${run_uri})..."
+  log ""
+  "${IMAGE_BUILD_COMMAND}" run --rm "${platform_args[@]+"${platform_args[@]}"}" \
+    "${run_uri}" validate-environment
+
+  log ""
+  log "Deploy image validated: the baked env-var contract passes its own gate."
+}
+
+main "$@"

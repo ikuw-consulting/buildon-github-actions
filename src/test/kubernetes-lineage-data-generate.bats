@@ -161,6 +161,8 @@ run_script() {
     TOKEN_DELIMITER_STYLE="${TOKEN_DELIMITER_STYLE}" \
     TOKEN_NAME_STYLE="${TOKEN_NAME_STYLE}" \
     OUTPUT_SUB_PATH="${OUTPUT_SUB_PATH}" \
+    ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH="${ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH:-}" \
+    ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH="${ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH:-}" \
     GIT_SHA="${GIT_SHA:-}" \
     BUILD_PLATFORM=test \
     GITHUB_OUTPUT="${GITHUB_OUTPUT}" \
@@ -730,8 +732,66 @@ EOF
 #
 # These BUILD_KINDs run lineage-data-generate twice per build. ENV_BUILD_SECTION
 # selects which run: 'app' produces the inner app CM (full happy path); 'env' or
-# 'rp' produce the environment CM (stubbed pending those workflows).
+# 'rp' produce the ENVIRONMENT RECORD CM (contents, contents-resolved,
+# consumption-report, resources data keys) into the tree at ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH.
 # =============================================================================
+
+# Stage an env/rp build at the environment-record step: flavour-named
+# contents files, a consumption report, the final-config tokens dir
+# (default location), and the finalised workload tree.
+stage_env_or_rp_preconditions() {
+  local project="$1"
+  local flavour="$2"
+  local out="${TEST_DIR}/kaptain-out"
+
+  mkdir -p "${TEST_DIR}/kaptainpm/final"
+  cat > "${TEST_DIR}/kaptainpm/final/KaptainPM.yaml" << 'EOF'
+apiVersion: kaptain.org/v1
+kind: kubernetes-run-environment
+spec:
+  global:
+    tokens:
+      delimiterStyle: shell
+      nameStyle: PascalCase
+  contents:
+    - alpha:1.0
+EOF
+
+  mkdir -p "${out}/${flavour}"
+  cat > "${out}/${flavour}/${flavour}.yaml" << 'EOF'
+- alpha:1.0
+EOF
+  cat > "${out}/${flavour}/${flavour}-resolved.yaml" << 'EOF'
+- ghcr.io/org/alpha:1.0.0-manifests
+EOF
+
+  mkdir -p "${out}/run-consumption-report"
+  cat > "${out}/run-consumption-report/${project}-1.2.3-consumption-report.yaml" << EOF
+kind: ${flavour}
+name: ${project}
+version: 1.2.3
+consumed:
+  - alpha:1.0
+EOF
+
+  # The stacked final-config dir the record sections take via
+  # ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH (deliberately NOT the app-side default location).
+  mkdir -p "${out}/final-config"
+  printf '%s' "${project}" > "${out}/final-config/ProjectName"
+  printf '%s' "1.2.3" > "${out}/final-config/Version"
+  printf '%s' "${project}" > "${out}/final-config/EnvironmentName"
+  printf '%s' "${project#run-}" > "${out}/final-config/EnvironmentShortName"
+
+  mkdir -p "${out}/run-agg/substituted"
+  cat > "${out}/run-agg/substituted/deployment.yaml" << EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${project}
+spec:
+  replicas: 2
+EOF
+}
 
 @test "env-section: kubernetes-run-environment + app dispatches as app" {
   stage_app_or_bundle_preconditions "myenv"
@@ -759,25 +819,54 @@ EOF
   [ ! -d "${TEST_DIR}/kaptain-out/lineage-data/keys-for-lineage-data" ]
 }
 
-@test "env-section: kubernetes-run-environment + env stubs with exit 42" {
-  BUILD_KIND=kubernetes-run-environment ENV_BUILD_SECTION=env PROJECT_NAME=myenv \
+@test "env-section: kubernetes-run-environment + env produces the environment record" {
+  stage_env_or_rp_preconditions "run-env-test" "environment"
+  BUILD_KIND=kubernetes-run-environment ENV_BUILD_SECTION=env PROJECT_NAME=run-env-test \
     PRODUCT_NAME="" PRODUCT_SHORT_NAME="" \
+    ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH="kaptain-out/run-agg/substituted" \
+    ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH="kaptain-out/final-config" \
     run_script
-  [ "${status}" -eq 42 ]
-  assert_output_contains "Not implemented"
-  assert_output_contains "Kind family: env"
-  assert_output_contains "Reserved filename: kaptain-environment-lineage-data.yaml"
-  assert_output_contains "Role label: kaptain-environment-lineage-data"
+  [ "${status}" -eq 0 ]
+  local cm="${TEST_DIR}/kaptain-out/run-agg/substituted/kaptain-environment-lineage-data.yaml"
+  [ -f "${cm}" ]
+  grep -q "kaptain.org/role: \"kaptain-environment-lineage-data\"" "${cm}"
+  grep -q "kaptain.org/build-kind: \"kubernetes-run-environment\"" "${cm}"
+  grep -q "kaptain.org/environment-name: \"run-env-test\"" "${cm}"
+  grep -q "kaptain.org/environment-short-name: \"env-test\"" "${cm}"
+  local keys="${TEST_DIR}/kaptain-out/lineage-data/env/keys-for-lineage-data"
+  [ -f "${keys}/contents.yaml" ]
+  [ -f "${keys}/contents-resolved.yaml" ]
+  [ -f "${keys}/consumption-report.yaml" ]
+  [ -f "${keys}/resources.yaml" ]
+  # env is the final layer: no contract data key.
+  [ ! -f "${keys}/contract.yaml" ]
+  # The record lists itself in its own inventory, product-style.
+  grep -q "name: run-env-test-lineage-data" "${keys}/resources.yaml"
 }
 
-@test "env-section: kubernetes-run-environment without ENV_BUILD_SECTION fails with diagnostic" {
-  BUILD_KIND=kubernetes-run-environment PROJECT_NAME=myenv \
+@test "env-section: env record fails loudly when the consumption report is missing" {
+  stage_env_or_rp_preconditions "run-env-test" "environment"
+  rm -rf "${TEST_DIR}/kaptain-out/run-consumption-report"
+  BUILD_KIND=kubernetes-run-environment ENV_BUILD_SECTION=env PROJECT_NAME=run-env-test \
     PRODUCT_NAME="" PRODUCT_SHORT_NAME="" \
+    ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH="kaptain-out/run-agg/substituted" \
+    ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH="kaptain-out/final-config" \
     run_script
   [ "${status}" -ne 0 ]
-  [ "${status}" -ne 42 ]
-  assert_output_contains "ENV_BUILD_SECTION is required for BUILD_KIND=kubernetes-run-environment"
-  assert_output_contains "Expected one of: app, env"
+  assert_output_contains "Consumption report not found"
+  assert_output_contains "Did kubernetes-run-consumption-report run first?"
+}
+
+@test "env-section: kubernetes-run-environment without ENV_BUILD_SECTION defaults to the env record" {
+  stage_env_or_rp_preconditions "run-env-test" "environment"
+  BUILD_KIND=kubernetes-run-environment PROJECT_NAME=run-env-test \
+    PRODUCT_NAME="" PRODUCT_SHORT_NAME="" \
+    ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH="kaptain-out/run-agg/substituted" \
+    ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH="kaptain-out/final-config" \
+    run_script
+  [ "${status}" -eq 0 ]
+  assert_output_contains "Kind family: env"
+  [ -f "${TEST_DIR}/kaptain-out/run-agg/substituted/kaptain-environment-lineage-data.yaml" ]
 }
 
 @test "env-section: kubernetes-run-environment with invalid ENV_BUILD_SECTION fails with diagnostic" {
@@ -803,25 +892,34 @@ EOF
     "$(final_lineage_data_path "myrp" "kaptain-app-lineage-data.yaml")"
 }
 
-@test "env-section: kubernetes-run-platform-meta-environment + rp stubs with exit 42" {
-  BUILD_KIND=kubernetes-run-platform-meta-environment ENV_BUILD_SECTION=rp PROJECT_NAME=myrp \
+@test "env-section: kubernetes-run-platform-meta-environment + rp produces the platform record" {
+  stage_env_or_rp_preconditions "run-platform-test" "run-platform"
+  BUILD_KIND=kubernetes-run-platform-meta-environment ENV_BUILD_SECTION=rp PROJECT_NAME=run-platform-test \
     PRODUCT_NAME="" PRODUCT_SHORT_NAME="" \
+    ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH="kaptain-out/run-agg/substituted" \
+    ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH="kaptain-out/final-config" \
     run_script
-  [ "${status}" -eq 42 ]
-  assert_output_contains "Not implemented"
-  assert_output_contains "Kind family: rp"
-  assert_output_contains "Reserved filename: kaptain-environment-lineage-data.yaml"
-  assert_output_contains "Role label: kaptain-environment-lineage-data"
+  [ "${status}" -eq 0 ]
+  local cm="${TEST_DIR}/kaptain-out/run-agg/substituted/kaptain-environment-lineage-data.yaml"
+  [ -f "${cm}" ]
+  grep -q "kaptain.org/role: \"kaptain-environment-lineage-data\"" "${cm}"
+  grep -q "kaptain.org/build-kind: \"kubernetes-run-platform-meta-environment\"" "${cm}"
+  local keys="${TEST_DIR}/kaptain-out/lineage-data/rp/keys-for-lineage-data"
+  [ -f "${keys}/contents.yaml" ]
+  [ -f "${keys}/consumption-report.yaml" ]
+  [ ! -f "${keys}/contract.yaml" ]
 }
 
-@test "env-section: kubernetes-run-platform-meta-environment without ENV_BUILD_SECTION fails with diagnostic" {
-  BUILD_KIND=kubernetes-run-platform-meta-environment PROJECT_NAME=myrp \
+@test "env-section: kubernetes-run-platform-meta-environment without ENV_BUILD_SECTION defaults to the rp record" {
+  stage_env_or_rp_preconditions "run-platform-test" "run-platform"
+  BUILD_KIND=kubernetes-run-platform-meta-environment PROJECT_NAME=run-platform-test \
     PRODUCT_NAME="" PRODUCT_SHORT_NAME="" \
+    ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH="kaptain-out/run-agg/substituted" \
+    ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH="kaptain-out/final-config" \
     run_script
-  [ "${status}" -ne 0 ]
-  [ "${status}" -ne 42 ]
-  assert_output_contains "ENV_BUILD_SECTION is required for BUILD_KIND=kubernetes-run-platform-meta-environment"
-  assert_output_contains "Expected one of: app, rp"
+  [ "${status}" -eq 0 ]
+  assert_output_contains "Kind family: rp"
+  [ -f "${TEST_DIR}/kaptain-out/run-agg/substituted/kaptain-environment-lineage-data.yaml" ]
 }
 
 @test "env-section: kubernetes-run-platform-meta-environment + env (wrong section) fails with diagnostic" {

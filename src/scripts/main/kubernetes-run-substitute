@@ -1,0 +1,449 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+#
+# kubernetes-run-substitute - Stack the final config and substitute the
+# run's assembled workload aggregate (shared by env and run-platform,
+# keyed on RUN_BUILD_KIND like run-finalise and run-package).
+#
+# Split out of the aggregate entrypoints so validation points can sit on
+# BOTH sides: the pre-sub validation sees the full assembled tree the
+# aggregate step produced; the post-sub validation sees the full
+# substituted tree this step produces.
+#
+# Steps, in order:
+#   1. Stack the final config dir (later wins on collision):
+#        1. children's contract-zip defaults (defaults-merged)
+#        2. the run's own src/config tokens
+#        3. built-in tokens (PROJECT_NAME, VERSION*, Environment token
+#           family with ENVIRONMENT_TYPE env|meta-env, etc.)
+#      Layers 2 + 3 are produced by prepare-substitution-tokens into a
+#      clean tmp dir then overlaid: the util's built-in-override safety
+#      check walks CONFIG_SUB_PATH against TOKENS_OUTPUT_SUB_PATH
+#      expecting no pre-existing entries; pre-seeding children's defaults
+#      there would create false-positive conflicts on every shared name.
+#   2. Substitute the whole aggregate against the stacked config. The run
+#      is the FINAL layer: the config is applied here, not carried
+#      forward as deferred defaults.
+#   3. Post-substitution gate: unresolved non-secret tokens always fail,
+#      unless an IgnoreUnresolved marker in the file covers them. Stale
+#      markers fail every build mode (see lib/token-markers.bash).
+#      Secret-template tokens: env builds require an encrypted value per
+#      token in SECRETS_SUB_PATH; RP builds defer them to child deploys.
+#      Every failure here is fatal in every build mode.
+#   4. Token usage accounting + unreferenced value check (one scan, two
+#      outputs; see lib/token-usage.bash). The accounting yaml is left
+#      behind for the consumption report; unreferenced config/secret
+#      values fail per failOnUnreferencedConfigOrSecrets (child defaults
+#      exempt; RP checks config only - children own their own secrets).
+#
+# Inputs (env):
+#   PROJECT_NAME             - Required; run name (run-* / run-platform-*)
+#   ENVIRONMENT_SHORT_NAME   - Required; derived and exported by the
+#                              aggregate step
+#   RUN_BUILD_KIND           - environment | run-platform (derived from
+#                              PROJECT_NAME when unset)
+#   OUTPUT_SUB_PATH          - Build output dir (default kaptain-out)
+#   TOKEN_DELIMITER_STYLE / TOKEN_NAME_STYLE - Token rendering
+#   CONFIG_SUB_PATH          - The run's own token dir (default src/config)
+#   SECRETS_SUB_PATH         - Encrypted secret values dir (default
+#                              src/secrets; env builds only)
+#   ENV_FAIL_ON_UNREFERENCED_CONFIG_OR_SECRETS - see environments.bash
+#   BUILD_MODE               - Required (no default); nothing in this step
+#                              branches on it. Every check here is
+#                              performable locally, so every check is fatal
+#                              locally too
+#
+# Outputs (env + GITHUB_OUTPUT):
+#   ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH        - The substituted workload tree
+#                              (input to the post-sub validation and
+#                              finalise)
+#   ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH - The stacked final-config dir
+#
+# Both are run-scoped names on purpose: MANIFESTS_SUB_PATH and
+# DEFAULTS_SUB_PATH are USER CONFIG vars (the source manifest and source
+# defaults dirs), only load-final-kaptainpm-yaml publishes user config, and
+# a step's outputs are re-exported into the environment for every later
+# step - so emitting those names here would overwrite the user's values for
+# the rest of the build.
+#
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=src/scripts/defaults/platform.bash
+source "${SCRIPT_DIR}/../defaults/platform.bash"
+# shellcheck source=src/scripts/lib/log.bash
+source "${SCRIPT_DIR}/../lib/log.bash"
+# shellcheck source=src/scripts/defaults/build-mode.bash
+source "${SCRIPT_DIR}/../defaults/build-mode.bash"
+# shellcheck source=src/scripts/defaults/output-sub-path.bash
+source "${SCRIPT_DIR}/../defaults/output-sub-path.bash"
+# shellcheck source=src/scripts/defaults/tokens.bash
+source "${SCRIPT_DIR}/../defaults/tokens.bash"
+# shellcheck source=src/scripts/defaults/environments.bash
+source "${SCRIPT_DIR}/../defaults/environments.bash"
+# shellcheck source=src/scripts/lib/output-var.bash
+source "${SCRIPT_DIR}/../lib/output-var.bash"
+# shellcheck source=src/scripts/lib/token-usage.bash
+source "${SCRIPT_DIR}/../lib/token-usage.bash"
+# shellcheck source=src/scripts/lib/token-format.bash
+source "${SCRIPT_DIR}/../lib/token-format.bash"
+# shellcheck source=src/scripts/lib/token-markers.bash
+source "${SCRIPT_DIR}/../lib/token-markers.bash"
+# shellcheck source=src/scripts/lib/builtin-tokens-from-entry.bash
+source "${SCRIPT_DIR}/../lib/builtin-tokens-from-entry.bash"
+
+PROJECT_NAME="${PROJECT_NAME:?PROJECT_NAME is required}"
+ENVIRONMENT_SHORT_NAME="${ENVIRONMENT_SHORT_NAME:?ENVIRONMENT_SHORT_NAME is required (exported by the aggregate step)}"
+UTIL_DIR="${SCRIPT_DIR}/../util"
+
+RUN_BUILD_KIND="${RUN_BUILD_KIND:-}"
+if [[ -z "${RUN_BUILD_KIND}" ]]; then
+  case "${PROJECT_NAME}" in
+    run-platform-*) RUN_BUILD_KIND="run-platform" ;;
+    *)              RUN_BUILD_KIND="environment" ;;
+  esac
+fi
+
+if [[ "${RUN_BUILD_KIND}" == "run-platform" ]]; then
+  AGGREGATE_BASE="${OUTPUT_SUB_PATH}/run-platform-meta-environment"
+  ENVIRONMENT_TYPE_VALUE="meta-env"
+else
+  AGGREGATE_BASE="${OUTPUT_SUB_PATH}/run-environment"
+  ENVIRONMENT_TYPE_VALUE="env"
+fi
+AGGREGATE_MANIFESTS_NORMALISED_DIR="${AGGREGATE_BASE}/manifests-aggregated"
+AGGREGATE_DEFAULTS_MERGED="${AGGREGATE_BASE}/config-defaults"
+AGGREGATE_TOKENS_TMP_DIR="${AGGREGATE_BASE}/config-prepared-tmp"
+AGGREGATE_FINAL_CONFIG_DIR="${AGGREGATE_BASE}/config-final"
+# The two layers prepare-substitution-tokens produces together, split back
+# apart so each documented layer of the stack is a directory you can look at.
+AGGREGATE_CONFIG_IN_REPO_DIR="${AGGREGATE_BASE}/config-in-repo"
+AGGREGATE_CONFIG_BUILTINS_DIR="${AGGREGATE_BASE}/config-builtins"
+AGGREGATE_SUBSTITUTED_DIR="${AGGREGATE_BASE}/manifests-substituted"
+
+# Set by step_ignore_unresolved_markers when the tree carries any; empty
+# means the gate scans exactly as it did before markers existed.
+IGNORE_MARKERS_FILE=""
+
+# IgnoreUnresolved markers: in-file exemptions from the gate below, saying
+# "residue on this line is expected" rather than "leave this token alone" -
+# see lib/token-markers.bash for the marker forms and their rules, and the
+# DoNotConvert family in util/convert-tokens-in-tree for the other user of
+# that parser. Protecting a token from conversion does NOT imply ignoring it
+# here; the two are usually written together but stay independent.
+#
+# One recursive grep decides whether any of the line-aware machinery runs.
+# The scan is narrowed to the file type the gate itself walks (.yaml only,
+# never .yml): a marker in anything else would validate against a file the
+# gate never inspects.
+step_ignore_unresolved_markers() {
+  local marked_files marked_file marked_rel marked_count=0
+  marked_files=$(token_markers_files "IgnoreUnresolved" "${AGGREGATE_SUBSTITUTED_DIR}")
+  [[ -z "${marked_files}" ]] && return 0
+
+  IGNORE_MARKERS_FILE="${AGGREGATE_BASE}/substitution-gate-ignores.tsv"
+  : > "${IGNORE_MARKERS_FILE}"
+  token_markers_reset
+
+  while IFS= read -r marked_file; do
+    if [[ -z "${marked_file}" ]]; then continue; fi
+    case "${marked_file}" in
+      *.yaml) ;;
+      *) continue ;;
+    esac
+    marked_count=$((marked_count + 1))
+    marked_rel="${marked_file#"${AGGREGATE_SUBSTITUTED_DIR}"/}"
+    # Secret templates take the other branch of the gate entirely: every
+    # token in one is checked against the encrypted values, so a marker
+    # there claims to do something it cannot.
+    if [[ "${marked_file}" == *.template.yaml ]]; then
+      token_markers_error "  ${marked_rel}: IgnoreUnresolved markers have no effect in a secret template; every token here is checked against ${SECRETS_SUB_PATH}/ instead"
+      continue
+    fi
+    token_markers_collect "IgnoreUnresolved" "${marked_file}" "${marked_rel}" "${IGNORE_MARKERS_FILE}"
+  done <<< "${marked_files}"
+
+  [[ "${marked_count}" -eq 0 ]] && return 0
+
+  # Always fatal, including local builds, and deliberately outside the
+  # BUILD_MODE softening below: a stale marker suppresses nothing today and
+  # will suppress the wrong thing once the lines around it move.
+  if [[ "${TOKEN_MARKERS_ERROR_COUNT}" -gt 0 ]]; then
+    log_error ""
+    log_error "${TOKEN_MARKERS_ERROR_COUNT} IgnoreUnresolved marker problem(s)."
+    log_error "Fix the markers in the source project. Marker problems fail every"
+    log_error "build mode: an inert marker is worse than no marker at all."
+    exit 1
+  fi
+
+  local ignore_count
+  ignore_count=$(wc -l < "${IGNORE_MARKERS_FILE}" | tr -d ' ')
+  log ""
+  log "IgnoreUnresolved markers: ${ignore_count} exemption(s) across ${marked_count} file(s)."
+}
+
+# Emit the unresolved token names in one file, minus any the IgnoreUnresolved
+# markers cover. Only reached when the tree carries markers, so the gate's
+# scan is untouched in the common case; line numbers are needed here because
+# coverage is per line, and per token within a line when a specifier is used.
+gate_unignored_tokens() {
+  local file="${1}" rel="${2}" regex="${3}"
+  grep -noE "${regex}" "${file}" 2>/dev/null \
+    | awk -v ignores="${IGNORE_MARKERS_FILE}" -v relative="${rel}" '
+      BEGIN {
+        while ((getline record < ignores) > 0) {
+          first = index(record, "\t")
+          if (first == 0) continue
+          record_file = substr(record, 1, first - 1)
+          record_rest = substr(record, first + 1)
+          second = index(record_rest, "\t")
+          if (second == 0) continue
+          record_line  = substr(record_rest, 1, second - 1) + 0
+          record_token = substr(record_rest, second + 1)
+          if (record_file != relative) continue
+          if (record_token == "*") ignore_all[record_line] = 1
+          else ignore_token[record_line, record_token] = 1
+        }
+        close(ignores)
+      }
+      {
+        at = index($0, ":")
+        if (at == 0) next
+        line_no = substr($0, 1, at - 1) + 0
+        token = substr($0, at + 1)
+        if (line_no in ignore_all) next
+        if ((line_no, token) in ignore_token) next
+        print token
+      }' \
+    | LC_ALL=C sort -u | sed -E 's/^\$\{|\}$//g' || true
+}
+
+# Post-substitution gate: nothing unresolved may remain in the final
+# layer. Unresolved non-secret tokens always fail unless an IgnoreUnresolved
+# marker covers them. Secret-template tokens branch by kind: env builds
+# require an encrypted value per token (deploy resolves them from
+# SECRETS_SUB_PATH); RP builds defer them to the child deploys that own the
+# secrets. Fatal in every build mode: a token that did not resolve is
+# equally unresolved on a laptop and on a runner.
+#
+# Shell-style token pattern; other delimiter styles need this
+# generalised - the same limitation is noted in lib/resource-checksum.bash.
+# Marker validation is deliberately broader than this regex: see
+# lib/token-markers.bash.
+step_substitution_gate() {
+  log ""
+  log "Post-substitution gate (final layer: nothing unresolved may remain)..."
+
+  local token_regex='\$\{[A-Za-z_][A-Za-z0-9_]*\}'
+  local failures=0
+  local deferred=0
+  local file rel tokens tok
+  while IFS= read -r -d '' file; do
+    rel="${file#"${AGGREGATE_SUBSTITUTED_DIR}"/}"
+    if [[ -n "${IGNORE_MARKERS_FILE}" ]]; then
+      tokens=$(gate_unignored_tokens "${file}" "${rel}" "${token_regex}")
+    else
+      tokens=$(grep -oE "${token_regex}" "${file}" | LC_ALL=C sort -u | sed -E 's/^\$\{|\}$//g' || true)
+    fi
+    [[ -z "${tokens}" ]] && continue
+    if [[ "${file}" == *.template.yaml ]]; then
+      while IFS= read -r tok; do
+        [[ -z "${tok}" ]] && continue
+        if [[ "${RUN_BUILD_KIND}" == "run-platform" ]]; then
+          deferred=$((deferred + 1))
+          continue
+        fi
+        # Encrypted values carry their encryption-type extension
+        # (<Token>.age etc, per kaptain-user-scripts' kaptain-encrypt);
+        # accept any single-extension match for the token.
+        #
+        # An unresolved token in a secret template has two possible causes
+        # and the build cannot tell them apart: the token was meant to come
+        # from config and that value is missing, or it is a real secret and
+        # the encrypted value is missing. Name both.
+        if ! compgen -G "${SECRETS_SUB_PATH}/${tok}.*" > /dev/null; then
+          log_error "  ${rel}: unresolved token '${tok}' in a secret template - no config value supplied it,"
+          log_error "    and there is no encrypted value at ${SECRETS_SUB_PATH}/${tok}.<type>"
+          failures=$((failures + 1))
+        fi
+      done <<< "${tokens}"
+    else
+      while IFS= read -r tok; do
+        [[ -z "${tok}" ]] && continue
+        log_error "  ${rel}: unresolved token '${tok}' (not a secret template; nothing downstream will ever supply it)"
+        failures=$((failures + 1))
+      done <<< "${tokens}"
+    fi
+  done < <(find "${AGGREGATE_SUBSTITUTED_DIR}" -type f -name '*.yaml' -print0 | LC_ALL=C sort -z)
+
+  # Always fatal, in every build mode. A local build exists to fail the same
+  # way a server build would; the only things it may legitimately soften are
+  # what it physically cannot check (credentials, remote artefacts). An
+  # unresolved token is checkable everywhere, so it fails everywhere.
+  if [[ "${failures}" -gt 0 ]]; then
+    log_error ""
+    log_error "${failures} unresolved-token problem(s) after substitution."
+    log_error "This run is the final layer: every non-secret token must resolve at"
+    log_error "build time. Env builds also require an encrypted value in"
+    log_error "${SECRETS_SUB_PATH}/ for every secret-template token."
+    exit 1
+  fi
+  if [[ "${RUN_BUILD_KIND}" == "run-platform" ]]; then
+    log "  Gate passed: no unresolved non-secret tokens; ${deferred} secret-template token(s) deferred to child deploys."
+  else
+    log "  Gate passed: no unresolved non-secret tokens; all secret tokens have values."
+  fi
+}
+
+# prepare-substitution-tokens writes two of the three documented layers into
+# one directory: the run's own src/config, and the computed built-ins. Split
+# them back apart so config-in-repo, config-builtins and config-defaults each
+# exist on disk, which makes the stated precedence inspectable rather than a
+# property of overlay order, and gives provenance three honest layers.
+#
+# The util is shared well beyond this repo, so the split happens here rather
+# than by changing what it writes.
+#
+# The subtraction is EXACT, not a guess: prepare-substitution-tokens refuses to
+# copy a user config token whose name already exists as a built-in, so the two
+# sets are disjoint by construction. That refusal is the invariant this rests
+# on, and the assertion below fails loudly on the day it stops being true
+# rather than silently mis-attributing a token.
+split_prepared_config_layers() {
+  log ""
+  log "Splitting the prepared config back into its layers..."
+  mkdir -p "${AGGREGATE_CONFIG_IN_REPO_DIR}" "${AGGREGATE_CONFIG_BUILTINS_DIR}"
+
+  local file rel in_repo=0 builtins=0
+  while IFS= read -r -d '' file; do
+    rel="${file#"${AGGREGATE_TOKENS_TMP_DIR}"/}"
+    if [[ -f "${CONFIG_SUB_PATH}/${rel}" ]]; then
+      mkdir -p "$(dirname "${AGGREGATE_CONFIG_IN_REPO_DIR}/${rel}")"
+      cp "${file}" "${AGGREGATE_CONFIG_IN_REPO_DIR}/${rel}"
+      in_repo=$((in_repo + 1))
+    else
+      mkdir -p "$(dirname "${AGGREGATE_CONFIG_BUILTINS_DIR}/${rel}")"
+      cp "${file}" "${AGGREGATE_CONFIG_BUILTINS_DIR}/${rel}"
+      builtins=$((builtins + 1))
+    fi
+  done < <(find "${AGGREGATE_TOKENS_TMP_DIR}" -type f -print0)
+
+  log "  ${in_repo} from ${CONFIG_SUB_PATH}, ${builtins} built-in."
+}
+
+# Token usage accounting + unreferenced value check - one scan, two
+# outputs (see lib/token-usage.bash). The accounting yaml is left behind
+# in the aggregate base for the consumption report. Policy on
+# unreferenced config/secret values comes from
+# failOnUnreferencedConfigOrSecrets (default true; child defaults
+# exempt), with the usual local-build softening. RP builds pass no
+# secrets dir: children own their own secrets, so only config values are
+# checked for references.
+step_token_usage() {
+  log ""
+  log "Token usage accounting + unreferenced value check..."
+  local usage_secrets_dir="${SECRETS_SUB_PATH}"
+  [[ "${RUN_BUILD_KIND}" == "run-platform" ]] && usage_secrets_dir=""
+  token_usage_report \
+    "${AGGREGATE_MANIFESTS_NORMALISED_DIR}" \
+    "${OUTPUT_SUB_PATH}/run-image-deploy-manifests/manifests" \
+    "${AGGREGATE_DEFAULTS_MERGED}" \
+    "${AGGREGATE_TOKENS_TMP_DIR}" \
+    "${CONFIG_SUB_PATH}" \
+    "${usage_secrets_dir}" \
+    "${AGGREGATE_BASE}/token-usage.yaml"
+  log "  Wrote ${AGGREGATE_BASE}/token-usage.yaml"
+
+  [[ "${TOKEN_USAGE_UNREFERENCED_COUNT}" -eq 0 ]] && return 0
+
+  local entry
+  if [[ "${ENV_FAIL_ON_UNREFERENCED_CONFIG_OR_SECRETS}" != "true" ]]; then
+    while IFS= read -r entry; do
+      [[ -z "${entry}" ]] && continue
+      log_warning "unreferenced ${entry%% *} value '${entry#* }' - tolerated (failOnUnreferencedConfigOrSecrets=false)"
+    done <<< "${TOKEN_USAGE_UNREFERENCED}"
+    return 0
+  fi
+  while IFS= read -r entry; do
+    [[ -z "${entry}" ]] && continue
+    log_error "  unreferenced ${entry%% *} value '${entry#* }' - no token in the manifest set references it"
+  done <<< "${TOKEN_USAGE_UNREFERENCED}"
+  # No BUILD_MODE softening: failOnUnreferencedConfigOrSecrets above is the
+  # switch for tolerating these, and it is a project decision rather than a
+  # property of where the build happens to be running.
+  log_error "${TOKEN_USAGE_UNREFERENCED_COUNT} unreferenced config/secret value(s). Remove them, or set"
+  log_error "failOnUnreferencedConfigOrSecrets=false to tolerate them with warnings."
+  return 1
+}
+
+main() {
+  log "=== Kubernetes Run Substitute ==="
+  log "Project:    ${PROJECT_NAME}"
+  log "Build kind: ${RUN_BUILD_KIND}"
+  log "Env scheme: ${TOKEN_DELIMITER_STYLE}-${TOKEN_NAME_STYLE}"
+  log "Aggregate:  ${AGGREGATE_BASE}"
+  log "================================="
+
+  if [[ ! -d "${AGGREGATE_MANIFESTS_NORMALISED_DIR}" ]]; then
+    log_error "Assembled tree not found: ${AGGREGATE_MANIFESTS_NORMALISED_DIR}"
+    log_error "Did the aggregate step run first?"
+    exit 1
+  fi
+
+  log ""
+  log "Stacking final config dir (children defaults < run src/config < built-ins)..."
+  log ""
+  mkdir -p "${AGGREGATE_FINAL_CONFIG_DIR}" "${AGGREGATE_TOKENS_TMP_DIR}"
+  if [[ -d "${AGGREGATE_DEFAULTS_MERGED}" ]] \
+      && find "${AGGREGATE_DEFAULTS_MERGED}" -mindepth 1 -print -quit | grep -q .; then
+    cp -R "${AGGREGATE_DEFAULTS_MERGED}/." "${AGGREGATE_FINAL_CONFIG_DIR}/"
+  fi
+  # The Environment token family is injected here and ONLY here: this is
+  # the image-contents side of the build. The deploy-manifests side never
+  # emits these files (plan section 8: contents side only, and never
+  # overridable once the identity-tier change lands). Emitted to the
+  # builtin-resolved-tokens/environment/ scan dir like every other context
+  # scalar; prepare-substitution-tokens picks them up via its disk scan
+  # rather than per-step env vars.
+  emit_builtin_token_scalar ENVIRONMENT            "${PROJECT_NAME}"
+  emit_builtin_token_scalar ENVIRONMENT_NAME       "${PROJECT_NAME}"
+  emit_builtin_token_scalar ENVIRONMENT_SHORT_NAME "${ENVIRONMENT_SHORT_NAME}"
+  emit_builtin_token_scalar ENVIRONMENT_TYPE       "${ENVIRONMENT_TYPE_VALUE}"
+
+  TOKENS_OUTPUT_SUB_PATH="${AGGREGATE_TOKENS_TMP_DIR}" \
+    "${UTIL_DIR}/prepare-substitution-tokens"
+  cp -R "${AGGREGATE_TOKENS_TMP_DIR}/." "${AGGREGATE_FINAL_CONFIG_DIR}/"
+
+  split_prepared_config_layers
+
+  # This run is the FINAL layer: the stacked config is not carried
+  # forward as deferred defaults, it is applied right here.
+  log ""
+  log "Substituting aggregate against the stacked final config..."
+  mkdir -p "${AGGREGATE_SUBSTITUTED_DIR}"
+  cp -R "${AGGREGATE_MANIFESTS_NORMALISED_DIR}/." "${AGGREGATE_SUBSTITUTED_DIR}/"
+  "${UTIL_DIR}/substitute-tokens-from-dir" \
+    "${TOKEN_DELIMITER_STYLE}" \
+    "${AGGREGATE_FINAL_CONFIG_DIR}" \
+    "${AGGREGATE_SUBSTITUTED_DIR}"
+
+  step_ignore_unresolved_markers
+
+  step_substitution_gate
+
+  step_token_usage
+
+  log ""
+  # Run-scoped names, deliberately NOT the common MANIFESTS_SUB_PATH /
+  # DEFAULTS_SUB_PATH. Those are user config vars - the source manifest dir
+  # and the source defaults dir - and only load-final-kaptainpm-yaml gets to
+  # publish user config. Exporting them here would overwrite the user's
+  # values for every later step, and DEFAULTS_SUB_PATH in particular means
+  # defaults, not the whole stacked config this produces.
+  output_var "ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH" "${AGGREGATE_SUBSTITUTED_DIR}"
+  output_var "ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH" "${AGGREGATE_FINAL_CONFIG_DIR}"
+}
+
+main "$@"

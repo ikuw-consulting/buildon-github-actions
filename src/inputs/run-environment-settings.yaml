@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+#
+# Env/RP-scope run settings (spec.main.{environment,runPlatform}
+# projections plus the shared global paths the run steps consume).
+# Empty values fall through to the script defaults in
+# src/scripts/defaults/environments.bash.
+env-deploy-source-base-path:
+  description: 'Source dir for the deploy-image manifests (relative)'
+  required: false
+  type: string
+  default: ''
+generate-ideal-environment-deploy-manifests:
+  description: 'Generate the ideal deploy manifests (true) or consume supplied ones (false)'
+  required: false
+  type: string
+  default: ''
+image-deploy-manifests-apply-mode:
+  description: 'How a run-platform applies this environment deploy-manifests set - seed-and-compare or enforce-state-normally, environment only'
+  required: false
+  type: string
+  default: ''
+env-deploy-mode:
+  description: 'deployment | job (generate-mode only)'
+  required: false
+  type: string
+  default: ''
+image-auto-update-provider:
+  description: 'keel | keelson | none'
+  required: false
+  type: string
+  default: ''
+image-auto-update-policy:
+  description: 'patch | minor | major | all | force (force is keel-only)'
+  required: false
+  type: string
+  default: ''
+image-auto-update-trigger:
+  description: 'poll | default'
+  required: false
+  type: string
+  default: ''
+image-auto-update-poll-schedule:
+  description: 'Single-unit duration, e.g. 1m (rendered per provider)'
+  required: false
+  type: string
+  default: ''
+image-auto-update-field-manager-strategy:
+  description: 'mimic | patch | claim (keelson only, ignored otherwise)'
+  required: false
+  type: string
+  default: ''
+cluster-scoped-delegation:
+  description: 'self | parent (env-only; RP is the root and always self)'
+  required: false
+  type: string
+  default: ''
+cluster-scoped-kinds-file:
+  description: 'File NAME (versioned) of the cluster-scoped Kind list in fixed src/data/cluster-scoped-kinds/'
+  required: false
+  type: string
+  default: ''
+env-deploy-base-image-registry:
+  description: 'Registry of the composed environment deploy base image'
+  required: false
+  type: string
+  default: ''
+env-deploy-base-image-include-namespace:
+  description: 'true (default) includes the namespace segment in the composed base image; false ignores the namespace value and condenses the segment out'
+  required: false
+  type: string
+  default: ''
+env-deploy-base-image-namespace:
+  description: 'Namespace segment of the composed environment deploy base image'
+  required: false
+  type: string
+  default: ''
+env-deploy-base-image-family:
+  description: 'Family of the composed environment deploy base image'
+  required: false
+  type: string
+  default: ''
+env-deploy-base-image-version:
+  description: 'Version of the composed environment deploy base image'
+  required: false
+  type: string
+  default: ''
+allow-local-manifests-override:
+  description: 'When true, local src/kubernetes files override colliding child-contributed paths (warn per replacement)'
+  required: false
+  type: string
+  default: ''
+fail-on-unreferenced-config-or-secrets:
+  description: 'When true (default), config/secret value files no token references fail the build; false warns'
+  required: false
+  type: string
+  default: ''
+secrets-sub-path:
+  description: 'Directory containing encrypted secret value files (relative)'
+  required: false
+  type: string
+  default: ''

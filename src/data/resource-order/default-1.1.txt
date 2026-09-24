@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+#
+# Default Kind ordering for the resource-checksum pass.
+# See todo-checked/ResourceChecksum.md for the design.
+#
+# One Kind per non-blank, non-comment line. Order top-to-bottom is
+# dependency order: earlier kinds are hashed and suffixed first, so when
+# later kinds are processed their bytes already contain the suffixed
+# names of their dependencies.
+#
+# Files under src/data/ live in a sub dir per data set and are named
+# <name>-<version>.txt. Each file is IMMUTABLE once published: content
+# never changes - fixes or additions land as a new version (kept forever)
+# and bad versions are removed outright, never edited. Builds pin a
+# specific file, so a given version always means the same bytes.
+#
+# Users select a file by name with the checksumOrderFile setting
+# (MANIFESTS_CHECKSUM_ORDER_FILE); the file is resolved in this fixed
+# directory, so extensions can ship additional lists here. The selected
+# file REPLACES this list entirely (no merge).
+#
+# Secret is NOT listed here: checksum_tree processes Secret templates
+# FIRST (before this list), hashing the input set (raw template bytes +
+# encrypted token values) rather than the rendered manifest, when an
+# env-build's secrets dir is present.
+
+# === Tier 1: leaves (nothing they reference is in this list) ===
+ConfigMap
+PersistentVolumeClaim
+Role
+ClusterRole
+
+# === Tier 2: bridges (reference Tier 1 by name) ===
+ServiceAccount
+RoleBinding
+ClusterRoleBinding
+
+# cert-manager
+Issuer
+ClusterIssuer
+Certificate
+
+# === Tier 3: workloads (reference Tiers 1+2 by name) ===
+Deployment
+StatefulSet
+DaemonSet
+ReplicaSet
+Job
+CronJob
+
+# === Tier 4: workload followers (reference Tier 3 by name) ===
+HorizontalPodAutoscaler
+# KEDA
+ScaledObject
+ScaledJob
+
+# === Tier 5: routing (reference Services / each other by name) ===
+Service
+Ingress
+IngressClass
+# Gateway API
+GatewayClass
+Gateway
+HTTPRoute
+GRPCRoute
+TLSRoute
+TCPRoute
+UDPRoute
+ReferenceGrant
+
+# === Tier 6: policy attached to routing (reference Tier 5 by name) ===
+# Envoy Gateway
+ClientTrafficPolicy
+BackendTrafficPolicy
+BackendTLSPolicy
+EnvoyPatchPolicy
+EnvoyExtensionPolicy

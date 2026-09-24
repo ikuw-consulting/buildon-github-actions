@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: 'Kubernetes Run Consumption Report'
+description: 'Generates the run''s consumption report - the env analog of a manifests contract: consumed contents, token usage per providing tier, and the deploy-time secret token inventory'
+
+inputs:
+  # Action-specific inputs
+  project-name:
+    description: 'Run name (run-* / run-platform-*)'
+    required: true
+  version:
+    description: 'Version'
+    required: true
+  run-build-kind:
+    description: 'environment | run-platform (derived from project-name when empty)'
+    required: false
+    default: ''
+  environment-workload-contents-sub-path:
+    description: 'The substituted+finalised workload tree'
+    required: true
+
+  # Build output
+  output-sub-path:
+    description: 'Build output directory (relative)'
+    required: false
+    default: 'kaptain-out'
+
+outputs:
+  run-consumption-report:
+    description: 'Path to the consumption report yaml'
+    value: ${{ steps.consumption-report.outputs.RUN_CONSUMPTION_REPORT }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate consumption report
+      id: consumption-report
+      shell: bash
+      env:
+        BUILD_MODE: build_server
+        BUILD_PLATFORM: github-actions
+        BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        PROJECT_NAME: ${{ inputs.project-name }}
+        VERSION: ${{ inputs.version }}
+        RUN_BUILD_KIND: ${{ inputs.run-build-kind }}
+        ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH: ${{ inputs.environment-workload-contents-sub-path }}
+        OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
+      run: "${{ github.action_path }}/../../scripts/main/kubernetes-run-consumption-report"

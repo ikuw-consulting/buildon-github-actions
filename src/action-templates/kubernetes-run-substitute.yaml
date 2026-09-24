@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: 'Kubernetes Run Substitute'
+description: 'Stacks the final config (children defaults < run config < built-ins with the Environment token family) and substitutes the assembled workload aggregate, then gates: unresolved tokens, secret coverage, token usage'
+
+inputs:
+  # Action-specific inputs
+  project-name:
+    description: 'Run name (run-* / run-platform-*)'
+    required: true
+  environment-short-name:
+    description: 'Environment short name (from the aggregate step)'
+    required: true
+  run-build-kind:
+    description: 'environment | run-platform (derived from project-name when empty)'
+    required: false
+    default: ''
+
+  # INJECT-INPUT: output-sub-path
+  # INJECT-INPUT: token-substitution
+  # INJECT-INPUT: run-environment-settings
+
+outputs:
+  environment-workload-contents-sub-path:
+    description: 'The substituted workload tree (input to post-sub validation and finalise)'
+    value: ${{ steps.run-substitute.outputs.ENVIRONMENT_WORKLOAD_CONTENTS_SUB_PATH }}
+  environment-workload-contents-config-sub-path:
+    description: 'The stacked final-config dir the tree was substituted against'
+    value: ${{ steps.run-substitute.outputs.ENVIRONMENT_WORKLOAD_CONTENTS_CONFIG_SUB_PATH }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Substitute run aggregate
+      id: run-substitute
+      shell: bash
+      env:
+        BUILD_MODE: build_server
+        BUILD_PLATFORM: github-actions
+        BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        PROJECT_NAME: ${{ inputs.project-name }}
+        ENVIRONMENT_SHORT_NAME: ${{ inputs.environment-short-name }}
+        RUN_BUILD_KIND: ${{ inputs.run-build-kind }}
+        OUTPUT_SUB_PATH: ${{ inputs.output-sub-path }}
+        TOKEN_DELIMITER_STYLE: ${{ inputs.token-delimiter-style }}
+        TOKEN_NAME_STYLE: ${{ inputs.token-name-style }}
+        CONFIG_SUB_PATH: ${{ inputs.config-sub-path }}
+        CONFIG_VALUE_TRAILING_NEWLINE: ${{ inputs.config-value-trailing-newline }}
+        TOKEN_SUBSTITUTION_PASSES: ${{ inputs.token-substitution-passes }}
+        SECRETS_SUB_PATH: ${{ inputs.secrets-sub-path }}
+        ENV_FAIL_ON_UNREFERENCED_CONFIG_OR_SECRETS: ${{ inputs.fail-on-unreferenced-config-or-secrets }}
+      run: "${{ github.action_path }}/../../scripts/main/kubernetes-run-substitute"

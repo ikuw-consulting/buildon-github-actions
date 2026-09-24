@@ -371,6 +371,66 @@ MAPPINGS=(
   "spec.main.generators.podDisruptionBudget.additionalLabels:KUBERNETES_PODDISRUPTIONBUDGET_ADDITIONAL_LABELS"
   "spec.main.generators.podDisruptionBudget.additionalAnnotations:KUBERNETES_PODDISRUPTIONBUDGET_ADDITIONAL_ANNOTATIONS"
 
+  # Environment (kubernetes-run-environment). Shares env vars with runPlatform
+  # below; only one of spec.main.environment / spec.main.runPlatform is present
+  # in any given KaptainPM.yaml (selected by kind:), so the names do not collide.
+  "spec.main.environment.allowLocalManifestsOverride:ENV_ALLOW_LOCAL_MANIFESTS_OVERRIDE"
+  "spec.main.environment.failOnUnreferencedConfigOrSecrets:ENV_FAIL_ON_UNREFERENCED_CONFIG_OR_SECRETS"
+  "spec.main.environment.imageAutoUpdateProvider:ENV_IMAGE_AUTO_UPDATE_PROVIDER"
+  "spec.main.environment.imageAutoUpdatePolicy:ENV_IMAGE_AUTO_UPDATE_POLICY"
+  "spec.main.environment.imageAutoUpdateTrigger:ENV_IMAGE_AUTO_UPDATE_TRIGGER"
+  "spec.main.environment.imageAutoUpdatePollSchedule:ENV_IMAGE_AUTO_UPDATE_POLL_SCHEDULE"
+  "spec.main.environment.imageAutoUpdateFieldManagerStrategy:ENV_IMAGE_AUTO_UPDATE_FIELD_MANAGER_STRATEGY"
+  "spec.main.environment.clusterScopedDelegation:ENV_CLUSTER_SCOPED_DELEGATION"
+  "spec.main.environment.clusterScopedKindsFile:MANIFESTS_CLUSTER_SCOPED_KINDS_FILE"
+  "spec.main.environment.trustedContributorsOnly:MANIFESTS_TRUSTED_CONTRIBUTORS_ONLY"
+  "spec.main.environment.signoffsSubPath:MANIFESTS_SIGNOFFS_SUB_PATH"
+  "spec.main.environment.signoffsKindsFile:MANIFESTS_SIGNOFFS_KINDS_FILE"
+  "spec.main.environment.deployMode:ENV_DEPLOY_MODE"
+  "spec.main.environment.checksumSecretsTiming:ENV_CHECKSUM_SECRETS_TIMING"
+  "spec.main.environment.checksumLength:RESOURCE_CHECKSUM_LENGTH"
+  "spec.main.environment.checksumOrderFile:MANIFESTS_CHECKSUM_ORDER_FILE"
+  "spec.main.environment.environmentDeploySourceBasePath:ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH"
+  "spec.main.environment.generateIdealEnvironmentDeployManifests:ENV_GENERATE_IDEAL_ENVIRONMENT_DEPLOY_MANIFESTS"
+  # Environment-only: how a run-platform applies this environment's
+  # deploy-manifests set. A run-platform deploys itself, so it has no
+  # equivalent and the schema does not offer it one.
+  "spec.main.environment.imageDeployManifestsApplyMode:ENV_IMAGE_DEPLOY_MANIFESTS_APPLY_MODE"
+  "spec.main.environment.environmentDeployBaseImage.registry:ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_REGISTRY"
+  "spec.main.environment.environmentDeployBaseImage.includeNamespace:ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_INCLUDE_NAMESPACE"
+  "spec.main.environment.environmentDeployBaseImage.namespace:ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_NAMESPACE"
+  "spec.main.environment.environmentDeployBaseImage.family:ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_FAMILY"
+  "spec.main.environment.environmentDeployBaseImage.version:ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_VERSION"
+  # Note: spec.main.environment.cleanUp is exported WHOLE as JSON below -
+  # one value, structure preserved, rather than a field-per-var fan-out.
+
+  # RunPlatform (kubernetes-run-platform-meta-environment). Same env-var names
+  # as environment above; see note there.
+  "spec.main.runPlatform.allowLocalManifestsOverride:ENV_ALLOW_LOCAL_MANIFESTS_OVERRIDE"
+  "spec.main.runPlatform.failOnUnreferencedConfigOrSecrets:ENV_FAIL_ON_UNREFERENCED_CONFIG_OR_SECRETS"
+  "spec.main.runPlatform.imageAutoUpdateProvider:ENV_IMAGE_AUTO_UPDATE_PROVIDER"
+  "spec.main.runPlatform.imageAutoUpdatePolicy:ENV_IMAGE_AUTO_UPDATE_POLICY"
+  "spec.main.runPlatform.imageAutoUpdateTrigger:ENV_IMAGE_AUTO_UPDATE_TRIGGER"
+  "spec.main.runPlatform.imageAutoUpdatePollSchedule:ENV_IMAGE_AUTO_UPDATE_POLL_SCHEDULE"
+  "spec.main.runPlatform.imageAutoUpdateFieldManagerStrategy:ENV_IMAGE_AUTO_UPDATE_FIELD_MANAGER_STRATEGY"
+  # No clusterScopedDelegation for runPlatform: the platform is the root and
+  # is always 'self'.
+  "spec.main.runPlatform.trustedContributorsOnly:MANIFESTS_TRUSTED_CONTRIBUTORS_ONLY"
+  "spec.main.runPlatform.signoffsSubPath:MANIFESTS_SIGNOFFS_SUB_PATH"
+  "spec.main.runPlatform.signoffsKindsFile:MANIFESTS_SIGNOFFS_KINDS_FILE"
+  "spec.main.runPlatform.deployMode:ENV_DEPLOY_MODE"
+  "spec.main.runPlatform.checksumSecretsTiming:ENV_CHECKSUM_SECRETS_TIMING"
+  "spec.main.runPlatform.checksumLength:RESOURCE_CHECKSUM_LENGTH"
+  "spec.main.runPlatform.checksumOrderFile:MANIFESTS_CHECKSUM_ORDER_FILE"
+  "spec.main.runPlatform.environmentDeploySourceBasePath:ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH"
+  "spec.main.runPlatform.generateIdealEnvironmentDeployManifests:ENV_GENERATE_IDEAL_ENVIRONMENT_DEPLOY_MANIFESTS"
+  "spec.main.runPlatform.environmentDeployBaseImage.registry:ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_REGISTRY"
+  "spec.main.runPlatform.environmentDeployBaseImage.includeNamespace:ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_INCLUDE_NAMESPACE"
+  "spec.main.runPlatform.environmentDeployBaseImage.namespace:ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_NAMESPACE"
+  "spec.main.runPlatform.environmentDeployBaseImage.family:ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_FAMILY"
+  "spec.main.runPlatform.environmentDeployBaseImage.version:ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_VERSION"
+  # Note: spec.main.runPlatform.cleanUp is exported WHOLE as JSON below.
+
   # Manifests
   "spec.main.manifests.subPath:MANIFESTS_SUB_PATH"
   "spec.main.manifests.allowLocalOverride:ALLOW_LOCAL_MANIFESTS_OVERRIDE"
@@ -589,6 +649,33 @@ if [[ -n "${image_retags_json}" && "${image_retags_json}" != "null" && "${image_
   output_var "VENDOR_HELM_RENDERED_IMAGE_RETAGS" "${image_retags_json}" > /dev/null
   log "Field .spec.main.vendorHelmRendered.imageRetags exported as VENDOR_HELM_RENDERED_IMAGE_RETAGS (JSON)"
   found_count=$((found_count + 1))
+fi
+
+# Env/RP scope: pick the block that exists for this kind. Only one of
+# spec.main.environment / spec.main.runPlatform is present per file.
+env_block_path=""
+case "${actual_kind}" in
+  kubernetes-run-environment)                env_block_path="spec.main.environment" ;;
+  kubernetes-run-platform-meta-environment)  env_block_path="spec.main.runPlatform" ;;
+esac
+
+# Env/RP scope: the WHOLE cleanUp block as one JSON value, structure
+# preserved exactly as written.
+#
+# One value rather than a field-per-var fan-out, because the structure IS
+# the interface: the deploy scripts consume this shape from the cleanup
+# policy ConfigMap, so flattening it into a dozen scalars here only to
+# rebuild the same shape downstream would be two opportunities to diverge,
+# a dozen action inputs to thread, and a new var for every field the schema
+# ever gains. Nested collections (the matcher lists, the overseen-namespace
+# entries) could not survive the flattening anyway.
+if [[ -n "${env_block_path}" ]]; then
+  clean_up_json=$(yq -o=json ".${env_block_path}.cleanUp // \"\"" "${PM_FILE}" | jq -c '.')
+  if [[ -n "${clean_up_json}" && "${clean_up_json}" != "null" && "${clean_up_json}" != '""' ]]; then
+    output_var "ENV_CLEAN_UP" "${clean_up_json}" > /dev/null
+    log "Field .${env_block_path}.cleanUp exported as ENV_CLEAN_UP (JSON)"
+    found_count=$((found_count + 1))
+  fi
 fi
 
 # Fields used in workflow step inputs or if-conditions that need defaults when absent from yaml
