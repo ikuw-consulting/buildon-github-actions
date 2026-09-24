@@ -399,6 +399,21 @@ content_validate_bundle() {
 
   # Every unresolved token actually present in the manifests must appear in
   # .config.required. Producer claims to enumerate everything; verify by scan.
+  #
+  # Except the deploy-time context family. Kaptain itself writes
+  # ${Environment}, ${ProductName} and their siblings into every bundle's
+  # metadata labels and lineage data, and they are resolved by the product or
+  # environment build that finally deploys the bundle (kubernetes-product-
+  # aggregate and kubernetes-run-substitute emit them as builtins). No producer
+  # can declare them in a contract, because no producer has values for them;
+  # requiring it rejected every Kaptain-built bundle imported as a template.
+  # Exactly this family is exempt, in the bundle's own naming style; any other
+  # undeclared token still fails.
+  local deploy_time_tokens="" deploy_time_name
+  for deploy_time_name in ENVIRONMENT ENVIRONMENT_NAME ENVIRONMENT_SHORT_NAME ENVIRONMENT_TYPE \
+    PRODUCT_NAME PRODUCT_SHORT_NAME; do
+    deploy_time_tokens+="$(convert_token_name "${bundle_name_style}" "${deploy_time_name}")"$'\n'
+  done
   local unresolved_tokens
   unresolved_tokens=$("${CONTENT_RESOLVE_UTIL_DIR}/scan-unresolved-tokens" \
     "${bundle_delim_style}" "${bundle_name_style}" "${manifests_dir}")
@@ -407,6 +422,7 @@ content_validate_bundle() {
     local token
     while IFS= read -r token; do
       [[ -z "${token}" ]] && continue
+      grep -qxF "${token}" <<< "${deploy_time_tokens}" && continue
       if [[ -z "${required_tokens}" ]] || ! grep -qxF "${token}" <<< "${required_tokens}"; then
         missing+=("${token}")
       fi
