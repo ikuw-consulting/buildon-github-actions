@@ -416,6 +416,13 @@ check_bats_assertions() {
   log_info "All BATS assertions can fail their tests"
 }
 
+# Check token regexes and delimiter stripping come only from lib/token-format.bash
+check_token_patterns() {
+  log_info "Checking token patterns come only from lib/token-format.bash"
+  "${SCRIPT_DIR}/check-token-patterns.bash"
+  log_info "No hand-built token patterns"
+}
+
 validate_guide_examples() {
   log_info "Validating guide example KaptainPM.yaml files against schema"
   ( cd "${PROJECT_ROOT}" && "${SCRIPT_DIR}/validate-guides-against-kaptainpm-schema.bash" )
@@ -451,6 +458,9 @@ main() {
 
   # Check BATS assertions are not silently ignored by set -e
   check_bats_assertions
+
+  # Check nothing hand-builds token regexes or delimiter stripping
+  check_token_patterns
 
   # Run shellcheck
   run_shellcheck
