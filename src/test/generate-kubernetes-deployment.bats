@@ -131,6 +131,21 @@ read_manifest_with_suffix() {
   assert_contains "$manifest" "protocol: TCP"
 }
 
+@test "omits container ports when KUBERNETES_DEPLOYMENT_PORTS_ENABLED=false" {
+  KUBERNETES_DEPLOYMENT_PORTS_ENABLED=false run "$GENERATORS_DIR/generate-kubernetes-workload-deployment"
+  [ "$status" -eq 0 ]
+
+  manifest=$(read_manifest)
+  [ "$(echo "$manifest" | grep -c "containerPort")" -eq 0 ]
+  [ "$(echo "$manifest" | grep -c "ports:")" -eq 0 ]
+}
+
+@test "rejects a non-boolean KUBERNETES_DEPLOYMENT_PORTS_ENABLED" {
+  KUBERNETES_DEPLOYMENT_PORTS_ENABLED=nope run "$GENERATORS_DIR/generate-kubernetes-workload-deployment"
+  [ "$status" -ne 0 ]
+  assert_output_contains "KUBERNETES_DEPLOYMENT_PORTS_ENABLED"
+}
+
 # =============================================================================
 # Security context
 # =============================================================================

@@ -29,6 +29,10 @@ KUBERNETES_DEPLOYMENT_ADDITIONAL_ANNOTATIONS="${KUBERNETES_DEPLOYMENT_ADDITIONAL
 KUBERNETES_DEPLOYMENT_MAX_SURGE="${KUBERNETES_DEPLOYMENT_MAX_SURGE:-1}"
 KUBERNETES_DEPLOYMENT_MAX_UNAVAILABLE="${KUBERNETES_DEPLOYMENT_MAX_UNAVAILABLE:-0}"
 
+# Ports (enabled by default; a workload that serves nothing, such as the env
+# deploy reconciler, turns them off)
+KUBERNETES_DEPLOYMENT_PORTS_ENABLED="${KUBERNETES_DEPLOYMENT_PORTS_ENABLED:-true}"
+
 # =============================================================================
 # Convenience short names (for single-purpose generator scripts only)
 # =============================================================================
@@ -43,3 +47,6 @@ SPECIFIC_ANNOTATIONS="${KUBERNETES_DEPLOYMENT_ADDITIONAL_ANNOTATIONS}"
 # Deployment strategy (always RollingUpdate - Recreate causes downtime)
 MAX_SURGE="${KUBERNETES_DEPLOYMENT_MAX_SURGE}"
 MAX_UNAVAILABLE="${KUBERNETES_DEPLOYMENT_MAX_UNAVAILABLE}"
+
+# Ports
+DEPLOYMENT_PORTS_ENABLED="${KUBERNETES_DEPLOYMENT_PORTS_ENABLED}"

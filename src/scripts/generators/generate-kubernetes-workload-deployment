@@ -20,6 +20,9 @@
 #     KUBERNETES_WORKLOAD_CONFIGMAP_KEYS_FOR_ENV  - Comma/space-separated keys to expose as env refs
 #     KUBERNETES_WORKLOAD_SECRET_KEYS_FOR_ENV     - Comma/space-separated keys to expose as env refs
 #
+#   Deployment settings (KUBERNETES_DEPLOYMENT_*):
+#     KUBERNETES_DEPLOYMENT_PORTS_ENABLED         - Emit the container port (default: true)
+#
 # Output:
 #   ${OUTPUT_SUB_PATH}/manifests/combined/[${combined-sub-path}/]deployment[-${suffix}].yaml
 #
@@ -77,6 +80,7 @@ FINAL_ENV_SUB_PATH=$(build_configuration_source_path "${BASE_ENV_SUB_PATH}" "${N
 
 validate_common_inputs
 validate_workload_inputs
+validate_boolean "KUBERNETES_DEPLOYMENT_PORTS_ENABLED" "${DEPLOYMENT_PORTS_ENABLED}"
 
 # =============================================================================
 # Generate token references
@@ -273,8 +277,10 @@ script_name=$(basename "${BASH_SOURCE[0]}")
   generate_container_command 10 "${CONTAINER_COMMAND}"
   generate_container_args 10 "${CONTAINER_ARGS}"
 
-  # Ports
-  generate_container_ports 10 "${CONTAINER_PORT}"
+  # Ports (omitted for workloads that serve nothing)
+  if [[ "${DEPLOYMENT_PORTS_ENABLED}" == "true" ]]; then
+    generate_container_ports 10 "${CONTAINER_PORT}"
+  fi
 
   # Container security context
   generate_container_security_context 10 "${READONLY_ROOT_FILESYSTEM}"
