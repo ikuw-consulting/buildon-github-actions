@@ -11,6 +11,7 @@
 #   format_canonical_token - Convenience combining both
 #   format_project_suffixed_token - Combine project + suffix into delimited token
 #   unresolved_token_regex - grep-E regex matching unresolved tokens
+#   strip_token_delimiters - Matched token per line -> bare token name
 
 bats_require_minimum_version 1.5.0
 
@@ -709,6 +710,51 @@ setup() {
   echo '${PROJECT.NAME}' | grep -Eq "$pattern"
 }
 
+@test "unresolved_token_regex: shell + PascalCase matches a leading digit, as its validator allows" {
+  pattern=$(unresolved_token_regex shell PascalCase)
+  echo '${2FaSecret}' | grep -Eq "^$pattern$"
+}
+
+@test "unresolved_token_regex: shell + camelCase matches a leading digit, as its validator allows" {
+  pattern=$(unresolved_token_regex shell camelCase)
+  echo '${2faSecret}' | grep -Eq "^$pattern$"
+}
+
+@test "unresolved_token_regex: shell + UPPER_SNAKE matches a leading digit, as its validator allows" {
+  pattern=$(unresolved_token_regex shell UPPER_SNAKE)
+  echo '${2FA_SECRET}' | grep -Eq "^$pattern$"
+}
+
+@test "unresolved_token_regex: shell + lower_snake matches a leading digit, as its validator allows" {
+  pattern=$(unresolved_token_regex shell lower_snake)
+  echo '${2fa_secret}' | grep -Eq "^$pattern$"
+}
+
+@test "unresolved_token_regex: shell + lower-kebab matches a leading digit, as its validator allows" {
+  pattern=$(unresolved_token_regex shell lower-kebab)
+  echo '${2fa-secret}' | grep -Eq "^$pattern$"
+}
+
+@test "unresolved_token_regex: shell + UPPER-KEBAB matches a leading digit, as its validator allows" {
+  pattern=$(unresolved_token_regex shell UPPER-KEBAB)
+  echo '${2FA-SECRET}' | grep -Eq "^$pattern$"
+}
+
+@test "unresolved_token_regex: shell + lower.dot matches a leading digit, as its validator allows" {
+  pattern=$(unresolved_token_regex shell lower.dot)
+  echo '${2fa.secret}' | grep -Eq "^$pattern$"
+}
+
+@test "unresolved_token_regex: shell + UPPER.DOT matches a leading digit, as its validator allows" {
+  pattern=$(unresolved_token_regex shell UPPER.DOT)
+  echo '${2FA.SECRET}' | grep -Eq "^$pattern$"
+}
+
+@test "unresolved_token_regex: shell + PascalCase matches a nested segment with a leading digit" {
+  pattern=$(unresolved_token_regex shell PascalCase)
+  echo '${Vendor/2FaSecret}' | grep -Eq "^$pattern$"
+}
+
 # --- mustache delimiter style ---
 
 @test "unresolved_token_regex: mustache + PascalCase matches token" {
@@ -1256,12 +1302,91 @@ assert_round_trips() {
 }
 
 # =============================================================================
+# strip_token_delimiters tests - matched token per line -> bare token name
+# =============================================================================
+
+# Formats a nested name in the style, finds it in a line of text with the
+# style's unresolved_token_regex, and strips it - the way scan-unresolved-tokens
+# uses the pair - so each style is checked end to end.
+assert_strip_round_trip() {
+  local style="$1"
+  local reference pattern stripped
+  reference=$(format_token_reference "${style}" "Vendor/DbHost")
+  pattern=$(unresolved_token_regex "${style}" PascalCase)
+  stripped=$(printf 'host: %s # note\n' "${reference}" | grep -Eo "${pattern}" | strip_token_delimiters "${style}")
+  [ "${stripped}" = "Vendor/DbHost" ]
+}
+
+@test "strip_token_delimiters: shell round trip leaves the bare name" {
+  assert_strip_round_trip shell
+}
+
+@test "strip_token_delimiters: mustache round trip leaves the bare name" {
+  assert_strip_round_trip mustache
+}
+
+@test "strip_token_delimiters: helm round trip leaves the bare name" {
+  assert_strip_round_trip helm
+}
+
+@test "strip_token_delimiters: erb round trip leaves the bare name" {
+  assert_strip_round_trip erb
+}
+
+@test "strip_token_delimiters: github-actions round trip leaves the bare name" {
+  assert_strip_round_trip github-actions
+}
+
+@test "strip_token_delimiters: blade round trip leaves the bare name" {
+  assert_strip_round_trip blade
+}
+
+@test "strip_token_delimiters: stringtemplate round trip leaves the bare name" {
+  assert_strip_round_trip stringtemplate
+}
+
+@test "strip_token_delimiters: ognl round trip leaves the bare name" {
+  assert_strip_round_trip ognl
+}
+
+@test "strip_token_delimiters: t4 round trip leaves the bare name" {
+  assert_strip_round_trip t4
+}
+
+@test "strip_token_delimiters: swift round trip leaves the bare name" {
+  assert_strip_round_trip swift
+}
+
+@test "strip_token_delimiters: strips every line of multi-line input" {
+  run strip_token_delimiters shell <<< $'${One}\n${Two/Three}'
+  [ "$status" -eq 0 ]
+  [ "$output" = $'One\nTwo/Three' ]
+}
+
+@test "strip_token_delimiters: unknown delimiter style fails" {
+  run strip_token_delimiters bogus <<< '${One}'
+  [ "$status" -ne 0 ]
+  assert_output_contains "Unknown delimiter style: bogus"
+}
+
+@test "strip_token_delimiters: requires exactly one argument" {
+  run strip_token_delimiters <<< '${One}'
+  [ "$status" -ne 0 ]
+  assert_output_contains "requires exactly 1 argument"
+}
+
+# =============================================================================
 # any_token_regex tests - grep-E regex for token-shaped content in ANY style
 # =============================================================================
 
 @test "any_token_regex: matches shell style" {
   pattern=$(any_token_regex)
   echo 'a: ${ProjectName}' | grep -Eq "$pattern"
+}
+
+@test "any_token_regex: matches a segment with a leading digit" {
+  pattern=$(any_token_regex)
+  [ "$(echo 'a: ${Vendor/2FaSecret}' | grep -Eo "$pattern")" = '${Vendor/2FaSecret}' ]
 }
 
 @test "any_token_regex: matches mustache style" {

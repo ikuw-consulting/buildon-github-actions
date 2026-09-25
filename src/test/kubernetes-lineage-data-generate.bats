@@ -307,8 +307,8 @@ EOF
   [ "${status}" -eq 0 ]
   # After sub-round substitute the data file should hold the concrete CM name,
   # which is ${ProjectName}-lineage-data (the lineage CM's actual metadata.name).
-  ! grep -q '\${ProjectName}' \
-    "${TEST_DIR}/kaptain-out/lineage-data/keys-for-lineage-data/resources.yaml"
+  [ "$(grep -c '\${ProjectName}' \
+    "${TEST_DIR}/kaptain-out/lineage-data/keys-for-lineage-data/resources.yaml")" -eq 0 ]
   grep -q "name: product-foo-lineage-data" \
     "${TEST_DIR}/kaptain-out/lineage-data/keys-for-lineage-data/resources.yaml"
   ! grep -q '\${ProjectName}' \
@@ -506,8 +506,8 @@ EOF
     PRODUCT_NAME="" PRODUCT_SHORT_NAME="" \
     run_script
   [ "${status}" -eq 0 ]
-  ! grep -q "kaptain.org/product-name" \
-    "$(final_lineage_data_path "myapp" "kaptain-app-lineage-data.yaml")"
+  [ "$(grep -c "kaptain.org/product-name" \
+    "$(final_lineage_data_path "myapp" "kaptain-app-lineage-data.yaml")")" -eq 0 ]
   ! grep -q "kaptain.org/product-short-name" \
     "$(final_lineage_data_path "myapp" "kaptain-app-lineage-data.yaml")"
 }

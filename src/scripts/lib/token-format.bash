@@ -17,6 +17,7 @@
 #   validate_token_styles            - Validate both styles and exit on error
 #   unresolved_token_regex           - grep-E regex matching unresolved tokens for a given style pair
 #   any_token_regex                  - grep-E regex matching token-shaped content in any supported style
+#   strip_token_delimiters           - stdin filter: one matched token per line -> bare token name
 
 # Internal: lowercase a string (bash 3.2 compatible)
 lowercase() {
@@ -110,18 +111,21 @@ unresolved_token_regex() {
     return 1
   fi
 
-  # Build name character class from name style
+  # Build name character class from name style. Each segment may start with a
+  # digit, as the matching plugins/token-name-validators/<style> allows: a
+  # name the validator accepts must be matchable here, or it is invisible to
+  # the gate and to the unreferenced-value check.
   local name_regex
   local name_segment
   case "${name_style}" in
-    PascalCase)      name_segment='[A-Z][A-Za-z0-9]*' ;;
-    camelCase)       name_segment='[a-z][A-Za-z0-9]*' ;;
-    UPPER_SNAKE)     name_segment='[A-Z_][A-Z0-9_]*' ;;
-    lower_snake)     name_segment='[a-z_][a-z0-9_]*' ;;
-    lower-kebab)     name_segment='[a-z][a-z0-9-]*' ;;
-    UPPER-KEBAB)     name_segment='[A-Z][A-Z0-9-]*' ;;
-    lower.dot)       name_segment='[a-z][a-z0-9.]*' ;;
-    UPPER.DOT)       name_segment='[A-Z][A-Z0-9.]*' ;;
+    PascalCase)      name_segment='[A-Z0-9][A-Za-z0-9]*' ;;
+    camelCase)       name_segment='[a-z0-9][A-Za-z0-9]*' ;;
+    UPPER_SNAKE)     name_segment='[A-Z0-9_][A-Z0-9_]*' ;;
+    lower_snake)     name_segment='[a-z0-9_][a-z0-9_]*' ;;
+    lower-kebab)     name_segment='[a-z0-9][a-z0-9-]*' ;;
+    UPPER-KEBAB)     name_segment='[A-Z0-9][A-Z0-9-]*' ;;
+    lower.dot)       name_segment='[a-z0-9][a-z0-9.]*' ;;
+    UPPER.DOT)       name_segment='[A-Z0-9][A-Z0-9.]*' ;;
     *)
       log_error "Unknown name style: ${name_style}"
       return 1
@@ -149,6 +153,34 @@ unresolved_token_regex() {
   esac
 }
 
+# Strip delimiters from matched tokens to leave the bare token names. Reads one
+# match per line on stdin (as produced by grep -o with unresolved_token_regex)
+# and writes one name per line.
+# Usage: strip_token_delimiters <delimiter-style>
+strip_token_delimiters() {
+  if [[ $# -ne 1 ]]; then
+    log_error "strip_token_delimiters requires exactly 1 argument, got $#"
+    return 1
+  fi
+
+  case "${1:-}" in
+    shell)           sed 's/^\${\(.*\)}$/\1/' ;;              # ${Name}
+    mustache)        sed 's/^{{ \(.*\) }}$/\1/' ;;            # {{ Name }}
+    helm)            sed 's/^{{ \.Values\.\(.*\) }}$/\1/' ;;  # {{ .Values.Name }}
+    erb)             sed 's/^<%= \(.*\) %>$/\1/' ;;           # <%= Name %>
+    github-actions)  sed 's/^\${{ \(.*\) }}$/\1/' ;;          # ${{ Name }}
+    blade)           sed 's/^{{ \$\(.*\) }}$/\1/' ;;          # {{ $Name }}
+    stringtemplate)  sed 's/^\$\(.*\)\$$/\1/' ;;              # $Name$
+    ognl)            sed 's/^%{\(.*\)}$/\1/' ;;               # %{Name}
+    t4)              sed 's/^<#= \(.*\) #>$/\1/' ;;           # <#= Name #>
+    swift)           sed 's/^\\(\(.*\))$/\1/' ;;              # \(Name)
+    *)
+      log_error "Unknown delimiter style: ${1:-}"
+      return 1
+      ;;
+  esac
+}
+
 # Return a grep -E regex matching token-shaped content in ANY supported
 # delimiter style, with a permissive name segment spanning every supported name
 # style at once.
@@ -161,7 +193,7 @@ unresolved_token_regex() {
 #
 # Usage: any_token_regex
 any_token_regex() {
-  local segment='[A-Za-z_][A-Za-z0-9_.-]*'
+  local segment='[A-Za-z0-9_][A-Za-z0-9_.-]*'
   local name="${segment}(/${segment})*"
 
   local parts

@@ -341,9 +341,9 @@ EOF
   [ "$status" -eq 0 ]
   repackage=$(get_repackage)
   # These should NOT be in repackage - the matches are all source style tokens
-  ! echo "$repackage" | grep -q "shell-PascalCase"
-  ! echo "$repackage" | grep -q "shell-UPPER-KEBAB"
-  ! echo "$repackage" | grep -q 'shell-UPPER\.DOT'
+  [ "$(echo "$repackage" | grep -c "shell-PascalCase")" -eq 0 ]
+  [ "$(echo "$repackage" | grep -c "shell-UPPER-KEBAB")" -eq 0 ]
+  [ "$(echo "$repackage" | grep -c 'shell-UPPER\.DOT')" -eq 0 ]
   # They should be in automatic
   automatic=$(get_automatic)
   echo "$automatic" | grep -q "shell-PascalCase"

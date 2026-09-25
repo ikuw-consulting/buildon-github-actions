@@ -295,8 +295,8 @@ EOF
   # MemoryRequest and CpuRequest have defaults, should NOT be in noDefault
   local no_defaults
   no_defaults=$(yq '.config.noDefault[]' "$contract")
-  ! echo "$no_defaults" | grep -q "MemoryRequest"
-  ! echo "$no_defaults" | grep -q "CpuRequest"
+  [ "$(echo "$no_defaults" | grep -c "MemoryRequest")" -eq 0 ]
+  [ "$(echo "$no_defaults" | grep -c "CpuRequest")" -eq 0 ]
   # Environment and EnvironmentDockerRegistryAndNamespace have NO defaults
   echo "$no_defaults" | grep -q "Environment"
   echo "$no_defaults" | grep -q "EnvironmentDockerRegistryAndNamespace"

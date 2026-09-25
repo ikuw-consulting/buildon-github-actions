@@ -102,8 +102,8 @@ The brackets pin that exact version. A range such as `[1.8.4,2.0.0)` works in th
 @test "consume: forms defaults to short-only when omitted" {
   run "$FRS" consume "keelson" "1.8.4" "ghcr.io" "keelson-pro"
   [ "$status" -eq 0 ]
-  [[ "$output" == *'keelson:[1.8.4]'* ]]
-  [[ "$output" != *"ghcr.io"* ]]
+  [[ "$output" == *'keelson:[1.8.4]'* ]] || return 1
+  [[ "$output" != *"ghcr.io"* ]] || return 1
   [[ "$output" != *"**"* ]]
 }
 
@@ -116,23 +116,23 @@ The brackets pin that exact version. A range such as `[1.8.4,2.0.0)` works in th
 @test "consume: empty namespace drops the slash from the label" {
   run "$FRS" consume "layer-foo" "1.3.2" "ghcr.io" "" short-first
   [ "$status" -eq 0 ]
-  [[ "$output" == *'**From any project using `ghcr.io`**'* ]]
-  [[ "$output" != *'`ghcr.io/`'* ]]
+  [[ "$output" == *'**From any project using `ghcr.io`**'* ]] || return 1
+  [[ "$output" != *'`ghcr.io/`'* ]] || return 1
   [[ "$output" == *'ghcr.io/layer/layer-foo:[1.3.2]'* ]]
 }
 
 @test "consume: range upper bound is next major with the same part count" {
   run "$FRS" consume "keelson" "5" "ghcr.io" "keelson-pro"
   [ "$status" -eq 0 ]
-  [[ "$output" == *'`[5,6)`'* ]]
+  [[ "$output" == *'`[5,6)`'* ]] || return 1
 
   run "$FRS" consume "keelson" "2.4" "ghcr.io" "keelson-pro"
   [ "$status" -eq 0 ]
-  [[ "$output" == *'`[2.4,3.0)`'* ]]
+  [[ "$output" == *'`[2.4,3.0)`'* ]] || return 1
 
   run "$FRS" consume "keelson" "1.2.3.4" "ghcr.io" "keelson-pro"
   [ "$status" -eq 0 ]
-  [[ "$output" == *'`[1.2.3.4,2.0.0.0)`'* ]]
+  [[ "$output" == *'`[1.2.3.4,2.0.0.0)`'* ]] || return 1
 
   run "$FRS" consume "keelson" "10.9.9" "ghcr.io" "keelson-pro"
   [ "$status" -eq 0 ]
