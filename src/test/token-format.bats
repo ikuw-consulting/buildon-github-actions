@@ -11,6 +11,7 @@
 #   format_canonical_token - Convenience combining both
 #   format_project_suffixed_token - Combine project + suffix into delimited token
 #   unresolved_token_regex - grep-E regex matching unresolved tokens
+#   strip_token_delimiters - Matched token per line -> bare token name
 
 bats_require_minimum_version 1.5.0
 
@@ -1298,6 +1299,80 @@ assert_round_trips() {
 @test "prefix_token_name: fails with wrong argument count" {
   run prefix_token_name PascalCase
   [ "$status" -ne 0 ]
+}
+
+# =============================================================================
+# strip_token_delimiters tests - matched token per line -> bare token name
+# =============================================================================
+
+# Formats a nested name in the style, finds it in a line of text with the
+# style's unresolved_token_regex, and strips it - the way scan-unresolved-tokens
+# uses the pair - so each style is checked end to end.
+assert_strip_round_trip() {
+  local style="$1"
+  local reference pattern stripped
+  reference=$(format_token_reference "${style}" "Vendor/DbHost")
+  pattern=$(unresolved_token_regex "${style}" PascalCase)
+  stripped=$(printf 'host: %s # note\n' "${reference}" | grep -Eo "${pattern}" | strip_token_delimiters "${style}")
+  [ "${stripped}" = "Vendor/DbHost" ]
+}
+
+@test "strip_token_delimiters: shell round trip leaves the bare name" {
+  assert_strip_round_trip shell
+}
+
+@test "strip_token_delimiters: mustache round trip leaves the bare name" {
+  assert_strip_round_trip mustache
+}
+
+@test "strip_token_delimiters: helm round trip leaves the bare name" {
+  assert_strip_round_trip helm
+}
+
+@test "strip_token_delimiters: erb round trip leaves the bare name" {
+  assert_strip_round_trip erb
+}
+
+@test "strip_token_delimiters: github-actions round trip leaves the bare name" {
+  assert_strip_round_trip github-actions
+}
+
+@test "strip_token_delimiters: blade round trip leaves the bare name" {
+  assert_strip_round_trip blade
+}
+
+@test "strip_token_delimiters: stringtemplate round trip leaves the bare name" {
+  assert_strip_round_trip stringtemplate
+}
+
+@test "strip_token_delimiters: ognl round trip leaves the bare name" {
+  assert_strip_round_trip ognl
+}
+
+@test "strip_token_delimiters: t4 round trip leaves the bare name" {
+  assert_strip_round_trip t4
+}
+
+@test "strip_token_delimiters: swift round trip leaves the bare name" {
+  assert_strip_round_trip swift
+}
+
+@test "strip_token_delimiters: strips every line of multi-line input" {
+  run strip_token_delimiters shell <<< $'${One}\n${Two/Three}'
+  [ "$status" -eq 0 ]
+  [ "$output" = $'One\nTwo/Three' ]
+}
+
+@test "strip_token_delimiters: unknown delimiter style fails" {
+  run strip_token_delimiters bogus <<< '${One}'
+  [ "$status" -ne 0 ]
+  assert_output_contains "Unknown delimiter style: bogus"
+}
+
+@test "strip_token_delimiters: requires exactly one argument" {
+  run strip_token_delimiters <<< '${One}'
+  [ "$status" -ne 0 ]
+  assert_output_contains "requires exactly 1 argument"
 }
 
 # =============================================================================
