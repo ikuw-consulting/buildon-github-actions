@@ -1,15 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.31/spec-kaptainpm-schema-layerset-source-1.31.yaml",
+  "$id": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.32/spec-kaptainpm-schema-layerset-source-1.32.yaml",
   "name": "spec-kaptainpm-schema",
-  "version": "1.31",
+  "version": "1.32",
   "source": "https://github.com/kube-kaptain/spec-kaptainpm-schema",
   "latest": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/main/spec-kaptainpm-schema.yaml",
-  "tagged": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/1.31/spec-kaptainpm-schema.yaml",
-  "release": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.31/spec-kaptainpm-schema-layerset-source-1.31.yaml",
-  "validate-using": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.31/spec-kaptainpm-schema-layerset-source-1.31.json",
+  "tagged": "https://raw.githubusercontent.com/kube-kaptain/spec-kaptainpm-schema/1.32/spec-kaptainpm-schema.yaml",
+  "release": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.32/spec-kaptainpm-schema-layerset-source-1.32.yaml",
+  "validate-using": "https://github.com/kube-kaptain/spec-kaptainpm-schema/releases/download/1.32/spec-kaptainpm-schema-layerset-source-1.32.json",
   "title": "KaptainPM",
-  "description": "Kaptain project manifest schema (version 1.31).\n",
+  "description": "Kaptain project manifest schema (version 1.32).\n",
   "type": "object",
   "required": [
     "apiVersion"
@@ -19,7 +19,7 @@
     "apiVersion": {
       "type": "string",
       "pattern": "^kaptain\\.org/[0-9]+(\\.[0-9]+)*$",
-      "description": "API version - must be kaptain.org/ followed by the schema version (e.g. kaptain.org/1.2). Set via 1.31 token substitution at build time.\n"
+      "description": "API version - must be kaptain.org/ followed by the schema version (e.g. kaptain.org/1.2). Set via 1.32 token substitution at build time.\n"
     },
     "kind": {
       "type": "string",
@@ -1974,7 +1974,7 @@
         "environment": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Environment build configuration. Applies only to kubernetes-run-environment builds which aggregate apps, bundles, and products listed in spec.contents.\n",
+          "description": "Run build configuration, for both kubernetes-run-environment and kubernetes-run-platform-meta-environment builds, which aggregate apps, bundles, and products listed in spec.contents (a run-platform also seeds managed run-* child projects). Optional: every setting has a default. A few settings apply to only one of the two kinds; each says which.\n",
           "properties": {
             "clusterScopedDelegation": {
               "$ref": "#/$defs/runEnvClusterScopedDelegation"
@@ -2038,164 +2038,6 @@
             },
             "cleanUp": {
               "$ref": "#/$defs/runEnvCleanUp"
-            }
-          },
-          "allOf": [
-            {
-              "if": {
-                "required": [
-                  "deployMode"
-                ],
-                "properties": {
-                  "deployMode": {
-                    "const": "job"
-                  }
-                }
-              },
-              "then": {
-                "properties": {
-                  "imageAutoUpdateProvider": {
-                    "enum": [
-                      "keelson",
-                      "none"
-                    ]
-                  }
-                }
-              }
-            },
-            {
-              "if": {
-                "required": [
-                  "imageAutoUpdatePolicy"
-                ],
-                "properties": {
-                  "imageAutoUpdatePolicy": {
-                    "const": "force"
-                  }
-                }
-              },
-              "then": {
-                "required": [
-                  "imageAutoUpdateProvider"
-                ],
-                "properties": {
-                  "imageAutoUpdateProvider": {
-                    "const": "keel"
-                  }
-                }
-              }
-            },
-            {
-              "if": {
-                "required": [
-                  "generateIdealEnvironmentDeployManifests"
-                ],
-                "properties": {
-                  "generateIdealEnvironmentDeployManifests": {
-                    "enum": [
-                      false,
-                      "false"
-                    ]
-                  }
-                }
-              },
-              "then": {
-                "not": {
-                  "anyOf": [
-                    {
-                      "required": [
-                        "deployMode"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "imageAutoUpdateProvider"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "imageAutoUpdatePolicy"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "imageAutoUpdateTrigger"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "imageAutoUpdatePollSchedule"
-                      ]
-                    },
-                    {
-                      "required": [
-                        "imageAutoUpdateFieldManagerStrategy"
-                      ]
-                    }
-                  ]
-                }
-              }
-            }
-          ]
-        },
-        "runPlatform": {
-          "type": "object",
-          "additionalProperties": false,
-          "description": "Run-platform build configuration. Applies only to kubernetes-run-platform-meta-environment builds which aggregate apps, bundles, and products listed in spec.contents and seed managed run-* child projects.\n",
-          "properties": {
-            "allowLocalManifestsOverride": {
-              "$ref": "#/$defs/runEnvAllowLocalManifestsOverride"
-            },
-            "failOnUnreferencedConfigOrSecrets": {
-              "$ref": "#/$defs/runEnvFailOnUnreferencedConfigOrSecrets"
-            },
-            "trustedContributorsOnly": {
-              "$ref": "#/$defs/runEnvTrustedContributorsOnly"
-            },
-            "imageAutoUpdateProvider": {
-              "$ref": "#/$defs/runEnvImageAutoUpdateProvider"
-            },
-            "imageAutoUpdatePolicy": {
-              "$ref": "#/$defs/runEnvImageAutoUpdatePolicy"
-            },
-            "imageAutoUpdateTrigger": {
-              "$ref": "#/$defs/runEnvImageAutoUpdateTrigger"
-            },
-            "imageAutoUpdatePollSchedule": {
-              "$ref": "#/$defs/runEnvImageAutoUpdatePollSchedule"
-            },
-            "imageAutoUpdateFieldManagerStrategy": {
-              "$ref": "#/$defs/runEnvImageAutoUpdateFieldManagerStrategy"
-            },
-            "deployMode": {
-              "$ref": "#/$defs/runEnvDeployMode"
-            },
-            "checksumSecretsTiming": {
-              "$ref": "#/$defs/runEnvChecksumSecretsTiming"
-            },
-            "checksumLength": {
-              "$ref": "#/$defs/runEnvChecksumLength"
-            },
-            "checksumOrderFile": {
-              "$ref": "#/$defs/runEnvChecksumOrderFile"
-            },
-            "signoffsSubPath": {
-              "$ref": "#/$defs/runEnvSignoffsSubPath"
-            },
-            "signoffsKindsFile": {
-              "$ref": "#/$defs/runEnvSignoffsKindsFile"
-            },
-            "environmentDeploySourceBasePath": {
-              "$ref": "#/$defs/runEnvEnvironmentDeploySourceBasePath"
-            },
-            "generateIdealEnvironmentDeployManifests": {
-              "$ref": "#/$defs/runEnvGenerateIdealEnvironmentDeployManifests"
-            },
-            "environmentDeployBaseImage": {
-              "$ref": "#/$defs/runEnvEnvironmentDeployBaseImage"
-            },
-            "cleanUp": {
-              "$ref": "#/$defs/runPlatformCleanUp"
             }
           },
           "allOf": [
@@ -2951,7 +2793,7 @@
     "runEnvCleanUp": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Cleanup configuration for an environment build. One block so every setting inside sheds the prefix the block supplies.\n",
+      "description": "Cleanup configuration for a run build. One block so every setting inside sheds the prefix the block supplies. undeclaredNamespacePolicy and additionalNamespaces are namespace oversight, which is run-platform only because only the RP creates and cleans namespaces; they are rejected on a kubernetes-run-environment build.\n",
       "properties": {
         "policy": {
           "$ref": "#/$defs/runEnvCleanUpPolicy"
@@ -2959,26 +2801,6 @@
         "additionalResources": {
           "type": "array",
           "description": "Resources in our managed namespace(s) that we did not declare but expect to exist; preserved from cleanup. Typical sources: operator-injected sidecars (Envoy gateway proxy), controller-managed CMs and Secrets (cert-manager), sidecar/mesh injectors.\nLayer-composable: a layer can contribute entries that deep-merge with the project's own list. One layer per upstream tool is a sensible organisation pattern (e.g. layer-envoy-cleanup-exempts).\n",
-          "items": {
-            "$ref": "#/$defs/runEnvResourceMatcher"
-          }
-        },
-        "accumulatingResources": {
-          "$ref": "#/$defs/runEnvAccumulatingResources"
-        }
-      }
-    },
-    "runPlatformCleanUp": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "Cleanup configuration for a run-platform build: the environment block plus namespace oversight, which is RP-only because only the RP creates and cleans namespaces.\n",
-      "properties": {
-        "policy": {
-          "$ref": "#/$defs/runEnvCleanUpPolicy"
-        },
-        "additionalResources": {
-          "type": "array",
-          "description": "As per the environment block - resources in our managed namespace(s) we did not declare but expect to exist.\n",
           "items": {
             "$ref": "#/$defs/runEnvResourceMatcher"
           }
