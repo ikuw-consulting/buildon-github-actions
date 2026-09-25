@@ -408,6 +408,14 @@ check_schemas() {
 }
 
 # Validate every examples/guides/*/KaptainPM.yaml against the pinned schema
+# Check for BATS assertions that can never fail (negated commands anywhere,
+# bare [[ ]] on bash 3.2) unless they are the last command in their body
+check_bats_assertions() {
+  log_info "Checking BATS assertions can fail their tests"
+  "${SCRIPT_DIR}/check-bats-assertions.bash"
+  log_info "All BATS assertions can fail their tests"
+}
+
 validate_guide_examples() {
   log_info "Validating guide example KaptainPM.yaml files against schema"
   ( cd "${PROJECT_ROOT}" && "${SCRIPT_DIR}/validate-guides-against-kaptainpm-schema.bash" )
@@ -440,6 +448,9 @@ main() {
 
   # Check for non-portable sed -i
   check_sed_portability
+
+  # Check BATS assertions are not silently ignored by set -e
+  check_bats_assertions
 
   # Run shellcheck
   run_shellcheck
