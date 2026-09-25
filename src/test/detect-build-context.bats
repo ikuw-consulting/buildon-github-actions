@@ -136,7 +136,7 @@ derive() {
   git config --unset branch.main.merge 2>/dev/null || true
   derive
   [ "$status" -eq 0 ]
-  [[ "$output" == *"No git remotes configured"* ]]
+  [[ "$output" == *"No git remotes configured"* ]] || return 1
   [[ "$output" == *"TARGET=origin/main|REF=refs/remotes/origin/main"* ]]
 }
 
@@ -158,6 +158,6 @@ derive() {
     echo \"CB=\${CURRENT_BRANCH}|T=\${TARGET_BRANCH}|RN=\${REPOSITORY_NAME}|RO=\${REPOSITORY_OWNER}\"
   "
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Not a git repository"* ]]
+  [[ "$output" == *"Not a git repository"* ]] || return 1
   [[ "$output" == *"CB=main|T=origin/main|RN=$(basename "${NOREPO}")|RO="* ]]
 }

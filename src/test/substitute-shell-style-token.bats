@@ -38,7 +38,7 @@ teardown() {
   content='name: ${ProjectName}
 version: ${Version}'
   substitute_shell_style_token "ProjectName" "my-app" content
-  [[ "$content" == *"name: my-app"* ]]
+  [[ "$content" == *"name: my-app"* ]] || return 1
   [[ "$content" == *'version: ${Version}'* ]]
 }
 
@@ -66,9 +66,9 @@ version: ${Version}'
 tag: ${Version}
 label: ${Version}'
   substitute_shell_style_token "Version" "1.2.3" content
-  [[ "$content" == *"name: 1.2.3"* ]]
-  [[ "$content" == *"tag: 1.2.3"* ]]
-  [[ "$content" == *"label: 1.2.3"* ]]
+  [[ "$content" == *"name: 1.2.3"* ]] || return 1
+  [[ "$content" == *"tag: 1.2.3"* ]] || return 1
+  [[ "$content" == *"label: 1.2.3"* ]] || return 1
   [ "$SUBSTITUTE_TOKEN_COUNT" -eq 3 ]
 }
 
