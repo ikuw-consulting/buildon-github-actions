@@ -709,6 +709,51 @@ setup() {
   echo '${PROJECT.NAME}' | grep -Eq "$pattern"
 }
 
+@test "unresolved_token_regex: shell + PascalCase matches a leading digit, as its validator allows" {
+  pattern=$(unresolved_token_regex shell PascalCase)
+  echo '${2FaSecret}' | grep -Eq "^$pattern$"
+}
+
+@test "unresolved_token_regex: shell + camelCase matches a leading digit, as its validator allows" {
+  pattern=$(unresolved_token_regex shell camelCase)
+  echo '${2faSecret}' | grep -Eq "^$pattern$"
+}
+
+@test "unresolved_token_regex: shell + UPPER_SNAKE matches a leading digit, as its validator allows" {
+  pattern=$(unresolved_token_regex shell UPPER_SNAKE)
+  echo '${2FA_SECRET}' | grep -Eq "^$pattern$"
+}
+
+@test "unresolved_token_regex: shell + lower_snake matches a leading digit, as its validator allows" {
+  pattern=$(unresolved_token_regex shell lower_snake)
+  echo '${2fa_secret}' | grep -Eq "^$pattern$"
+}
+
+@test "unresolved_token_regex: shell + lower-kebab matches a leading digit, as its validator allows" {
+  pattern=$(unresolved_token_regex shell lower-kebab)
+  echo '${2fa-secret}' | grep -Eq "^$pattern$"
+}
+
+@test "unresolved_token_regex: shell + UPPER-KEBAB matches a leading digit, as its validator allows" {
+  pattern=$(unresolved_token_regex shell UPPER-KEBAB)
+  echo '${2FA-SECRET}' | grep -Eq "^$pattern$"
+}
+
+@test "unresolved_token_regex: shell + lower.dot matches a leading digit, as its validator allows" {
+  pattern=$(unresolved_token_regex shell lower.dot)
+  echo '${2fa.secret}' | grep -Eq "^$pattern$"
+}
+
+@test "unresolved_token_regex: shell + UPPER.DOT matches a leading digit, as its validator allows" {
+  pattern=$(unresolved_token_regex shell UPPER.DOT)
+  echo '${2FA.SECRET}' | grep -Eq "^$pattern$"
+}
+
+@test "unresolved_token_regex: shell + PascalCase matches a nested segment with a leading digit" {
+  pattern=$(unresolved_token_regex shell PascalCase)
+  echo '${Vendor/2FaSecret}' | grep -Eq "^$pattern$"
+}
+
 # --- mustache delimiter style ---
 
 @test "unresolved_token_regex: mustache + PascalCase matches token" {
@@ -1262,6 +1307,11 @@ assert_round_trips() {
 @test "any_token_regex: matches shell style" {
   pattern=$(any_token_regex)
   echo 'a: ${ProjectName}' | grep -Eq "$pattern"
+}
+
+@test "any_token_regex: matches a segment with a leading digit" {
+  pattern=$(any_token_regex)
+  [ "$(echo 'a: ${Vendor/2FaSecret}' | grep -Eo "$pattern")" = '${Vendor/2FaSecret}' ]
 }
 
 @test "any_token_regex: matches mustache style" {

@@ -110,18 +110,21 @@ unresolved_token_regex() {
     return 1
   fi
 
-  # Build name character class from name style
+  # Build name character class from name style. Each segment may start with a
+  # digit, as the matching plugins/token-name-validators/<style> allows: a
+  # name the validator accepts must be matchable here, or it is invisible to
+  # the gate and to the unreferenced-value check.
   local name_regex
   local name_segment
   case "${name_style}" in
-    PascalCase)      name_segment='[A-Z][A-Za-z0-9]*' ;;
-    camelCase)       name_segment='[a-z][A-Za-z0-9]*' ;;
-    UPPER_SNAKE)     name_segment='[A-Z_][A-Z0-9_]*' ;;
-    lower_snake)     name_segment='[a-z_][a-z0-9_]*' ;;
-    lower-kebab)     name_segment='[a-z][a-z0-9-]*' ;;
-    UPPER-KEBAB)     name_segment='[A-Z][A-Z0-9-]*' ;;
-    lower.dot)       name_segment='[a-z][a-z0-9.]*' ;;
-    UPPER.DOT)       name_segment='[A-Z][A-Z0-9.]*' ;;
+    PascalCase)      name_segment='[A-Z0-9][A-Za-z0-9]*' ;;
+    camelCase)       name_segment='[a-z0-9][A-Za-z0-9]*' ;;
+    UPPER_SNAKE)     name_segment='[A-Z0-9_][A-Z0-9_]*' ;;
+    lower_snake)     name_segment='[a-z0-9_][a-z0-9_]*' ;;
+    lower-kebab)     name_segment='[a-z0-9][a-z0-9-]*' ;;
+    UPPER-KEBAB)     name_segment='[A-Z0-9][A-Z0-9-]*' ;;
+    lower.dot)       name_segment='[a-z0-9][a-z0-9.]*' ;;
+    UPPER.DOT)       name_segment='[A-Z0-9][A-Z0-9.]*' ;;
     *)
       log_error "Unknown name style: ${name_style}"
       return 1
@@ -161,7 +164,7 @@ unresolved_token_regex() {
 #
 # Usage: any_token_regex
 any_token_regex() {
-  local segment='[A-Za-z_][A-Za-z0-9_.-]*'
+  local segment='[A-Za-z0-9_][A-Za-z0-9_.-]*'
   local name="${segment}(/${segment})*"
 
   local parts
