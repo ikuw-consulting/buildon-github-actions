@@ -515,6 +515,95 @@ EOF
   [ ! -s "${list}" ]
 }
 
+# =============================================================================
+# Resource envelopes
+#
+# lib/assert-resource-envelopes.bash has its own suite; these two prove it is
+# wired into this build and that it decides the build's exit status. Fixtures
+# stage an application contract kind, because the shared stage_oci_fixture
+# publishes kubernetes-bundle, which the check skips by design.
+# =============================================================================
+
+# Stage an application bundle whose single container either carries a full
+# resource envelope or none. Args: manifests_uri, project, envelope (full|none)
+stage_app_oci_fixture() {
+  local manifests_uri="$1"
+  local project="$2"
+  local envelope="$3"
+  local key
+  key=$(echo "${manifests_uri}" | tr '/:' '__')
+  local fixture_dir="${MOCK_OCI_DIR}/${key}"
+  mkdir -p "${fixture_dir}"
+
+  local stage="${TEST_DIR}/_stage-app-$$-${RANDOM}"
+  mkdir -p "${stage}/${project}"
+  # ${Replicas} keeps the contract's required-token coverage check satisfied.
+  cat > "${stage}/${project}/deployment.yaml" << EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${project}
+spec:
+  replicas: \${Replicas}
+  template:
+    spec:
+      containers:
+        - name: ${project}
+EOF
+  if [[ "${envelope}" == "full" ]]; then
+    cat >> "${stage}/${project}/deployment.yaml" << 'EOF'
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+EOF
+  fi
+  ( cd "${stage}" && zip -qr "${fixture_dir}/${project}-1.0-manifests.zip" "${project}" )
+  rm -rf "${stage}"
+
+  local contract_stage="${TEST_DIR}/_stage-appc-$$-${RANDOM}"
+  mkdir -p "${contract_stage}"
+  cat > "${contract_stage}/contract.yaml" << 'EOF'
+apiVersion: kaptain.org/manifests-contract/1.3
+kind: kubernetes-app-manifests-only
+tokens:
+  delimiterStyle: shell
+  nameStyle: PascalCase
+compatibility:
+  automaticConversion: []
+  repackageRequired: []
+config:
+  required:
+    - Replicas
+EOF
+  ( cd "${contract_stage}" && zip -qr "${fixture_dir}/${project}-1.0-contract.zip" . )
+  rm -rf "${contract_stage}"
+}
+
+@test "envelopes: an application bundle with no requests or limits fails the aggregate" {
+  setup_mock_oci
+  stage_app_oci_fixture "alpha:1.0-manifests" "alpha" none
+  write_pm "alpha:1.0"
+  run_script
+  [ "${status}" -ne 0 ]
+  assert_output_contains "carry no resource envelope"
+  assert_output_contains "container 'alpha'"
+  assert_output_contains "requests.cpu"
+  assert_output_contains "limits.memory"
+}
+
+@test "envelopes: an application bundle declaring all four fields passes" {
+  setup_mock_oci
+  stage_app_oci_fixture "alpha:1.0-manifests" "alpha" full
+  write_pm "alpha:1.0"
+  run_script
+  [ "${status}" -eq 0 ]
+  assert_output_contains "checking resource envelopes"
+}
+
 teardown() {
   dump_bats_result
 }

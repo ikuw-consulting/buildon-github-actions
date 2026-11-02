@@ -7,7 +7,9 @@
 # Validates product naming, derives PRODUCT_NAME / PRODUCT_SHORT_NAME, blocks
 # products from including other products, then delegates fetching and staging
 # of every spec.contents entry to lib/content-resolve.bash and per-bundle
-# scheme conversion + defaults merging to lib/bundle-import.bash.
+# scheme conversion + defaults merging to lib/bundle-import.bash. Finally it
+# holds every application bundle's containers to declaring CPU and memory
+# requests and limits, via lib/assert-resource-envelopes.bash.
 #
 # Outputs to the foreign-contributor drop dirs consumed by the downstream
 # kubernetes-manifests-package-prepare step:
@@ -52,6 +54,8 @@ export CONTENT_FLAVOUR=contents
 source "${SCRIPT_DIR}/../lib/content-resolve.bash"
 # shellcheck source=src/scripts/lib/bundle-import.bash
 source "${SCRIPT_DIR}/../lib/bundle-import.bash"
+# shellcheck source=src/scripts/lib/assert-resource-envelopes.bash
+source "${SCRIPT_DIR}/../lib/assert-resource-envelopes.bash"
 
 PROJECT_NAME="${PROJECT_NAME:?PROJECT_NAME is required}"
 KAPTAINPM_FILE="${KAPTAINPM_FILE:-kaptainpm/final/KaptainPM.yaml}"
@@ -201,6 +205,15 @@ main() {
 
   # shellcheck disable=SC2119 # intentionally call with no args to use the function's default
   bundle_import_all
+
+  # After import, not before: the imported tree is the one that goes on to be
+  # packaged, so checking it is checking what deploys. Before publishing,
+  # because a product with a container that has no memory limit is a product
+  # that can evict a neighbouring product's pods off the node.
+  log ""
+  log "Checking resource envelopes..."
+  log ""
+  assert_resource_envelopes "${MANIFESTS_ADDITIONAL_SUB_PATH}" "${CONTENT_CONTRACTS_DIR}"
 
   output_var "PRODUCT_CONTENTS_FILE" "${CONTENT_LIST_FILE}"
 
