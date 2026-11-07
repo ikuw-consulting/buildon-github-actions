@@ -59,6 +59,8 @@ EOF
   rm -rf "${stage}"
 }
 
+# MANIFESTS_CONTRACT_KIND overrides the build kind the contract publishes, for
+# the tests that care which level produced a child.
 make_contract_zip() {
   local zip_path="$1"
   local delim="$2"
@@ -68,7 +70,7 @@ make_contract_zip() {
   mkdir -p "${stage}"
   cat > "${stage}/contract.yaml" << EOF
 apiVersion: kaptain.org/manifests-contract/1.2
-kind: kubernetes-bundle
+kind: ${MANIFESTS_CONTRACT_KIND:-kubernetes-bundle}
 tokens:
   delimiterStyle: ${delim}
   nameStyle: ${name}
@@ -922,6 +924,218 @@ EOF
   [ "$(grep -c "app.kubernetes.io/part-of" "${policy}")" -eq 0 ]
   [ "$(grep -c "kaptain.org/product" "${policy}")" -eq 0 ]
   grep -q "kaptain.org/project-name" "${policy}"
+}
+
+# =============================================================================
+# Resource envelopes on the run's OWN manifests
+#
+# The environment's src/kubernetes holds deployables no product aggregate ever
+# sees, because they belong to the environment rather than to a product bundle.
+# They are also the only manifests in the assembled tree the environment author
+# can fix in this repo, which is why they are the ones checked here.
+# =============================================================================
+
+# A child bundle whose one container carries no resource envelope, published
+# under <contract-kind>. A product publishes kubernetes-product-aggregate,
+# which is what an environment imports.
+# Usage: stage_budgetless_child_fixture <manifests-uri> <project> <contract-kind>
+stage_budgetless_child_fixture() {
+  local manifests_uri="$1"
+  local project="$2"
+  local contract_kind="$3"
+  local key fixture_dir stage
+  key=$(echo "${manifests_uri}" | tr '/:' '__')
+  fixture_dir="${MOCK_OCI_DIR}/${key}"
+  mkdir -p "${fixture_dir}"
+
+  stage="${TEST_DIR}/_stage-bc-$$-${RANDOM}"
+  mkdir -p "${stage}/${project}"
+  cat > "${stage}/${project}/deployment.yaml" << EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${project}
+spec:
+  template:
+    spec:
+      containers:
+        - name: ${project}-web
+          image: example:1.0
+EOF
+  ( cd "${stage}" && zip -qr "${fixture_dir}/${project}-1.0-manifests.zip" "${project}" )
+  rm -rf "${stage}"
+
+  MANIFESTS_CONTRACT_KIND="${contract_kind}" \
+    make_contract_zip "${fixture_dir}/${project}-1.0-contract.zip" shell PascalCase
+}
+
+@test "envelopes: a local manifest whose container carries no envelope fails the build" {
+  setup_mock_oci
+  write_pm
+  write_local_manifest redis-deployment.yaml 'apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  template:
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+'
+  run_script
+  [ "${status}" -ne 0 ]
+  assert_output_contains "src/kubernetes/redis-deployment.yaml"
+  assert_output_contains "container 'redis' is missing requests.cpu, requests.memory, limits.cpu, limits.memory"
+}
+
+@test "envelopes: a local manifest declaring all four fields passes" {
+  setup_mock_oci
+  write_pm
+  write_local_manifest redis-deployment.yaml 'apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  template:
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+'
+  run_script
+  [ "${status}" -eq 0 ]
+}
+
+@test "envelopes: a local registered custom resource with no spec.resources fails the build" {
+  setup_mock_oci
+  write_pm
+  export RESOURCE_ENVELOPE_CUSTOM_RESOURCES="widgets.example.com/v1|Widget|.spec.resources"
+  write_local_manifest database.yaml 'apiVersion: widgets.example.com/v1
+kind: Widget
+metadata:
+  name: run-widget
+spec:
+  instances: 1
+  storage:
+    size: 10Gi
+'
+  run_script
+  [ "${status}" -ne 0 ]
+  assert_output_contains "src/kubernetes/database.yaml"
+  assert_output_contains "widgets.example.com/v1 Widget spec.resources 'run-widget' is missing"
+}
+
+@test "envelopes: every offending local manifest is reported before failing" {
+  setup_mock_oci
+  write_pm
+  export RESOURCE_ENVELOPE_CUSTOM_RESOURCES="widgets.example.com/v1|Widget|.spec.resources"
+  write_local_manifest redis-deployment.yaml 'apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  template:
+    spec:
+      containers:
+        - name: redis
+'
+  write_local_manifest database.yaml 'apiVersion: widgets.example.com/v1
+kind: Widget
+metadata:
+  name: run-widget
+spec:
+  instances: 1
+'
+  run_script
+  [ "${status}" -ne 0 ]
+  assert_output_contains "container 'redis'"
+  assert_output_contains "Widget spec.resources 'run-widget'"
+}
+
+@test "envelopes: a local Service and HTTPRoute carry no budget and are not reported" {
+  setup_mock_oci
+  write_pm
+  write_local_manifest redis-service.yaml 'apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  ports:
+    - name: redis
+      port: 6379
+'
+  write_local_manifest http-route.yaml 'apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: web-route
+spec:
+  rules:
+    - backendRefs:
+        - name: web
+          port: 80
+'
+  run_script
+  [ "${status}" -eq 0 ]
+}
+
+@test "envelopes: an environment with no local manifests at all passes" {
+  setup_mock_oci
+  write_pm
+  run_script
+  [ "${status}" -eq 0 ]
+}
+
+# The recorded decision, pinned so changing it has to argue with a test: an
+# imported product bundle was already checked at its own product aggregate, by
+# this same assertion, at the level that can fix it. Re-checking it here would
+# fail an environment for a manifest it cannot change without a new product
+# release - and would let a newer environment build fail a product that built
+# green on an older one.
+@test "envelopes: an imported product bundle is not re-checked at the environment" {
+  setup_mock_oci
+  stage_budgetless_child_fixture "alpha:1.0-manifests" "alpha" kubernetes-product-aggregate
+  write_pm "alpha:1.0"
+  run_script
+  [ "${status}" -eq 0 ]
+  [ -f "${TEST_DIR}/kaptain-out/run-environment/manifests-aggregated/alpha/deployment.yaml" ]
+}
+
+# Same for an application bundle imported straight into an environment, which is
+# the stronger case: even a kubernetes-app-* child is the product aggregate's to
+# fail, not the environment's, so the rule stays in exactly one place.
+@test "envelopes: an imported application bundle is not re-checked either" {
+  setup_mock_oci
+  stage_budgetless_child_fixture "alpha:1.0-manifests" "alpha" kubernetes-app-manifests-only
+  write_pm "alpha:1.0"
+  run_script
+  [ "${status}" -eq 0 ]
+}
+
+@test "envelopes: a run-platform's own manifests are checked the same way" {
+  setup_mock_oci
+  stage_own_deploy_manifests_output run-platform-foo
+  write_pm
+  write_local_manifest redis-deployment.yaml 'apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  template:
+    spec:
+      containers:
+        - name: redis
+'
+  PROJECT_NAME=run-platform-foo BUILD_KIND=kubernetes-run-platform-meta-environment run_script
+  [ "${status}" -ne 0 ]
+  assert_output_contains "container 'redis'"
 }
 
 teardown() {

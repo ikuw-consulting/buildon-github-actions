@@ -82,6 +82,8 @@ source "${SCRIPT_DIR}/../defaults/environments.bash"
 source "${SCRIPT_DIR}/../lib/env-deploy-base-image-compose.bash"
 # shellcheck source=src/scripts/lib/secret-encryption-types.bash
 source "${SCRIPT_DIR}/../lib/secret-encryption-types.bash"
+# shellcheck source=src/scripts/lib/assert-resource-envelopes.bash
+source "${SCRIPT_DIR}/../lib/assert-resource-envelopes.bash"
 
 KAPTAINPM_FILE="${KAPTAINPM_FILE:-kaptainpm/final/KaptainPM.yaml}"
 LOCAL_MANIFESTS_SUB_PATH="${MANIFESTS_SUB_PATH:-src/kubernetes}"
@@ -843,6 +845,20 @@ main() {
   log "Folding in local manifests (${LOCAL_MANIFESTS_SUB_PATH}, allowLocalManifestsOverride=${ENV_ALLOW_LOCAL_MANIFESTS_OVERRIDE})..."
   log ""
   merge_local_manifests
+
+  # The run's own manifests only. The imported children were each checked at
+  # their own product aggregate, at the level that can fix them; see
+  # assert_local_resource_envelopes for why the two levels partition the tree
+  # rather than both check all of it.
+  #
+  # After merge_local_manifests, so a collision or a bad shape is reported
+  # first: being told a file has no budget is no use while it is also the wrong
+  # name. Before the cleanup policy ConfigMap, which this check would otherwise
+  # have to know to ignore.
+  log ""
+  log "Checking resource envelopes on this run's own manifests (${LOCAL_MANIFESTS_SUB_PATH})..."
+  log ""
+  assert_local_resource_envelopes "${LOCAL_MANIFESTS_SUB_PATH}"
 
   log ""
   log "Emitting the resolved cleanup policy ConfigMap..."
