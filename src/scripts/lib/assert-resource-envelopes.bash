@@ -57,6 +57,11 @@
 # check unlandable. That is a stated gap, not an oversight: a vendor bundle's
 # budget is set where it is adopted.
 #
+# A custom resource that declares its pod's budget on itself is checked only
+# where this library has an arm for its apiVersion and kind; see the registered
+# custom resources in RESOURCE_ENVELOPE_CUSTOM_RESOURCES. Each entry is mechanical,
+# the registry's completeness is not - also a stated gap.
+#
 # Required tools: yq, find
 #
 # Required functions in scope: log, log_error (from log.bash)
@@ -71,19 +76,64 @@ RESOURCE_ENVELOPE_APPLICATION_KIND_PREFIX="kubernetes-app-"
 # and the message a build author reads cannot drift apart.
 RESOURCE_ENVELOPE_REQUIRED_FIELDS=(requests.cpu requests.memory limits.cpu limits.memory)
 
-# One yq program for every workload kind. Each arm selects the documents of one
-# shape and descends to its pod spec; the union is then walked once.
+# REGISTERED CUSTOM RESOURCES
+#
+# Some custom resources declare their pod's budget on the custom resource itself
+# and leave an operator to build the pod. There is no general rule for where an
+# operator puts this, so the library knows none by default: the registry below
+# starts empty and the consuming project fills it for the operators it runs.
+#
+#   RESOURCE_ENVELOPE_CUSTOM_RESOURCES
+#     One entry per line (blank lines and lines starting with # are ignored):
+#
+#       <apiVersion>|<kind>|<resources-path>
+#
+#     for example   example.com/v1|Widget|.spec.resources
+#
+#     <resources-path> is a plain dotted path to a Kubernetes ResourceRequirements
+#     map (requests / limits). Anything else in it is rejected rather than handed
+#     to yq, so a registry entry cannot carry an expression.
+#
+# An entry is keyed on `apiVersion` AND `kind` together - never `kind` alone,
+# because a kind name such as `Cluster` is used by several operators and checking
+# a path on one that keeps its budget elsewhere would read as a pass while
+# proving nothing. Pinning the apiVersion also means a future version with a
+# rearranged spec falls out of the registry rather than being checked at a path
+# it no longer has.
+#
+# An apiVersion/kind pair that is not registered is SKIPPED, not failed. Failing
+# closed on every unrecognised kind would fail an HTTPRoute, a Gateway and a
+# HealthCheckPolicy, none of which has a pod budget to declare. Each entry is
+# mechanical; whether the registry covers every budget-carrying custom resource
+# in use is a review gate - stated here as one rather than faked.
+RESOURCE_ENVELOPE_CUSTOM_RESOURCES="${RESOURCE_ENVELOPE_CUSTOM_RESOURCES:-}"
+
+# The yq stages shared by both groups below: turn { subject, name, resources }
+# into one tab separated line. Presence is tested with `!= null and != ""` rather
+# than `has()` so that a key present with no value, and a key present as an empty
+# string, both read as the absence they are. Emitting booleans rather than the
+# values keeps @tsv safe when a token has parsed as a map.
+RESOURCE_ENVELOPE_YQ_REPORT='
+| [ (.subject),
+    (.name // "" | tostring),
+    (.resources.requests.cpu    != null and .resources.requests.cpu    != ""),
+    (.resources.requests.memory != null and .resources.requests.memory != ""),
+    (.resources.limits.cpu      != null and .resources.limits.cpu      != ""),
+    (.resources.limits.memory   != null and .resources.limits.memory   != "") ]
+| @tsv
+'
+
+# WORKLOADS, whose pod spec is at a path the kind fixes. Each arm selects the
+# documents of one shape and descends to its pod spec, then every container and
+# initContainer in it.
 #
 # Selecting on the document's own kind first is what keeps a ConfigMap holding
 # the word "containers" in its data out of this, and a PersistentVolumeClaim's
 # `resources.requests.storage` - which is a claim's size, not a container's
 # budget - out with it.
 #
-# The output is one line per container: name, then one boolean per required
-# field, tab separated. Presence is tested with `!= null and != ""` rather than
-# `has()` so that a key present with no value, and a key present as an empty
-# string, both read as the absence they are. Emitting booleans rather than the
-# values keeps @tsv safe when a token has parsed as a map.
+# The output is one line per container: what kind of thing it is, its name, then
+# one boolean per required field, tab separated.
 RESOURCE_ENVELOPE_YQ_PROGRAM='
 (
   (select(.kind == "Pod") | .spec),
@@ -91,13 +141,8 @@ RESOURCE_ENVELOPE_YQ_PROGRAM='
   (select(.kind == "CronJob") | .spec.jobTemplate.spec.template.spec)
 )
 | (.initContainers[]?, .containers[]?)
-| [ (.name // "" | tostring),
-    (.resources.requests.cpu    != null and .resources.requests.cpu    != ""),
-    (.resources.requests.memory != null and .resources.requests.memory != ""),
-    (.resources.limits.cpu      != null and .resources.limits.cpu      != ""),
-    (.resources.limits.memory   != null and .resources.limits.memory   != "") ]
-| @tsv
-'
+| { "subject": "container", "name": .name, "resources": .resources }
+'"${RESOURCE_ENVELOPE_YQ_REPORT}"
 
 # State the rule once, for the caller to log on its way out however many
 # containers offended.
@@ -110,6 +155,8 @@ resource_envelope_rules_explain() {
   log_error "write them into the container's resources block where the manifests are"
   log_error "hand-written. An unresolved token is an acceptable value - the component"
   log_error "has to name the budget, not fix the number."
+  log_error "A registered custom resource (RESOURCE_ENVELOPE_CUSTOM_RESOURCES) declares"
+  log_error "the same four fields at its own registered path instead."
 }
 
 # Walk every manifest in one tree and append an offender line per container
@@ -173,14 +220,39 @@ resource_envelope_check_manifest() {
     return 0
   fi
 
-  local line name missing
+  # Registered custom resources, one yq pass per entry. The apiVersion, kind and
+  # subject travel as environment variables read with strenv(), never spliced
+  # into the program; only the validated path is.
+  local entry api_version kind path custom_report
+  while IFS= read -r entry; do
+    [[ -z "${entry//[[:space:]]/}" || "${entry}" == \#* ]] && continue
+    IFS='|' read -r api_version kind path <<< "${entry}"
+    if [[ -z "${api_version}" || -z "${kind}" ]] || ! [[ "${path}" =~ ^(\.[A-Za-z_][A-Za-z0-9_-]*)+$ ]]; then
+      RESOURCE_ENVELOPE_OFFENDERS+=("RESOURCE_ENVELOPE_CUSTOM_RESOURCES entry '${entry}' is not <apiVersion>|<kind>|<.dotted.path>")
+      continue
+    fi
+    if ! custom_report=$(
+      RESOURCE_ENVELOPE_CR_API="${api_version}" \
+      RESOURCE_ENVELOPE_CR_KIND="${kind}" \
+      RESOURCE_ENVELOPE_CR_SUBJECT="${api_version} ${kind} ${path#.}" \
+      yq eval -r "select(.apiVersion == strenv(RESOURCE_ENVELOPE_CR_API) and .kind == strenv(RESOURCE_ENVELOPE_CR_KIND))
+        | { \"subject\": strenv(RESOURCE_ENVELOPE_CR_SUBJECT), \"name\": .metadata.name, \"resources\": ${path} }
+        ${RESOURCE_ENVELOPE_YQ_REPORT}" "${file}" 2>&1
+    ); then
+      RESOURCE_ENVELOPE_OFFENDERS+=("${label}: could not be read as YAML, so its containers' budgets cannot be checked")
+      return 0
+    fi
+    report+=$'\n'"${custom_report}"
+  done <<< "${RESOURCE_ENVELOPE_CUSTOM_RESOURCES}"
+
+  local line subject name missing
   local requests_cpu requests_memory limits_cpu limits_memory
   while IFS= read -r line; do
     # yq prints a blank line for a document the program matched nothing in, and
     # a '---' between documents. Neither carries a tab, which every data line
     # does, so requiring one is the whole filter.
     [[ "${line}" != *$'\t'* ]] && continue
-    IFS=$'\t' read -r name requests_cpu requests_memory limits_cpu limits_memory <<< "${line}"
+    IFS=$'\t' read -r subject name requests_cpu requests_memory limits_cpu limits_memory <<< "${line}"
 
     missing=""
     [[ "${requests_cpu}" == "true" ]]    || missing="${missing}${missing:+, }requests.cpu"
@@ -189,7 +261,7 @@ resource_envelope_check_manifest() {
     [[ "${limits_memory}" == "true" ]]   || missing="${missing}${missing:+, }limits.memory"
     [[ -z "${missing}" ]] && continue
 
-    RESOURCE_ENVELOPE_OFFENDERS+=("${label}: container '${name:-<unnamed>}' is missing ${missing}")
+    RESOURCE_ENVELOPE_OFFENDERS+=("${label}: ${subject} '${name:-<unnamed>}' is missing ${missing}")
   done <<< "${report}"
 }
 

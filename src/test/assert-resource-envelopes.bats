@@ -16,7 +16,13 @@ load helpers
 # shellcheck source=src/scripts/lib/assert-resource-envelopes.bash
 source "${LIB_DIR}/assert-resource-envelopes.bash"
 
+# Register the made-up Widget custom resource used by the registry cases.
+register_widget() {
+  RESOURCE_ENVELOPE_CUSTOM_RESOURCES="widgets.example.com/v1|Widget|.spec.resources"
+}
+
 setup() {
+  RESOURCE_ENVELOPE_CUSTOM_RESOURCES=""
   TEST_DIR=$(create_test_dir "assert-resource-envelopes")
   MANIFESTS_DIR="${TEST_DIR}/additional-manifests"
   CONTRACTS_DIR="${TEST_DIR}/contracts"
@@ -392,13 +398,216 @@ spec:
   resources:
     requests:
       storage: 10Gi
----
+EOF
+
+  run assert_resource_envelopes "${MANIFESTS_DIR}" "${CONTRACTS_DIR}"
+  [ "${status}" -eq 0 ] || return 1
+}
+
+# =============================================================================
+# Custom resources that declare a budget the operator turns into a pod
+#
+# The library knows no custom resource by default. A consuming project registers
+# the ones it runs in RESOURCE_ENVELOPE_CUSTOM_RESOURCES as
+# <apiVersion>|<kind>|<.dotted.path>; these cases use a made-up
+# widgets.example.com/v1 Widget that keeps its budget at spec.resources.
+# =============================================================================
+
+@test "fails a registered Widget that declares no spec.resources, naming every field" {
+  write_contract alpha
+  register_widget
+  write_manifest alpha widget.yaml << 'EOF'
 apiVersion: widgets.example.com/v1
 kind: Widget
 metadata:
-  name: alpha-db
+  name: alpha-widget
 spec:
   instances: 1
+  storage:
+    size: 10Gi
+EOF
+
+  run assert_resource_envelopes "${MANIFESTS_DIR}" "${CONTRACTS_DIR}"
+  [ "${status}" -ne 0 ] || return 1
+  assert_output_contains "alpha/widget.yaml"
+  assert_output_contains "widgets.example.com/v1 Widget spec.resources 'alpha-widget'"
+  assert_output_contains "requests.cpu"
+  assert_output_contains "requests.memory"
+  assert_output_contains "limits.cpu"
+  assert_output_contains "limits.memory"
+}
+
+@test "passes a registered Widget declaring all four fields at spec.resources" {
+  write_contract alpha
+  register_widget
+  write_manifest alpha widget.yaml << 'EOF'
+apiVersion: widgets.example.com/v1
+kind: Widget
+metadata:
+  name: alpha-widget
+spec:
+  instances: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  storage:
+    size: 10Gi
+EOF
+
+  run assert_resource_envelopes "${MANIFESTS_DIR}" "${CONTRACTS_DIR}"
+  [ "${status}" -eq 0 ] || return 1
+}
+
+@test "fails a registered Widget whose cpu request alone is missing" {
+  write_contract alpha
+  register_widget
+  write_manifest alpha widget.yaml << 'EOF'
+apiVersion: widgets.example.com/v1
+kind: Widget
+metadata:
+  name: alpha-widget
+spec:
+  resources:
+    requests:
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+EOF
+
+  run assert_resource_envelopes "${MANIFESTS_DIR}" "${CONTRACTS_DIR}"
+  [ "${status}" -ne 0 ] || return 1
+  assert_output_contains "is missing requests.cpu"
+}
+
+# The registry is keyed on apiVersion and kind together, never kind alone: a
+# kind name is shared by several operators, and checking spec.resources on one
+# that keeps its budget elsewhere would read as a pass while proving nothing.
+@test "skips a Widget of an apiVersion the registry does not name" {
+  write_contract alpha
+  register_widget
+  write_manifest alpha other-widget.yaml << 'EOF'
+apiVersion: other.example.com/v1
+kind: Widget
+metadata:
+  name: not-ours
+spec:
+  instances: 1
+EOF
+
+  run assert_resource_envelopes "${MANIFESTS_DIR}" "${CONTRACTS_DIR}"
+  [ "${status}" -eq 0 ] || return 1
+}
+
+@test "checks a registered custom resource at a nested path" {
+  write_contract alpha
+  RESOURCE_ENVELOPE_CUSTOM_RESOURCES="widgets.example.com/v1|Widget|.spec.pod.resources"
+  write_manifest alpha widget.yaml << 'EOF'
+apiVersion: widgets.example.com/v1
+kind: Widget
+metadata:
+  name: alpha-widget
+spec:
+  pod:
+    resources:
+      requests:
+        cpu: 250m
+EOF
+
+  run assert_resource_envelopes "${MANIFESTS_DIR}" "${CONTRACTS_DIR}"
+  [ "${status}" -ne 0 ] || return 1
+  assert_output_contains "widgets.example.com/v1 Widget spec.pod.resources 'alpha-widget' is missing requests.memory, limits.cpu, limits.memory"
+}
+
+@test "ignores comments and blank lines in the registry" {
+  write_contract alpha
+  RESOURCE_ENVELOPE_CUSTOM_RESOURCES=$'# widgets\n\nwidgets.example.com/v1|Widget|.spec.resources\n'
+  write_manifest alpha widget.yaml << 'EOF'
+apiVersion: widgets.example.com/v1
+kind: Widget
+metadata:
+  name: alpha-widget
+spec: {}
+EOF
+
+  run assert_resource_envelopes "${MANIFESTS_DIR}" "${CONTRACTS_DIR}"
+  [ "${status}" -ne 0 ] || return 1
+  assert_output_contains "Widget spec.resources 'alpha-widget' is missing"
+}
+
+# A registry entry is data, not an expression: a path that is not a plain dotted
+# path is rejected by name instead of being handed to yq, and a malformed entry
+# fails the build rather than silently checking nothing.
+@test "rejects a registry entry whose path is not a plain dotted path" {
+  write_contract alpha
+  RESOURCE_ENVELOPE_CUSTOM_RESOURCES='widgets.example.com/v1|Widget|.spec | del(.)'
+  write_manifest alpha widget.yaml << 'EOF'
+apiVersion: widgets.example.com/v1
+kind: Widget
+metadata:
+  name: alpha-widget
+EOF
+
+  run assert_resource_envelopes "${MANIFESTS_DIR}" "${CONTRACTS_DIR}"
+  [ "${status}" -ne 0 ] || return 1
+  assert_output_contains "RESOURCE_ENVELOPE_CUSTOM_RESOURCES entry"
+  assert_output_contains "is not <apiVersion>|<kind>|<.dotted.path>"
+}
+
+@test "rejects a registry entry with no path" {
+  write_contract alpha
+  RESOURCE_ENVELOPE_CUSTOM_RESOURCES='widgets.example.com/v1|Widget'
+  write_manifest alpha widget.yaml << 'EOF'
+apiVersion: widgets.example.com/v1
+kind: Widget
+metadata:
+  name: alpha-widget
+EOF
+
+  run assert_resource_envelopes "${MANIFESTS_DIR}" "${CONTRACTS_DIR}"
+  [ "${status}" -ne 0 ] || return 1
+  assert_output_contains "RESOURCE_ENVELOPE_CUSTOM_RESOURCES entry"
+}
+
+# With nothing registered the library checks workloads only, so a custom
+# resource with no budget passes - the registry is opt-in.
+@test "checks no custom resource when the registry is empty" {
+  write_contract alpha
+  write_manifest alpha widget.yaml << 'EOF'
+apiVersion: widgets.example.com/v1
+kind: Widget
+metadata:
+  name: alpha-widget
+spec: {}
+EOF
+
+  run assert_resource_envelopes "${MANIFESTS_DIR}" "${CONTRACTS_DIR}"
+  [ "${status}" -eq 0 ] || return 1
+}
+
+
+# An unregistered custom kind is skipped, not failed. Failing closed on every
+# unrecognised kind would fail an HTTPRoute, a Gateway and a HealthCheckPolicy,
+# none of which has a pod budget to declare - so the registry's completeness is
+# a review gate, named as one in the library's header, rather than faked here.
+@test "skips a custom resource with no registered resources path" {
+  write_contract alpha
+  write_manifest alpha http-route.yaml << 'EOF'
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: alpha
+spec:
+  parentRefs:
+    - name: shared
+  rules:
+    - backendRefs:
+        - name: web
+          port: 80
 EOF
 
   run assert_resource_envelopes "${MANIFESTS_DIR}" "${CONTRACTS_DIR}"
