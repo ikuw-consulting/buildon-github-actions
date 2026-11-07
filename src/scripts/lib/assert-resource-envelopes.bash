@@ -149,7 +149,7 @@ RESOURCE_ENVELOPE_YQ_PROGRAM='
 #
 # Usage: resource_envelope_rules_explain
 resource_envelope_rules_explain() {
-  log_error "Every container in an application bundle must declare CPU and memory"
+  log_error "Every container that reaches a cluster must declare CPU and memory"
   log_error "requests and limits: ${RESOURCE_ENVELOPE_REQUIRED_FIELDS[*]}."
   log_error "Set them in the component's spec.main.workload.container.resources, or"
   log_error "write them into the container's resources block where the manifests are"
@@ -318,4 +318,61 @@ assert_resource_envelopes() {
 
   resource_envelope_report \
     "Containers in this product's application bundles carry no resource envelope:"
+}
+
+# assert_local_resource_envelopes <manifests-dir>
+#
+# <manifests-dir> is a run's OWN manifest directory (MANIFESTS_SUB_PATH,
+# src/kubernetes by default), not a staged bundle tree. Three differences from
+# assert_resource_envelopes follow from that, and all three are the point:
+#
+#   - No contract, so no application-kind filter. There is nothing to read a
+#     build kind from because nothing published these manifests - the author of
+#     the run wrote them. That also makes the filter unnecessary rather than
+#     missing: the reason vendor bundles are skipped is that they are not the
+#     consuming project's to change, and these are.
+#   - The tree is flat, not keyed by bundle. Local manifests merge in at paths
+#     relative to the manifests dir, so there are no bundle subdirectories to
+#     walk and a subdirectory here is just a subdirectory.
+#   - An absent directory passes. A run with no manifests of its own is normal -
+#     a run-platform that only imports children has none - and a directory that
+#     does not exist cannot hide a container without a budget.
+#
+# WHAT THIS DELIBERATELY DOES NOT CHECK
+#
+# The imported children already in the assembled tree. Each was checked at its
+# own product aggregate, by this same assertion, at the level that can fix it: a
+# child's manifest is not the run's to edit, and failing a run for one would
+# need a new release of the child to clear - the same reason vendor bundles are
+# out of the product-level check. It would also let a run built on a newer
+# buildon fail a child that built green on an older one, which is two levels
+# disagreeing about one rule. So the rule stays stated in exactly one place per
+# manifest, and the levels partition the tree between them rather than overlap.
+#
+# Called on the source directory rather than the merged tree so a message names
+# the file where its author put it. The consequence is that a modifier is not
+# applied first, so a budget written by a patch modifier does not count here -
+# the same limitation, for the same reason, as at the product level: at aggregate
+# time the patches have not run.
+#
+# Returns 0 when every container and every registered custom resource in the
+# run's own manifests declares all four fields, 1 otherwise with every offender
+# logged.
+assert_local_resource_envelopes() {
+  if [[ $# -ne 1 ]]; then
+    log_error "assert_local_resource_envelopes requires exactly 1 argument, got $#"
+    return 1
+  fi
+  local manifests_dir="$1"
+
+  if [[ ! -d "${manifests_dir}" ]]; then
+    log "No ${manifests_dir} directory; this run contributes no manifests of its own."
+    return 0
+  fi
+
+  RESOURCE_ENVELOPE_OFFENDERS=()
+  resource_envelope_check_tree "${manifests_dir}" "${manifests_dir}/"
+
+  resource_envelope_report \
+    "Deployables in this run's own ${manifests_dir} carry no resource envelope:"
 }
