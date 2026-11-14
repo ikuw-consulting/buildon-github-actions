@@ -209,3 +209,46 @@ verify_step_wires() {
   [[ "${failures}" -eq 0 ]]
 }
 
+# A composite action passes on only the outputs it declares. A name read from
+# an action-backed step but declared by no action behind that step id arrives
+# empty on a runner, with no error.
+@test "every output read from an action-backed step is declared by an action behind that id" {
+  local sources pairs ids id action declared names name checked=0 failures=0
+  sources="$PROJECT_ROOT/src/steps-common/*.yaml $PROJECT_ROOT/src/workflow-templates/*.yaml"
+
+  # One "<step id> <action>" line per step that has both an id and a uses.
+  # shellcheck disable=SC2086 # the globs must expand
+  pairs=$(awk '
+    function flush() { if (id != "" && action != "") print id, action; id = ""; action = "" }
+    FNR == 1 { flush() }
+    /^[[:space:]]*- / { flush() }
+    /^[[:space:]]*(- )?id: / { id = $NF }
+    /uses: .*\/src\/actions\// { count = split($NF, parts, "/"); action = parts[count] }
+    END { flush() }
+  ' ${sources} | sort -u)
+
+  ids=$(printf '%s\n' "${pairs}" | cut -d' ' -f1 | sort -u)
+  for id in ${ids}; do
+    checked=$((checked + 1))
+    declared=""
+    for action in $(printf '%s\n' "${pairs}" | awk -v id="${id}" '$1 == id { print $2 }'); do
+      declared="${declared} $(awk '
+        /^outputs:/ { inside = 1; next }
+        /^[a-z]/ { inside = 0 }
+        inside && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ { sub(/:.*/, "", $1); print $1 }
+      ' "$ACTION_TEMPLATES_DIR/${action}.yaml" | tr '\n' ' ')"
+    done
+    # shellcheck disable=SC2086 # the globs must expand
+    names=$(grep -hoE "steps\.${id}\.outputs\.[A-Za-z0-9_-]+" ${sources} | sed -E 's/.*\.outputs\.//' | sort -u)
+    for name in ${names}; do
+      if [[ " ${declared} " != *" ${name} "* ]]; then
+        echo "steps.${id}.outputs.${name} is read, but no action behind id ${id} declares it" >&3
+        failures=$((failures + 1))
+      fi
+    done
+  done
+
+  [ "${checked}" -ge 50 ]
+  [[ "${failures}" -eq 0 ]]
+}
+

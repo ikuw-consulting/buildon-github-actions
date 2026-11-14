@@ -206,12 +206,7 @@ jobs:
           check-name: 'Build & Publish → Load Project KaptainPM Docker Logins'
       - name: Load project KaptainPM docker logins
         id: load-project-kpm
-        shell: bash
-        env:
-          BUILD_MODE: build_server
-          BUILD_PLATFORM: github-actions
-          BUILD_PLATFORM_LOG_PROVIDER: github-actions
-        run: ./.github/buildon-github-actions/src/scripts/main/load-project-kaptainpm-docker-logins
+        uses: ./.github/buildon-github-actions/src/actions/load-project-kaptainpm-docker-logins
       - name: Pass check - Load Project KaptainPM Docker Logins
         if: success() && steps.check-load-project-kpm.outputs.check-run-id != ''
         continue-on-error: true

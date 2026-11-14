@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: 'Load Project KaptainPM Docker Logins'
+description: 'Reads the registry login config from the project root KaptainPM.yaml'
+
+outputs:
+  DOCKER_REGISTRY_LOGINS:
+    description: 'Registry login config as single-line JSON (unset when none)'
+    value: ${{ steps.load.outputs.DOCKER_REGISTRY_LOGINS }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Load project KaptainPM docker logins
+      id: load
+      shell: bash
+      env:
+        BUILD_MODE: build_server
+        BUILD_PLATFORM: github-actions
+        BUILD_PLATFORM_LOG_PROVIDER: github-actions
+      run: "${GITHUB_ACTION_PATH}/../../scripts/main/load-project-kaptainpm-docker-logins"
