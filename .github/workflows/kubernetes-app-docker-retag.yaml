@@ -568,7 +568,6 @@ jobs:
           tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
 
           # Quality check options
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -624,7 +623,6 @@ jobs:
         with:
           release-branch: ${{ steps.kpm.outputs.RELEASE_BRANCH }}
           additional-release-branches: ${{ steps.kpm.outputs.ADDITIONAL_RELEASE_BRANCHES }}
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -940,7 +938,6 @@ jobs:
           tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
 
           # Quality check options
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -1253,7 +1250,6 @@ jobs:
           tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
 
           # Quality check options
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -1709,7 +1705,6 @@ jobs:
           tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
 
           # Quality check options
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -2442,7 +2437,6 @@ jobs:
           tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
 
           # Quality check options
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -2940,7 +2934,6 @@ jobs:
           tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
 
           # Quality check options
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -3267,7 +3260,6 @@ jobs:
           tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
 
           # Quality check options
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -3825,7 +3817,6 @@ jobs:
           tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
 
           # Quality check options
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}

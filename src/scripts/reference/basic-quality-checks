@@ -16,7 +16,6 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/setup-local-context.bash"
 
 # Quality Check Options (override via environment)
-export BLOCK_SLASHES="${BLOCK_SLASHES:-}"
 export QC_BLOCK_SLASH_CONTAINING_BRANCHES="${QC_BLOCK_SLASH_CONTAINING_BRANCHES:-false}"
 export QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES="${QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES:-true}"
 export QC_REQUIRE_CONVENTIONAL_BRANCHES="${QC_REQUIRE_CONVENTIONAL_BRANCHES:-false}"

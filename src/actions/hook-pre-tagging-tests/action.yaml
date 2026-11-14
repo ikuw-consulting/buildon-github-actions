@@ -914,10 +914,6 @@ inputs:
     required: false
     default: 'false'
   # Basic quality checks
-  block-slashes:
-    description: 'DEPRECATED: Use block-slash-containing-branches instead'
-    required: false
-    default: 'false'
   qc-block-slash-containing-branches:
     description: 'Block branch names containing slashes'
     required: false
@@ -1256,7 +1252,6 @@ runs:
         TAG_VERSION_USE_SOURCE_VERSION_EXACT: ${{ inputs.tag-version-use-source-version-exact }}
 
         # Workflow inputs - quality check options
-        BLOCK_SLASHES: ${{ inputs.block-slashes }}
         QC_BLOCK_SLASH_CONTAINING_BRANCHES: ${{ inputs.qc-block-slash-containing-branches }}
         QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES: ${{ inputs.qc-block-double-hyphen-containing-branches }}
         QC_REQUIRE_CONVENTIONAL_BRANCHES: ${{ inputs.qc-require-conventional-branches }}

@@ -74,7 +74,7 @@ teardown() {
   cd "$TEST_REPO"
 
   export CURRENT_BRANCH=feature/something
-  export BLOCK_SLASHES=true
+  export QC_BLOCK_SLASH_CONTAINING_BRANCHES=true
   run "$SCRIPTS_DIR/basic-quality-checks"
   [ "$status" -eq 2 ]
   assert_output_contains "contains a slash"
