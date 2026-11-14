@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: 'Kaptain Init'
+description: 'Resolves KaptainPM layers and writes the final merged KaptainPM.yaml'
+
+inputs:
+  # Registry defaults for layer resolution
+  docker-target-registry:
+    description: 'Default OCI registry for layers (a KaptainPM.yaml value wins)'
+    required: false
+    default: ''
+  docker-target-namespace:
+    description: 'Default OCI namespace for layers (a KaptainPM.yaml value wins)'
+    required: false
+    default: ''
+  # Container runtime
+  image-build-command:
+    description: 'Container runtime command (podman or docker)'
+    required: true
+  # Schema validation provider
+  schema-validation-command:
+    description: 'Full path to the schema validation plugin (from validate-tooling)'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Kaptain init
+      shell: bash
+      env:
+        BUILD_MODE: build_server
+        BUILD_PLATFORM: github-actions
+        BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        IMAGE_BUILD_COMMAND: ${{ inputs.image-build-command }}
+        SCHEMA_VALIDATION_COMMAND: ${{ inputs.schema-validation-command }}
+        DOCKER_TARGET_REGISTRY: ${{ inputs.docker-target-registry }}
+        DOCKER_TARGET_NAMESPACE: ${{ inputs.docker-target-namespace }}
+      run: "${GITHUB_ACTION_PATH}/../../scripts/main/kaptain-init"

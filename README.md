@@ -136,6 +136,7 @@ See [`examples/`](examples/) for more usage patterns.
 | `hook-pre-package-prepare` | Runs user's hook script before manifest packaging to generate ConfigMaps, modify manifests, or add files |
 | `hook-pre-publish` | Runs user's hook script after all build and tagging steps, before any release preparation or publishing |
 | `hook-pre-tagging-tests` | Runs user's hook script before tagging/versioning for custom validation or preparation |
+| `kaptain-init` | Resolves KaptainPM layers and writes the final merged KaptainPM.yaml |
 | `kubernetes-lineage-data-generate` | Emits the build's lineage data ConfigMap (presence + lineage record) into the substituted manifests tree. Generic across product, app, bundle, and env/rp builds, dispatched by build-kind (plus env-build-section for env/rp). |
 | `kubernetes-manifests-contract-generate` | Generates a manifests contract file describing token scheme, required config, and compatibility |
 | `kubernetes-manifests-package-only-token-override` | Overrides docker image tokens for manifests-only workflow |

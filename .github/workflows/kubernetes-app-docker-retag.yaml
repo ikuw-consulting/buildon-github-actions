@@ -285,16 +285,12 @@ jobs:
 
       - name: Kaptain init
         id: kaptain-init
-        shell: bash
-        env:
-          BUILD_MODE: build_server
-          BUILD_PLATFORM: github-actions
-          BUILD_PLATFORM_LOG_PROVIDER: github-actions
-          IMAGE_BUILD_COMMAND: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
-          SCHEMA_VALIDATION_COMMAND: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
-          DOCKER_TARGET_REGISTRY: ${{ steps.registry-defaults.outputs.registry }}
-          DOCKER_TARGET_NAMESPACE: ${{ steps.registry-defaults.outputs.namespace }}
-        run: ./.github/buildon-github-actions/src/scripts/main/kaptain-init
+        uses: ./.github/buildon-github-actions/src/actions/kaptain-init
+        with:
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
+          docker-target-registry: ${{ steps.registry-defaults.outputs.registry }}
+          docker-target-namespace: ${{ steps.registry-defaults.outputs.namespace }}
       - name: Pass check - Kaptain Init
         if: success() && steps.check-kaptain-init.outputs.check-run-id != ''
         continue-on-error: true

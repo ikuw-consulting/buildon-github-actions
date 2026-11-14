@@ -125,6 +125,17 @@ verify_step_wires() {
   fi
 }
 
+@test "kaptain-init wires the container runtime, schema validator and registry defaults" {
+  run verify_step_wires \
+    "$ACTION_TEMPLATES_DIR/kaptain-init.yaml" \
+    "$PROJECT_ROOT/src/steps-common/kaptain-init.yaml" \
+    IMAGE_BUILD_COMMAND SCHEMA_VALIDATION_COMMAND DOCKER_TARGET_REGISTRY DOCKER_TARGET_NAMESPACE
+  if [[ "$status" -ne 0 ]]; then
+    echo "$output" >&3
+    return 1
+  fi
+}
+
 @test "kubernetes-run-aggregate wires the schema validator" {
   run verify_step_wires \
     "$ACTION_TEMPLATES_DIR/kubernetes-run-aggregate.yaml" \
