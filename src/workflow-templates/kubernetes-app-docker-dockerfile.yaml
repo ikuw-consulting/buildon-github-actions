@@ -98,7 +98,7 @@ jobs:
       git-tag: ${{ steps.versions.outputs.git-tag }}
       project-name: ${{ steps.versions.outputs.project-name }}
       is-release: ${{ steps.versions.outputs.is-release }}
-      docker-target-image-full-uri: ${{ steps.docker-build.outputs.docker-docker-target-image-full-uri }}
+      docker-target-image-full-uri: ${{ steps.docker-build.outputs.docker-target-image-full-uri }}
       images-pushed: ${{ steps.docker-push-all.outputs.images-pushed }}
       manifests-zip-sub-path: ${{ steps.manifest-package.outputs.manifests-zip-sub-path }}
       manifests-zip-file-name: ${{ steps.manifest-package.outputs.manifests-zip-file-name }}
