@@ -930,7 +930,6 @@ validate_build_context_env_vars() {
   # Files that have an env block but only use inline bash, not kaptain scripts
   local inline_env_files=(
     "parse-workflow-ref-and-checkout.yaml"
-    "github-release-prepare-eks.yaml"
     "github-release-prepare-spec.yaml"
   )
 
