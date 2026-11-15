@@ -171,23 +171,23 @@ jobs:
       - name: Start check - Validate Tooling
         id: check-validate-tooling
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Validate Tooling'
       - name: Validate tooling
         id: validate-tooling
-        uses: ./.github/buildon-github-actions/src/actions/validate-tooling
+        uses: $/src/actions/validate-tooling
       - name: Pass check - Validate Tooling
         if: success() && steps.check-validate-tooling.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-validate-tooling.outputs.check-run-id }}
       - name: Fail check - Validate Tooling
         if: failure() && steps.check-validate-tooling.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-validate-tooling.outputs.check-run-id }}
@@ -196,23 +196,23 @@ jobs:
       - name: Start check - Load Project KaptainPM Docker Logins
         id: check-load-project-kpm
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Load Project KaptainPM Docker Logins'
       - name: Load project KaptainPM docker logins
         id: load-project-kpm
-        uses: ./.github/buildon-github-actions/src/actions/load-project-kaptainpm-docker-logins
+        uses: $/src/actions/load-project-kaptainpm-docker-logins
       - name: Pass check - Load Project KaptainPM Docker Logins
         if: success() && steps.check-load-project-kpm.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-load-project-kpm.outputs.check-run-id }}
       - name: Fail check - Load Project KaptainPM Docker Logins
         if: failure() && steps.check-load-project-kpm.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-load-project-kpm.outputs.check-run-id }}
@@ -221,7 +221,7 @@ jobs:
       - name: Start check - Pre-Init Docker Registry Logins
         id: check-docker-registry-logins-pre-init
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Pre-Init Docker Registry Logins'
@@ -230,7 +230,7 @@ jobs:
       # GHCR merge handled by the action internally
       - name: Docker registry logins (pre-init)
         id: docker-registry-logins-pre-init
-        uses: ./.github/buildon-github-actions/src/actions/docker-registry-logins
+        uses: $/src/actions/docker-registry-logins
         with:
           config: ${{ steps.load-project-kpm.outputs.DOCKER_REGISTRY_LOGINS }}
           secrets-json: ${{ secrets.docker-registry-logins-secrets }}
@@ -239,13 +239,13 @@ jobs:
       - name: Pass check - Pre-Init Docker Registry Logins
         if: success() && steps.check-docker-registry-logins-pre-init.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-docker-registry-logins-pre-init.outputs.check-run-id }}
       - name: Fail check - Pre-Init Docker Registry Logins
         if: failure() && steps.check-docker-registry-logins-pre-init.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-docker-registry-logins-pre-init.outputs.check-run-id }}
@@ -254,7 +254,7 @@ jobs:
       - name: Start check - Kaptain Init
         id: check-kaptain-init
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Kaptain Init'
@@ -276,7 +276,7 @@ jobs:
 
       - name: Kaptain init
         id: kaptain-init
-        uses: ./.github/buildon-github-actions/src/actions/kaptain-init
+        uses: $/src/actions/kaptain-init
         with:
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
           schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
@@ -285,13 +285,13 @@ jobs:
       - name: Pass check - Kaptain Init
         if: success() && steps.check-kaptain-init.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-kaptain-init.outputs.check-run-id }}
       - name: Fail check - Kaptain Init
         if: failure() && steps.check-kaptain-init.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-kaptain-init.outputs.check-run-id }}
@@ -300,13 +300,13 @@ jobs:
       - name: Start check - Load Final KaptainPM YAML
         id: check-load-final-kpm
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Load Final KaptainPM YAML'
       - name: Load final KaptainPM YAML
         id: kpm
-        uses: ./.github/buildon-github-actions/src/actions/load-final-kaptainpm-yaml
+        uses: $/src/actions/load-final-kaptainpm-yaml
         with:
           build-kind: kubernetes-bundle-docker-dockerfile
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -319,13 +319,13 @@ jobs:
       - name: Pass check - Load Final KaptainPM YAML
         if: success() && steps.check-load-final-kpm.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-load-final-kpm.outputs.check-run-id }}
       - name: Fail check - Load Final KaptainPM YAML
         if: failure() && steps.check-load-final-kpm.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-load-final-kpm.outputs.check-run-id }}
@@ -335,14 +335,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && success()
         id: check-pre-build
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Pre-Build'
       - name: Run pre-build
         if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && success()
         id: pre-build
-        uses: ./.github/buildon-github-actions/src/actions/hook-pre-build
+        uses: $/src/actions/hook-pre-build
         with:
           build-kind: kubernetes-bundle-docker-dockerfile
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -588,13 +588,13 @@ jobs:
       - name: Pass check - Pre-Build
         if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && success() && steps.check-pre-build.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-pre-build.outputs.check-run-id }}
       - name: Fail check - Pre-Build
         if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && failure() && steps.check-pre-build.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-pre-build.outputs.check-run-id }}
@@ -604,14 +604,14 @@ jobs:
         if: github.event_name == 'pull_request' && success()
         id: check-basic-quality
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Basic Quality Checks'
       - name: Basic quality checks
         if: github.event_name == 'pull_request' && success()
         id: quality
-        uses: ./.github/buildon-github-actions/src/actions/basic-quality-checks
+        uses: $/src/actions/basic-quality-checks
         with:
           release-branch: ${{ steps.kpm.outputs.RELEASE_BRANCH }}
           additional-release-branches: ${{ steps.kpm.outputs.ADDITIONAL_RELEASE_BRANCHES }}
@@ -625,13 +625,13 @@ jobs:
       - name: Pass check - Basic Quality Checks
         if: github.event_name == 'pull_request' && success() && steps.check-basic-quality.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-basic-quality.outputs.check-run-id }}
       - name: Fail check - Basic Quality Checks
         if: github.event_name == 'pull_request' && failure() && steps.check-basic-quality.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-basic-quality.outputs.check-run-id }}
@@ -641,7 +641,7 @@ jobs:
         if: steps.kpm.outputs.DOCKER_TARGET_REGISTRY != '' && success()
         id: check-docker-registry-logins
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Docker Registry Logins'
@@ -649,7 +649,7 @@ jobs:
       - name: Docker registry logins
         id: docker-registry-logins
         if: steps.kpm.outputs.DOCKER_TARGET_REGISTRY != '' && success()
-        uses: ./.github/buildon-github-actions/src/actions/docker-registry-logins
+        uses: $/src/actions/docker-registry-logins
         with:
           config: ${{ steps.kpm.outputs.DOCKER_REGISTRY_LOGINS }}
           secrets-json: ${{ secrets.docker-registry-logins-secrets }}
@@ -659,13 +659,13 @@ jobs:
       - name: Pass check - Docker Registry Logins
         if: steps.kpm.outputs.DOCKER_TARGET_REGISTRY != '' && success() && steps.check-docker-registry-logins.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-docker-registry-logins.outputs.check-run-id }}
       - name: Fail check - Docker Registry Logins
         if: steps.kpm.outputs.DOCKER_TARGET_REGISTRY != '' && failure() && steps.check-docker-registry-logins.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-docker-registry-logins.outputs.check-run-id }}
@@ -675,27 +675,27 @@ jobs:
         if: steps.kpm.outputs.DOCKER_QEMU_SETUP_NEEDED == 'true' && success()
         id: check-docker-platform-setup
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Docker Platform Setup'
       - name: Docker platform setup
         if: steps.kpm.outputs.DOCKER_QEMU_SETUP_NEEDED == 'true' && success()
         id: docker-platform-setup
-        uses: ./.github/buildon-github-actions/src/actions/docker-platform-setup
+        uses: $/src/actions/docker-platform-setup
         with:
           docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
       - name: Pass check - Docker Platform Setup
         if: steps.kpm.outputs.DOCKER_QEMU_SETUP_NEEDED == 'true' && success() && steps.check-docker-platform-setup.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-docker-platform-setup.outputs.check-run-id }}
       - name: Fail check - Docker Platform Setup
         if: steps.kpm.outputs.DOCKER_QEMU_SETUP_NEEDED == 'true' && failure() && steps.check-docker-platform-setup.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-docker-platform-setup.outputs.check-run-id }}
@@ -705,14 +705,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH != '' && success()
         id: check-pre-tagging
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Pre-tagging Tests'
       - name: Run pre-tagging tests
         if: steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH != '' && success()
         id: pre-tagging-tests
-        uses: ./.github/buildon-github-actions/src/actions/hook-pre-tagging-tests
+        uses: $/src/actions/hook-pre-tagging-tests
         with:
           build-kind: kubernetes-bundle-docker-dockerfile
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -958,13 +958,13 @@ jobs:
       - name: Pass check - Pre-tagging Tests
         if: steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH != '' && success() && steps.check-pre-tagging.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-pre-tagging.outputs.check-run-id }}
       - name: Fail check - Pre-tagging Tests
         if: steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH != '' && failure() && steps.check-pre-tagging.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-pre-tagging.outputs.check-run-id }}
@@ -973,13 +973,13 @@ jobs:
       - name: Start check - Versions & Naming
         id: check-versions
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Versions & Naming'
       - name: Generate versions and naming
         id: versions
-        uses: ./.github/buildon-github-actions/src/actions/versions-and-naming
+        uses: $/src/actions/versions-and-naming
         with:
           token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
           output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
@@ -1002,13 +1002,13 @@ jobs:
       - name: Pass check - Versions & Naming
         if: success() && steps.check-versions.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-versions.outputs.check-run-id }}
       - name: Fail check - Versions & Naming
         if: failure() && steps.check-versions.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-versions.outputs.check-run-id }}
@@ -1018,14 +1018,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH != '' && success()
         id: check-post-versions-and-naming
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Post-Versions-and-Naming'
       - name: Run post-versions-and-naming
         if: steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH != '' && success()
         id: post-versions-and-naming
-        uses: ./.github/buildon-github-actions/src/actions/hook-post-versions-and-naming
+        uses: $/src/actions/hook-post-versions-and-naming
         with:
           build-kind: kubernetes-bundle-docker-dockerfile
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -1289,13 +1289,13 @@ jobs:
       - name: Pass check - Post-Versions-and-Naming
         if: steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH != '' && success() && steps.check-post-versions-and-naming.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-post-versions-and-naming.outputs.check-run-id }}
       - name: Fail check - Post-Versions-and-Naming
         if: steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH != '' && failure() && steps.check-post-versions-and-naming.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-post-versions-and-naming.outputs.check-run-id }}
@@ -1305,24 +1305,24 @@ jobs:
         if: steps.versions.outputs.is-release != 'true' && steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED == 'true' && success()
         id: check-change-source-note
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Change Source Note'
       - name: Write change source note
         id: change-source-note-write
         if: steps.versions.outputs.is-release != 'true' && steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED == 'true' && success()
-        uses: ./.github/buildon-github-actions/src/actions/change-source-note-write
+        uses: $/src/actions/change-source-note-write
       - name: Pass check - Change Source Note
         if: steps.versions.outputs.is-release != 'true' && steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED == 'true' && success() && steps.check-change-source-note.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-change-source-note.outputs.check-run-id }}
       - name: Fail check - Change Source Note
         if: steps.versions.outputs.is-release != 'true' && steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED == 'true' && failure() && steps.check-change-source-note.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-change-source-note.outputs.check-run-id }}
@@ -1331,13 +1331,13 @@ jobs:
       - name: Start check - Release Change Data Generate
         id: check-release-change-data-generate
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Release Change Data Generate'
       - name: Generate release change data
         id: release-change-data-generate
-        uses: ./.github/buildon-github-actions/src/actions/release-change-data-generate
+        uses: $/src/actions/release-change-data-generate
         with:
           version: ${{ steps.versions.outputs.version }}
           project-name: ${{ steps.versions.outputs.project-name }}
@@ -1348,13 +1348,13 @@ jobs:
       - name: Pass check - Release Change Data Generate
         if: success() && steps.check-release-change-data-generate.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-release-change-data-generate.outputs.check-run-id }}
       - name: Fail check - Release Change Data Generate
         if: failure() && steps.check-release-change-data-generate.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-release-change-data-generate.outputs.check-run-id }}
@@ -1363,13 +1363,13 @@ jobs:
       - name: Start check - Release Change Data OCI Package
         id: check-release-change-data-oci-package
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Release Change Data OCI Package'
       - name: Package release change data as OCI image
         id: release-change-data-oci-package
-        uses: ./.github/buildon-github-actions/src/actions/release-change-data-oci-package
+        uses: $/src/actions/release-change-data-oci-package
         with:
           version: ${{ steps.versions.outputs.version }}
           docker-tag: ${{ steps.versions.outputs.docker-tag }}
@@ -1384,13 +1384,13 @@ jobs:
       - name: Pass check - Release Change Data OCI Package
         if: success() && steps.check-release-change-data-oci-package.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-release-change-data-oci-package.outputs.check-run-id }}
       - name: Fail check - Release Change Data OCI Package
         if: failure() && steps.check-release-change-data-oci-package.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-release-change-data-oci-package.outputs.check-run-id }}
@@ -1399,13 +1399,13 @@ jobs:
       - name: Start check - Templates Import
         id: check-templates-import
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Templates Import'
       - name: Import templates
         id: templates-import
-        uses: ./.github/buildon-github-actions/src/actions/kubernetes-templates-import
+        uses: $/src/actions/kubernetes-templates-import
         with:
           project-name: ${{ steps.versions.outputs.project-name }}
           output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
@@ -1420,13 +1420,13 @@ jobs:
       - name: Pass check - Templates Import
         if: success() && steps.check-templates-import.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-templates-import.outputs.check-run-id }}
       - name: Fail check - Templates Import
         if: failure() && steps.check-templates-import.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-templates-import.outputs.check-run-id }}
@@ -1436,14 +1436,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_PRE_DOCKER_PREPARE_SCRIPT_SUB_PATH != '' && success()
         id: check-pre-docker-prepare
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Pre-docker Prepare'
       - name: Run pre-docker prepare
         if: steps.kpm.outputs.HOOK_PRE_DOCKER_PREPARE_SCRIPT_SUB_PATH != '' && success()
         id: pre-docker-prepare
-        uses: ./.github/buildon-github-actions/src/actions/hook-pre-docker-prepare
+        uses: $/src/actions/hook-pre-docker-prepare
         with:
           build-kind: kubernetes-bundle-docker-dockerfile
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -1707,13 +1707,13 @@ jobs:
       - name: Pass check - Pre-docker Prepare
         if: steps.kpm.outputs.HOOK_PRE_DOCKER_PREPARE_SCRIPT_SUB_PATH != '' && success() && steps.check-pre-docker-prepare.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-pre-docker-prepare.outputs.check-run-id }}
       - name: Fail check - Pre-docker Prepare
         if: steps.kpm.outputs.HOOK_PRE_DOCKER_PREPARE_SCRIPT_SUB_PATH != '' && failure() && steps.check-pre-docker-prepare.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-pre-docker-prepare.outputs.check-run-id }}
@@ -1722,13 +1722,13 @@ jobs:
       - name: Start check - Docker Build
         id: check-docker-build
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Docker Build'
       - name: Build image
         id: docker-build
-        uses: ./.github/buildon-github-actions/src/actions/docker-build-dockerfile
+        uses: $/src/actions/docker-build-dockerfile
         with:
           docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
           docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}
@@ -1769,13 +1769,13 @@ jobs:
       - name: Pass check - Docker Build
         if: success() && steps.check-docker-build.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-docker-build.outputs.check-run-id }}
       - name: Fail check - Docker Build
         if: failure() && steps.check-docker-build.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-docker-build.outputs.check-run-id }}
@@ -1785,14 +1785,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_POST_DOCKER_TESTS_SCRIPT_SUB_PATH != '' && success()
         id: check-post-docker
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Post-docker Tests'
       - name: Run post-docker tests
         if: steps.kpm.outputs.HOOK_POST_DOCKER_TESTS_SCRIPT_SUB_PATH != '' && success()
         id: post-docker-tests
-        uses: ./.github/buildon-github-actions/src/actions/hook-post-docker-tests
+        uses: $/src/actions/hook-post-docker-tests
         with:
           build-kind: kubernetes-bundle-docker-dockerfile
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -2058,13 +2058,13 @@ jobs:
       - name: Pass check - Post-docker Tests
         if: steps.kpm.outputs.HOOK_POST_DOCKER_TESTS_SCRIPT_SUB_PATH != '' && success() && steps.check-post-docker.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-post-docker.outputs.check-run-id }}
       - name: Fail check - Post-docker Tests
         if: steps.kpm.outputs.HOOK_POST_DOCKER_TESTS_SCRIPT_SUB_PATH != '' && failure() && steps.check-post-docker.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-post-docker.outputs.check-run-id }}
@@ -2074,14 +2074,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH != '' && success()
         id: check-pre-package-prepare
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Pre-package Prepare'
       - name: Run pre-package prepare
         if: steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH != '' && success()
         id: pre-package-prepare
-        uses: ./.github/buildon-github-actions/src/actions/hook-pre-package-prepare
+        uses: $/src/actions/hook-pre-package-prepare
         with:
           build-kind: kubernetes-bundle-docker-dockerfile
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -2347,13 +2347,13 @@ jobs:
       - name: Pass check - Pre-package Prepare
         if: steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH != '' && success() && steps.check-pre-package-prepare.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-pre-package-prepare.outputs.check-run-id }}
       - name: Fail check - Pre-package Prepare
         if: steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH != '' && failure() && steps.check-pre-package-prepare.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-pre-package-prepare.outputs.check-run-id }}
@@ -2362,13 +2362,13 @@ jobs:
       - name: Start check - Substitute Manifests
         id: check-manifest-substitute
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Substitute Manifests'
       - name: Prepare manifests for packaging
         id: manifest-package-prepare
-        uses: ./.github/buildon-github-actions/src/actions/kubernetes-manifests-package-prepare
+        uses: $/src/actions/kubernetes-manifests-package-prepare
         with:
           manifests-sub-path: ${{ steps.kpm.outputs.MANIFESTS_SUB_PATH }}
           defaults-sub-path: ${{ steps.kpm.outputs.DEFAULTS_SUB_PATH }}
@@ -2403,7 +2403,7 @@ jobs:
           output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
       - name: Substitute manifests
         id: manifest-substitute
-        uses: ./.github/buildon-github-actions/src/actions/kubernetes-manifests-substitute
+        uses: $/src/actions/kubernetes-manifests-substitute
         with:
           project-name: ${{ steps.versions.outputs.project-name }}
           version: ${{ steps.versions.outputs.version }}
@@ -2414,13 +2414,13 @@ jobs:
       - name: Pass check - Substitute Manifests
         if: success() && steps.check-manifest-substitute.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-manifest-substitute.outputs.check-run-id }}
       - name: Fail check - Substitute Manifests
         if: failure() && steps.check-manifest-substitute.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-manifest-substitute.outputs.check-run-id }}
@@ -2429,13 +2429,13 @@ jobs:
       - name: Start check - Generate Manifests Contract
         id: check-manifest-contract-generate
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Generate Manifests Contract'
       - name: Generate manifests contract
         id: manifest-contract-generate
-        uses: ./.github/buildon-github-actions/src/actions/kubernetes-manifests-contract-generate
+        uses: $/src/actions/kubernetes-manifests-contract-generate
         with:
           project-name: ${{ steps.versions.outputs.project-name }}
           version: ${{ steps.versions.outputs.version }}
@@ -2448,13 +2448,13 @@ jobs:
       - name: Pass check - Generate Manifests Contract
         if: success() && steps.check-manifest-contract-generate.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-manifest-contract-generate.outputs.check-run-id }}
       - name: Fail check - Generate Manifests Contract
         if: failure() && steps.check-manifest-contract-generate.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-manifest-contract-generate.outputs.check-run-id }}
@@ -2463,13 +2463,13 @@ jobs:
       - name: Start check - Generate Lineage Data ConfigMap
         id: check-lineage-data-generate
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Generate Lineage Data ConfigMap'
       - name: Generate lineage data ConfigMap
         id: manifest-lineage-data-generate
-        uses: ./.github/buildon-github-actions/src/actions/kubernetes-lineage-data-generate
+        uses: $/src/actions/kubernetes-lineage-data-generate
         with:
           project-name: ${{ steps.versions.outputs.project-name }}
           version: ${{ steps.versions.outputs.version }}
@@ -2485,13 +2485,13 @@ jobs:
       - name: Pass check - Generate Lineage Data ConfigMap
         if: success() && steps.check-lineage-data-generate.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-lineage-data-generate.outputs.check-run-id }}
       - name: Fail check - Generate Lineage Data ConfigMap
         if: failure() && steps.check-lineage-data-generate.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-lineage-data-generate.outputs.check-run-id }}
@@ -2500,13 +2500,13 @@ jobs:
       - name: Start check - Package Manifests
         id: check-manifest-package
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Package Manifests'
       - name: Package manifests
         id: manifest-package
-        uses: ./.github/buildon-github-actions/src/actions/kubernetes-manifests-package
+        uses: $/src/actions/kubernetes-manifests-package
         with:
           project-name: ${{ steps.versions.outputs.project-name }}
           version: ${{ steps.versions.outputs.version }}
@@ -2514,13 +2514,13 @@ jobs:
       - name: Pass check - Package Manifests
         if: success() && steps.check-manifest-package.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-manifest-package.outputs.check-run-id }}
       - name: Fail check - Package Manifests
         if: failure() && steps.check-manifest-package.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-manifest-package.outputs.check-run-id }}
@@ -2529,13 +2529,13 @@ jobs:
       - name: Start check - Package Manifests for Repo Provider
         id: check-manifest-repo-provider-package
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Package Manifests for Repo Provider'
       - name: Package manifests for repo provider
         id: manifest-repo-provider-package
-        uses: ./.github/buildon-github-actions/src/actions/kubernetes-manifests-repo-provider-package
+        uses: $/src/actions/kubernetes-manifests-repo-provider-package
         with:
           manifests-repo-provider-type: ${{ steps.kpm.outputs.MANIFESTS_REPO_PROVIDER_TYPE }}
           manifests-packaging-base-image: ${{ steps.kpm.outputs.MANIFESTS_PACKAGING_BASE_IMAGE }}
@@ -2555,13 +2555,13 @@ jobs:
       - name: Pass check - Package Manifests for Repo Provider
         if: success() && steps.check-manifest-repo-provider-package.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-manifest-repo-provider-package.outputs.check-run-id }}
       - name: Fail check - Package Manifests for Repo Provider
         if: failure() && steps.check-manifest-repo-provider-package.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-manifest-repo-provider-package.outputs.check-run-id }}
@@ -2571,14 +2571,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH != '' && success()
         id: check-post-package
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Post-package Tests'
       - name: Run post-package tests
         if: steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH != '' && success()
         id: post-package-tests
-        uses: ./.github/buildon-github-actions/src/actions/hook-post-package-tests
+        uses: $/src/actions/hook-post-package-tests
         with:
           build-kind: kubernetes-bundle-docker-dockerfile
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -2848,13 +2848,13 @@ jobs:
       - name: Pass check - Post-package Tests
         if: steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH != '' && success() && steps.check-post-package.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-post-package.outputs.check-run-id }}
       - name: Fail check - Post-package Tests
         if: steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH != '' && failure() && steps.check-post-package.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-post-package.outputs.check-run-id }}
@@ -2864,14 +2864,14 @@ jobs:
         if: steps.kpm.outputs.DOCKER_PUSH_TARGETS != '' && success()
         id: check-docker-multi-tag
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Docker Multi-Tag'
       - name: Tag images for additional registries
         id: docker-multi-tag
         if: steps.kpm.outputs.DOCKER_PUSH_TARGETS != '' && success()
-        uses: ./.github/buildon-github-actions/src/actions/docker-multi-tag
+        uses: $/src/actions/docker-multi-tag
         with:
           docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
           docker-push-targets: ${{ steps.kpm.outputs.DOCKER_PUSH_TARGETS }}
@@ -2881,13 +2881,13 @@ jobs:
       - name: Pass check - Docker Multi-Tag
         if: steps.kpm.outputs.DOCKER_PUSH_TARGETS != '' && success() && steps.check-docker-multi-tag.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-docker-multi-tag.outputs.check-run-id }}
       - name: Fail check - Docker Multi-Tag
         if: steps.kpm.outputs.DOCKER_PUSH_TARGETS != '' && failure() && steps.check-docker-multi-tag.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-docker-multi-tag.outputs.check-run-id }}
@@ -2897,14 +2897,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_PRE_PUBLISH_SCRIPT_SUB_PATH != '' && success()
         id: check-pre-publish
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Pre-Publish'
       - name: Run pre-publish
         if: steps.kpm.outputs.HOOK_PRE_PUBLISH_SCRIPT_SUB_PATH != '' && success()
         id: pre-publish
-        uses: ./.github/buildon-github-actions/src/actions/hook-pre-publish
+        uses: $/src/actions/hook-pre-publish
         with:
           build-kind: kubernetes-bundle-docker-dockerfile
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -3168,13 +3168,13 @@ jobs:
       - name: Pass check - Pre-Publish
         if: steps.kpm.outputs.HOOK_PRE_PUBLISH_SCRIPT_SUB_PATH != '' && success() && steps.check-pre-publish.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-pre-publish.outputs.check-run-id }}
       - name: Fail check - Pre-Publish
         if: steps.kpm.outputs.HOOK_PRE_PUBLISH_SCRIPT_SUB_PATH != '' && failure() && steps.check-pre-publish.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-pre-publish.outputs.check-run-id }}
@@ -3184,7 +3184,7 @@ jobs:
         if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && success()
         id: check-github-release-prepare
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → GitHub Release Prepare'
@@ -3200,7 +3200,7 @@ jobs:
       - name: Prepare release files
         id: github-release-prepare
         if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && success()
-        uses: ./.github/buildon-github-actions/src/actions/github-release-prepare
+        uses: $/src/actions/github-release-prepare
         with:
           github-release-substituted-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_SUBSTITUTED_FILES }}
           github-release-verbatim-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_VERBATIM_FILES }}
@@ -3244,13 +3244,13 @@ jobs:
       - name: Pass check - GitHub Release Prepare
         if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && success() && steps.check-github-release-prepare.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-github-release-prepare.outputs.check-run-id }}
       - name: Fail check - GitHub Release Prepare
         if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && failure() && steps.check-github-release-prepare.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-github-release-prepare.outputs.check-run-id }}
@@ -3260,26 +3260,26 @@ jobs:
         if: steps.versions.outputs.is-release == 'true' && success()
         id: check-git-push-tag
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Git Tag Push'
       - name: Push git tag
         if: steps.versions.outputs.is-release == 'true' && success()
-        uses: ./.github/buildon-github-actions/src/actions/git-push-tag
+        uses: $/src/actions/git-push-tag
         with:
           git-tag: ${{ steps.versions.outputs.git-tag }}
           is-release: ${{ steps.versions.outputs.is-release }}
       - name: Pass check - Git Tag Push
         if: steps.versions.outputs.is-release == 'true' && success() && steps.check-git-push-tag.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-git-push-tag.outputs.check-run-id }}
       - name: Fail check - Git Tag Push
         if: steps.versions.outputs.is-release == 'true' && failure() && steps.check-git-push-tag.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-git-push-tag.outputs.check-run-id }}
@@ -3289,14 +3289,14 @@ jobs:
         if: steps.versions.outputs.is-release == 'true' && success()
         id: check-manifest-repo-provider-publish
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Publish Manifests via Repo Provider'
       - name: Publish manifests via repo provider
         id: manifest-repo-provider-publish
         if: steps.versions.outputs.is-release == 'true' && success()
-        uses: ./.github/buildon-github-actions/src/actions/kubernetes-manifests-repo-provider-publish
+        uses: $/src/actions/kubernetes-manifests-repo-provider-publish
         with:
           manifests-repo-provider-type: ${{ steps.kpm.outputs.MANIFESTS_REPO_PROVIDER_TYPE }}
           manifests-uri: ${{ steps.manifest-repo-provider-package.outputs.manifests-uri }}
@@ -3312,13 +3312,13 @@ jobs:
       - name: Pass check - Publish Manifests via Repo Provider
         if: steps.versions.outputs.is-release == 'true' && success() && steps.check-manifest-repo-provider-publish.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-manifest-repo-provider-publish.outputs.check-run-id }}
       - name: Fail check - Publish Manifests via Repo Provider
         if: steps.versions.outputs.is-release == 'true' && failure() && steps.check-manifest-repo-provider-publish.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-manifest-repo-provider-publish.outputs.check-run-id }}
@@ -3328,14 +3328,14 @@ jobs:
         if: steps.versions.outputs.is-release == 'true' && success()
         id: check-docker-push-all
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Docker Push All'
       - name: Push all images
         id: docker-push-all
         if: steps.versions.outputs.is-release == 'true' && success()
-        uses: ./.github/buildon-github-actions/src/actions/docker-push-all
+        uses: $/src/actions/docker-push-all
         with:
           docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
           is-release: ${{ steps.versions.outputs.is-release }}
@@ -3344,13 +3344,13 @@ jobs:
       - name: Pass check - Docker Push All
         if: steps.versions.outputs.is-release == 'true' && success() && steps.check-docker-push-all.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-docker-push-all.outputs.check-run-id }}
       - name: Fail check - Docker Push All
         if: steps.versions.outputs.is-release == 'true' && failure() && steps.check-docker-push-all.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-docker-push-all.outputs.check-run-id }}
@@ -3360,7 +3360,7 @@ jobs:
         if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true' && success()
         id: check-github-release
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → GitHub Release'
@@ -3428,7 +3428,7 @@ jobs:
 
       - name: GitHub Release
         if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true' && success()
-        uses: ./.github/buildon-github-actions/src/actions/github-release
+        uses: $/src/actions/github-release
         with:
           github-release-enabled: ${{ steps.kpm.outputs.GITHUB_RELEASE_ENABLED }}
           output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
@@ -3439,13 +3439,13 @@ jobs:
       - name: Pass check - GitHub Release
         if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true' && success() && steps.check-github-release.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-github-release.outputs.check-run-id }}
       - name: Fail check - GitHub Release
         if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true' && failure() && steps.check-github-release.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-github-release.outputs.check-run-id }}
@@ -3455,14 +3455,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && success()
         id: check-post-build
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Build & Publish → Post-Build'
       - name: Run post-build
         if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && success()
         id: post-build
-        uses: ./.github/buildon-github-actions/src/actions/hook-post-build
+        uses: $/src/actions/hook-post-build
         with:
           build-kind: kubernetes-bundle-docker-dockerfile
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -3726,13 +3726,13 @@ jobs:
       - name: Pass check - Post-Build
         if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && success() && steps.check-post-build.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-post-build.outputs.check-run-id }}
       - name: Fail check - Post-Build
         if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && failure() && steps.check-post-build.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-post-build.outputs.check-run-id }}

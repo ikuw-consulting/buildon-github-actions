@@ -3,7 +3,7 @@
 
 - name: Aggregate product
   id: product-aggregate
-  uses: ./.github/buildon-github-actions/src/actions/kubernetes-product-aggregate
+  uses: $/src/actions/kubernetes-product-aggregate
   with:
     project-name: ${{ steps.versions.outputs.project-name }}
     output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}

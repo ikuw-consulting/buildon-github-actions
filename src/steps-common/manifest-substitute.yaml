@@ -3,7 +3,7 @@
 
 - name: Substitute manifests
   id: manifest-substitute
-  uses: ./.github/buildon-github-actions/src/actions/kubernetes-manifests-substitute
+  uses: $/src/actions/kubernetes-manifests-substitute
   with:
     project-name: ${{ steps.versions.outputs.project-name }}
     version: ${{ steps.versions.outputs.version }}

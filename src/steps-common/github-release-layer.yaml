@@ -59,7 +59,7 @@
 
 - name: GitHub Release
   if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true'
-  uses: ./.github/buildon-github-actions/src/actions/github-release
+  uses: $/src/actions/github-release
   with:
     github-release-enabled: ${{ steps.kpm.outputs.GITHUB_RELEASE_ENABLED }}
     output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}

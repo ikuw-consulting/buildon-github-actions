@@ -4,7 +4,7 @@
 - name: Run pre-docker prepare
   if: steps.kpm.outputs.HOOK_PRE_DOCKER_PREPARE_SCRIPT_SUB_PATH != ''
   id: pre-docker-prepare
-  uses: ./.github/buildon-github-actions/src/actions/hook-pre-docker-prepare
+  uses: $/src/actions/hook-pre-docker-prepare
   with:
     build-kind: ${WORKFLOW_NAME}
     image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}

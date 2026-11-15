@@ -3,7 +3,7 @@
 
 - name: Prepare manifests for packaging
   id: manifest-package-prepare
-  uses: ./.github/buildon-github-actions/src/actions/kubernetes-manifests-package-prepare
+  uses: $/src/actions/kubernetes-manifests-package-prepare
   with:
     manifests-sub-path: ${{ steps.kpm.outputs.MANIFESTS_SUB_PATH }}
     defaults-sub-path: ${{ steps.kpm.outputs.DEFAULTS_SUB_PATH }}

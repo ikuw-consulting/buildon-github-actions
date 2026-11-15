@@ -4,7 +4,7 @@
 - name: Run post-package tests
   if: steps.kpm.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH != ''
   id: post-package-tests
-  uses: ./.github/buildon-github-actions/src/actions/hook-post-package-tests
+  uses: $/src/actions/hook-post-package-tests
   with:
     build-kind: ${WORKFLOW_NAME}
     image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}

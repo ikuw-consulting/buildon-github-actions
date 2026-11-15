@@ -3,7 +3,7 @@
 
 - name: Vendor helm render and process
   id: vendor-helm-render-and-process
-  uses: ./.github/buildon-github-actions/src/actions/vendor-helm-render-and-process
+  uses: $/src/actions/vendor-helm-render-and-process
   with:
     output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
     vendor-helm-rendered-repo-url: ${{ steps.kpm.outputs.VENDOR_HELM_RENDERED_REPO_URL }}

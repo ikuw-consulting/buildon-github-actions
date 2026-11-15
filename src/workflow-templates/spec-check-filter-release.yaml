@@ -190,7 +190,7 @@ jobs:
       # INJECT: github-check-start(name="Docker Build", id="check-docker-build")
       - name: Build image
         id: docker-build
-        uses: ./.github/buildon-github-actions/src/actions/docker-build-dockerfile
+        uses: $/src/actions/docker-build-dockerfile
         with:
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
           docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}

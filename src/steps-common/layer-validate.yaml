@@ -3,7 +3,7 @@
 
 - name: Validate layer
   id: layer-validate
-  uses: ./.github/buildon-github-actions/src/actions/layer-validate
+  uses: $/src/actions/layer-validate
   with:
     layer-type: ${{ steps.layer-package-prepare.outputs.LAYER_TYPE }}
     image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}

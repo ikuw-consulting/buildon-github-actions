@@ -4,7 +4,7 @@
 - name: Run pre-package prepare
   if: steps.kpm.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH != ''
   id: pre-package-prepare
-  uses: ./.github/buildon-github-actions/src/actions/hook-pre-package-prepare
+  uses: $/src/actions/hook-pre-package-prepare
   with:
     build-kind: ${WORKFLOW_NAME}
     image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}

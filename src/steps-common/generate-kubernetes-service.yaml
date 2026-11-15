@@ -4,7 +4,7 @@
 - name: Generate Service manifest
   id: generate-service
   if: steps.kpm.outputs.KUBERNETES_SERVICE_GENERATION_ENABLED != 'false' && (steps.kpm.outputs.KUBERNETES_SERVICE_GENERATION_ENABLED == 'true' || steps.kpm.outputs.KUBERNETES_WORKLOAD_TYPE == 'deployment' || steps.kpm.outputs.KUBERNETES_WORKLOAD_TYPE == 'statefulset' || steps.kpm.outputs.KUBERNETES_WORKLOAD_TYPE == 'daemonset')
-  uses: ./.github/buildon-github-actions/src/actions/generate-kubernetes-service
+  uses: $/src/actions/generate-kubernetes-service
   with:
     # Service settings
     kubernetes-service-generation-enabled: ${{ steps.kpm.outputs.KUBERNETES_SERVICE_GENERATION_ENABLED }}

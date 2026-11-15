@@ -4,7 +4,7 @@
 - name: Run post-build
   if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != ''
   id: post-build
-  uses: ./.github/buildon-github-actions/src/actions/hook-post-build
+  uses: $/src/actions/hook-post-build
   with:
     build-kind: ${WORKFLOW_NAME}
     image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}

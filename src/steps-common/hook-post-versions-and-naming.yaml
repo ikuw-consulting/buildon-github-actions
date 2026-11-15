@@ -4,7 +4,7 @@
 - name: Run post-versions-and-naming
   if: steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH != ''
   id: post-versions-and-naming
-  uses: ./.github/buildon-github-actions/src/actions/hook-post-versions-and-naming
+  uses: $/src/actions/hook-post-versions-and-naming
   with:
     build-kind: ${WORKFLOW_NAME}
     image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}

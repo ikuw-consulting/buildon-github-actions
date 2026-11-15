@@ -3,7 +3,7 @@
 
 - name: Validate deploy image
   id: run-deploy-image-validate
-  uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-deploy-image-validate
+  uses: $/src/actions/kubernetes-run-deploy-image-validate
   with:
     run-deploy-image-uri: ${{ steps.run-package.outputs.run-deploy-image-uri }}
     docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}

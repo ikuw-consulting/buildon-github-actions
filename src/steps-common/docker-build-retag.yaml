@@ -3,7 +3,7 @@
 
 - name: Pull and retag
   id: docker-build
-  uses: ./.github/buildon-github-actions/src/actions/docker-build-retag
+  uses: $/src/actions/docker-build-retag
   with:
     docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
     docker-source-registry: ${{ steps.kpm.outputs.DOCKER_SOURCE_REGISTRY }}

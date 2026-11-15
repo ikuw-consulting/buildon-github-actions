@@ -19,7 +19,7 @@
 
 - name: Kaptain init
   id: kaptain-init
-  uses: ./.github/buildon-github-actions/src/actions/kaptain-init
+  uses: $/src/actions/kaptain-init
   with:
     image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
     schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}

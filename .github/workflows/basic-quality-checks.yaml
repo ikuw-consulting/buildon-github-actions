@@ -92,23 +92,23 @@ jobs:
       - name: Start check - Validate Tooling
         id: check-validate-tooling
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Validate Tooling'
       - name: Validate tooling
         id: validate-tooling
-        uses: ./.github/buildon-github-actions/src/actions/validate-tooling
+        uses: $/src/actions/validate-tooling
       - name: Pass check - Validate Tooling
         if: success() && steps.check-validate-tooling.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-validate-tooling.outputs.check-run-id }}
       - name: Fail check - Validate Tooling
         if: failure() && steps.check-validate-tooling.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-validate-tooling.outputs.check-run-id }}
@@ -117,23 +117,23 @@ jobs:
       - name: Start check - Load Project KaptainPM Docker Logins
         id: check-load-project-kpm
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Load Project KaptainPM Docker Logins'
       - name: Load project KaptainPM docker logins
         id: load-project-kpm
-        uses: ./.github/buildon-github-actions/src/actions/load-project-kaptainpm-docker-logins
+        uses: $/src/actions/load-project-kaptainpm-docker-logins
       - name: Pass check - Load Project KaptainPM Docker Logins
         if: success() && steps.check-load-project-kpm.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-load-project-kpm.outputs.check-run-id }}
       - name: Fail check - Load Project KaptainPM Docker Logins
         if: failure() && steps.check-load-project-kpm.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-load-project-kpm.outputs.check-run-id }}
@@ -142,7 +142,7 @@ jobs:
       - name: Start check - Pre-Init Docker Registry Logins
         id: check-docker-registry-logins-pre-init
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Pre-Init Docker Registry Logins'
@@ -151,7 +151,7 @@ jobs:
       # GHCR merge handled by the action internally
       - name: Docker registry logins (pre-init)
         id: docker-registry-logins-pre-init
-        uses: ./.github/buildon-github-actions/src/actions/docker-registry-logins
+        uses: $/src/actions/docker-registry-logins
         with:
           config: ${{ steps.load-project-kpm.outputs.DOCKER_REGISTRY_LOGINS }}
           secrets-json: ${{ secrets.docker-registry-logins-secrets }}
@@ -160,13 +160,13 @@ jobs:
       - name: Pass check - Pre-Init Docker Registry Logins
         if: success() && steps.check-docker-registry-logins-pre-init.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-docker-registry-logins-pre-init.outputs.check-run-id }}
       - name: Fail check - Pre-Init Docker Registry Logins
         if: failure() && steps.check-docker-registry-logins-pre-init.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-docker-registry-logins-pre-init.outputs.check-run-id }}
@@ -175,7 +175,7 @@ jobs:
       - name: Start check - Kaptain Init
         id: check-kaptain-init
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Kaptain Init'
@@ -197,7 +197,7 @@ jobs:
 
       - name: Kaptain init
         id: kaptain-init
-        uses: ./.github/buildon-github-actions/src/actions/kaptain-init
+        uses: $/src/actions/kaptain-init
         with:
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
           schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
@@ -206,13 +206,13 @@ jobs:
       - name: Pass check - Kaptain Init
         if: success() && steps.check-kaptain-init.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-kaptain-init.outputs.check-run-id }}
       - name: Fail check - Kaptain Init
         if: failure() && steps.check-kaptain-init.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-kaptain-init.outputs.check-run-id }}
@@ -221,13 +221,13 @@ jobs:
       - name: Start check - Load Final KaptainPM YAML
         id: check-load-final-kpm
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Load Final KaptainPM YAML'
       - name: Load final KaptainPM YAML
         id: kpm
-        uses: ./.github/buildon-github-actions/src/actions/load-final-kaptainpm-yaml
+        uses: $/src/actions/load-final-kaptainpm-yaml
         with:
           build-kind: basic-quality-checks
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -240,13 +240,13 @@ jobs:
       - name: Pass check - Load Final KaptainPM YAML
         if: success() && steps.check-load-final-kpm.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-load-final-kpm.outputs.check-run-id }}
       - name: Fail check - Load Final KaptainPM YAML
         if: failure() && steps.check-load-final-kpm.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-load-final-kpm.outputs.check-run-id }}
@@ -256,14 +256,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && success()
         id: check-pre-build
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Pre-Build'
       - name: Run pre-build
         if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && success()
         id: pre-build
-        uses: ./.github/buildon-github-actions/src/actions/hook-pre-build
+        uses: $/src/actions/hook-pre-build
         with:
           build-kind: basic-quality-checks
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -509,13 +509,13 @@ jobs:
       - name: Pass check - Pre-Build
         if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && success() && steps.check-pre-build.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-pre-build.outputs.check-run-id }}
       - name: Fail check - Pre-Build
         if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && failure() && steps.check-pre-build.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-pre-build.outputs.check-run-id }}
@@ -525,14 +525,14 @@ jobs:
         if: github.event_name == 'pull_request' && success()
         id: check-basic-quality
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Basic Quality Checks'
       - name: Basic quality checks
         if: github.event_name == 'pull_request' && success()
         id: quality
-        uses: ./.github/buildon-github-actions/src/actions/basic-quality-checks
+        uses: $/src/actions/basic-quality-checks
         with:
           release-branch: ${{ steps.kpm.outputs.RELEASE_BRANCH }}
           additional-release-branches: ${{ steps.kpm.outputs.ADDITIONAL_RELEASE_BRANCHES }}
@@ -546,13 +546,13 @@ jobs:
       - name: Pass check - Basic Quality Checks
         if: github.event_name == 'pull_request' && success() && steps.check-basic-quality.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-basic-quality.outputs.check-run-id }}
       - name: Fail check - Basic Quality Checks
         if: github.event_name == 'pull_request' && failure() && steps.check-basic-quality.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-basic-quality.outputs.check-run-id }}
@@ -562,14 +562,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && success()
         id: check-post-build
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Post-Build'
       - name: Run post-build
         if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && success()
         id: post-build
-        uses: ./.github/buildon-github-actions/src/actions/hook-post-build
+        uses: $/src/actions/hook-post-build
         with:
           build-kind: basic-quality-checks
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -833,13 +833,13 @@ jobs:
       - name: Pass check - Post-Build
         if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && success() && steps.check-post-build.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-post-build.outputs.check-run-id }}
       - name: Fail check - Post-Build
         if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && failure() && steps.check-post-build.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-post-build.outputs.check-run-id }}

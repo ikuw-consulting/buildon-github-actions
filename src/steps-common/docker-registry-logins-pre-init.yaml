@@ -6,7 +6,7 @@
 # GHCR merge handled by the action internally
 - name: Docker registry logins (pre-init)
   id: docker-registry-logins-pre-init
-  uses: ./.github/buildon-github-actions/src/actions/docker-registry-logins
+  uses: $/src/actions/docker-registry-logins
   with:
     config: ${{ steps.load-project-kpm.outputs.DOCKER_REGISTRY_LOGINS }}
     secrets-json: ${{ secrets.docker-registry-logins-secrets }}

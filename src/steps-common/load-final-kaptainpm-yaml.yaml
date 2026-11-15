@@ -3,7 +3,7 @@
 
 - name: Load final KaptainPM YAML
   id: kpm
-  uses: ./.github/buildon-github-actions/src/actions/load-final-kaptainpm-yaml
+  uses: $/src/actions/load-final-kaptainpm-yaml
   with:
     build-kind: ${WORKFLOW_NAME}
     image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}

@@ -3,7 +3,7 @@
 
 - name: Generate release change data
   id: release-change-data-generate
-  uses: ./.github/buildon-github-actions/src/actions/release-change-data-generate
+  uses: $/src/actions/release-change-data-generate
   with:
     version: ${{ steps.versions.outputs.version }}
     project-name: ${{ steps.versions.outputs.project-name }}

@@ -4,7 +4,7 @@
 - name: Generate workload manifest
   id: generate-workload
   if: steps.kpm.outputs.KUBERNETES_WORKLOAD_TYPE != 'none'
-  uses: ./.github/buildon-github-actions/src/actions/generate-kubernetes-workload
+  uses: $/src/actions/generate-kubernetes-workload
   with:
     # Required context
     project-name: ${{ steps.versions.outputs.project-name }}

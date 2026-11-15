@@ -3,7 +3,7 @@
 
 - name: Push git tag
   if: steps.versions.outputs.is-release == 'true'
-  uses: ./.github/buildon-github-actions/src/actions/git-push-tag
+  uses: $/src/actions/git-push-tag
   with:
     git-tag: ${{ steps.versions.outputs.git-tag }}
     is-release: ${{ steps.versions.outputs.is-release }}

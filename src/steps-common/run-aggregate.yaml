@@ -3,7 +3,7 @@
 
 - name: Aggregate run contents
   id: run-aggregate
-  uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-aggregate
+  uses: $/src/actions/kubernetes-run-aggregate
   with:
     build-kind: ${{ steps.kpm.outputs.BUILD_KIND }}
     project-name: ${{ steps.versions.outputs.project-name }}

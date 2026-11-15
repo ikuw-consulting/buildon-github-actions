@@ -3,7 +3,7 @@
 
 - name: Import deploy-manifests templates
   id: run-idm-templates-import
-  uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-image-deploy-manifests-templates-import
+  uses: $/src/actions/kubernetes-run-image-deploy-manifests-templates-import
   with:
     project-name: ${{ steps.versions.outputs.project-name }}
     output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}

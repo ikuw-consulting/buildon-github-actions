@@ -5,7 +5,7 @@
 - name: Docker registry logins
   id: docker-registry-logins
   if: steps.kpm.outputs.DOCKER_TARGET_REGISTRY != ''
-  uses: ./.github/buildon-github-actions/src/actions/docker-registry-logins
+  uses: $/src/actions/docker-registry-logins
   with:
     config: ${{ steps.kpm.outputs.DOCKER_REGISTRY_LOGINS }}
     secrets-json: ${{ secrets.docker-registry-logins-secrets }}

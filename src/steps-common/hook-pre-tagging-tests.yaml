@@ -4,7 +4,7 @@
 - name: Run pre-tagging tests
   if: steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH != ''
   id: pre-tagging-tests
-  uses: ./.github/buildon-github-actions/src/actions/hook-pre-tagging-tests
+  uses: $/src/actions/hook-pre-tagging-tests
   with:
     build-kind: ${WORKFLOW_NAME}
     image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}

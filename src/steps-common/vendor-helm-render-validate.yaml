@@ -3,6 +3,6 @@
 
 - name: Vendor helm render validate
   id: vendor-helm-render-validate
-  uses: ./.github/buildon-github-actions/src/actions/vendor-helm-render-validate
+  uses: $/src/actions/vendor-helm-render-validate
   with:
     output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
