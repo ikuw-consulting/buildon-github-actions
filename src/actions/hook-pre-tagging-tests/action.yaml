@@ -1277,4 +1277,4 @@ runs:
         GITHUB_RELEASE_NOTES: ${{ inputs.github-release-notes }}
         GITHUB_RELEASE_NOTES_FILE: ${{ inputs.github-release-notes-file }}
         GITHUB_RELEASE_ADD_VERSION_TO_FILENAMES: ${{ inputs.github-release-add-version-to-filenames }}
-      run: .github/buildon-github-actions/src/scripts/main/hook-pre-tagging-tests
+      run: "${GITHUB_ACTION_PATH}/../../scripts/main/hook-pre-tagging-tests"

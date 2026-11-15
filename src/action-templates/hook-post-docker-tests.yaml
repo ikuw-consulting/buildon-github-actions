@@ -332,4 +332,4 @@ runs:
         IS_RELEASE: ${{ inputs.is-release }}
         # Step outputs - docker outputs
         DOCKER_TARGET_IMAGE_FULL_URI: ${{ inputs.docker-target-image-full-uri }}
-      run: .github/buildon-github-actions/src/scripts/main/hook-post-docker-tests
+      run: "${GITHUB_ACTION_PATH}/../../scripts/main/hook-post-docker-tests"

@@ -1365,4 +1365,4 @@ runs:
         MANIFESTS_ZIP_FILE_NAME: ${{ inputs.manifests-zip-file-name }}
         # Step outputs - manifest repo provider outputs
         MANIFESTS_URI: ${{ inputs.manifests-uri }}
-      run: .github/buildon-github-actions/src/scripts/main/hook-post-package-tests
+      run: "${GITHUB_ACTION_PATH}/../../scripts/main/hook-post-package-tests"

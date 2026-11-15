@@ -324,4 +324,4 @@ runs:
         GIT_TAG: ${{ inputs.git-tag }}
         PROJECT_NAME: ${{ inputs.project-name }}
         IS_RELEASE: ${{ inputs.is-release }}
-      run: .github/buildon-github-actions/src/scripts/main/hook-post-versions-and-naming
+      run: "${GITHUB_ACTION_PATH}/../../scripts/main/hook-post-versions-and-naming"

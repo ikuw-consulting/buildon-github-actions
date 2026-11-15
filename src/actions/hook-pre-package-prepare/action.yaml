@@ -1353,4 +1353,4 @@ runs:
         # Step outputs - docker outputs
         DOCKER_TARGET_IMAGE_FULL_URI: ${{ inputs.docker-target-image-full-uri }}
         # Step outputs - manifest outputs
-      run: .github/buildon-github-actions/src/scripts/main/hook-pre-package-prepare
+      run: "${GITHUB_ACTION_PATH}/../../scripts/main/hook-pre-package-prepare"
