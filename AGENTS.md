@@ -65,6 +65,7 @@ The repo has three source layers that assemble into two generated layers.
 | Marker | Used in | Effect |
 |---|---|---|
 | `# INJECT-INPUT: <group>` | action templates | Inline an input group from `src/inputs/<group>.yaml` |
+| `# INJECT-OUTPUTS: <script> <step-id>` | action templates | Declare every output `src/scripts/main/<script>` can export (its `MAPPINGS` table plus literal `output_var` names), each read from the step with that id |
 | `# INJECT: <step-name>` | workflow templates | Inline a step block from `src/steps-common/<step-name>.yaml` |
 | `# INJECT-COMMON: <name>` | workflow templates | Inline a common fragment |
 

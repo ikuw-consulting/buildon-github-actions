@@ -136,6 +136,17 @@ verify_step_wires() {
   fi
 }
 
+@test "load-final-kaptainpm-yaml wires the build kind, container runtime and registry defaults" {
+  run verify_step_wires \
+    "$ACTION_TEMPLATES_DIR/load-final-kaptainpm-yaml.yaml" \
+    "$PROJECT_ROOT/src/steps-common/load-final-kaptainpm-yaml.yaml" \
+    BUILD_KIND IMAGE_BUILD_COMMAND DOCKER_TARGET_REGISTRY DOCKER_TARGET_NAMESPACE
+  if [[ "$status" -ne 0 ]]; then
+    echo "$output" >&3
+    return 1
+  fi
+}
+
 @test "kubernetes-run-aggregate wires the schema validator" {
   run verify_step_wires \
     "$ACTION_TEMPLATES_DIR/kubernetes-run-aggregate.yaml" \
@@ -213,7 +224,7 @@ verify_step_wires() {
 # an action-backed step but declared by no action behind that step id arrives
 # empty on a runner, with no error.
 @test "every output read from an action-backed step is declared by an action behind that id" {
-  local sources pairs ids id action declared names name checked=0 failures=0
+  local sources pairs ids id action declared generated_from names name checked=0 failures=0
   sources="$PROJECT_ROOT/src/steps-common/*.yaml $PROJECT_ROOT/src/workflow-templates/*.yaml"
 
   # One "<step id> <action>" line per step that has both an id and a uses.
@@ -237,6 +248,14 @@ verify_step_wires() {
         /^[a-z]/ { inside = 0 }
         inside && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ { sub(/:.*/, "", $1); print $1 }
       ' "$ACTION_TEMPLATES_DIR/${action}.yaml" | tr '\n' ' ')"
+      # A template can take its outputs from a script instead of listing them
+      # (# INJECT-OUTPUTS: <script> <step id>). The assembler then declares
+      # every name in that script's MAPPINGS table and literal output_var calls.
+      generated_from=$(sed -n -E 's/^[[:space:]]*# INJECT-OUTPUTS: ([a-z0-9-]+) [a-z0-9-]+$/\1/p' "$ACTION_TEMPLATES_DIR/${action}.yaml")
+      if [[ -n "${generated_from}" ]]; then
+        declared="${declared} $(sed -n -E 's/^[[:space:]]*"[^":]+:([A-Z0-9_]+)"[[:space:]]*$/\1/p' "$SCRIPTS_DIR/${generated_from}" | tr '\n' ' ')"
+        declared="${declared} $(grep -vE '^[[:space:]]*#' "$SCRIPTS_DIR/${generated_from}" | grep -oE 'output_var "[A-Z0-9_]+"' | sed -E 's/output_var "(.*)"/\1/' | tr '\n' ' ')"
+      fi
     done
     # shellcheck disable=SC2086 # the globs must expand
     names=$(grep -hoE "steps\.${id}\.outputs\.[A-Za-z0-9_-]+" ${sources} | sed -E 's/.*\.outputs\.//' | sort -u)

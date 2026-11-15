@@ -297,20 +297,16 @@ jobs:
           check-name: 'Build & Publish → Load Final KaptainPM YAML'
       - name: Load final KaptainPM YAML
         id: kpm
-        shell: bash
-        env:
-          BUILD_MODE: build_server
-          BUILD_PLATFORM: github-actions
-          BUILD_PLATFORM_LOG_PROVIDER: github-actions
-          BUILD_KIND: layer-and-layerset-build
-          IMAGE_BUILD_COMMAND: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+        uses: ./.github/buildon-github-actions/src/actions/load-final-kaptainpm-yaml
+        with:
+          build-kind: layer-and-layerset-build
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
           # Platform registry/namespace defaults (spec values win inside the script;
           # targetIncludeNamespace=false disregards the namespace entirely). The
           # DOCKER_TARGET_* outputs of this step are authoritative for the whole
           # workflow - there is no later resolution step.
-          DOCKER_TARGET_REGISTRY: ${{ steps.registry-defaults.outputs.registry }}
-          DOCKER_TARGET_NAMESPACE: ${{ steps.registry-defaults.outputs.namespace }}
-        run: ./.github/buildon-github-actions/src/scripts/main/load-final-kaptainpm-yaml
+          docker-target-registry: ${{ steps.registry-defaults.outputs.registry }}
+          docker-target-namespace: ${{ steps.registry-defaults.outputs.namespace }}
       - name: Pass check - Load Final KaptainPM YAML
         if: success() && steps.check-load-final-kpm.outputs.check-run-id != ''
         continue-on-error: true

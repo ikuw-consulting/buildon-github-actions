@@ -163,6 +163,7 @@ See [`examples/`](examples/) for more usage patterns.
 | `kubernetes-templates-import` | Resolves spec.templates bundles and imports them into the additional-manifests and additional-defaults drop dirs (flat or hierarchy layout) |
 | `layer-package-prepare` | Prepares layer or layerset for OCI packaging - validates source, injects metadata, generates Dockerfile |
 | `layer-validate` | Validates substituted layer or layerset after docker build |
+| `load-final-kaptainpm-yaml` | Reads the final merged KaptainPM.yaml and exports its settings as outputs |
 | `load-project-kaptainpm-docker-logins` | Reads the registry login config from the project root KaptainPM.yaml |
 | `release-change-data-generate` | Generates structured release change data YAML from commit history |
 | `release-change-data-oci-package` | Packages release change data as OCI image for consolidated push |

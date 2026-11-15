@@ -1,0 +1,946 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: 'Load Final KaptainPM YAML'
+description: 'Reads the final merged KaptainPM.yaml and exports its settings as outputs'
+
+inputs:
+  build-kind:
+    description: 'Build kind identifier (workflow/reference script name)'
+    required: true
+  # Registry defaults (a KaptainPM.yaml value wins)
+  docker-target-registry:
+    description: 'Default target registry, used when KaptainPM.yaml sets none'
+    required: false
+    default: ''
+  docker-target-namespace:
+    description: 'Default target namespace, used when KaptainPM.yaml sets none'
+    required: false
+    default: ''
+  # Container runtime
+  image-build-command:
+    description: 'Container runtime command (podman or docker)'
+    required: true
+
+# Every name the script can export, generated from the script itself so the
+# declared set cannot drift from it. An undeclared output would arrive empty.
+outputs:
+  ADDITIONAL_RELEASE_BRANCHES:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.ADDITIONAL_RELEASE_BRANCHES }}
+  ALLOW_LOCAL_DEFAULTS_OVERRIDE:
+    description: 'KaptainPM.yaml value at spec.main.manifests.defaults.allowLocalOverride'
+    value: ${{ steps.load.outputs.ALLOW_LOCAL_DEFAULTS_OVERRIDE }}
+  ALLOW_LOCAL_MANIFESTS_OVERRIDE:
+    description: 'KaptainPM.yaml value at spec.main.manifests.allowLocalOverride'
+    value: ${{ steps.load.outputs.ALLOW_LOCAL_MANIFESTS_OVERRIDE }}
+  BUILD_KIND:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.BUILD_KIND }}
+  BUILD_SCRIPTS_REPO_ROOT:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.BUILD_SCRIPTS_REPO_ROOT }}
+  CHANGE_SOURCE_NOTE_ENABLED:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.CHANGE_SOURCE_NOTE_ENABLED }}
+  CONFIG_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.global.configSubPath'
+    value: ${{ steps.load.outputs.CONFIG_SUB_PATH }}
+  CONFIG_VALUE_TRAILING_NEWLINE:
+    description: 'KaptainPM.yaml value at spec.global.tokens.valueTrailingNewline'
+    value: ${{ steps.load.outputs.CONFIG_VALUE_TRAILING_NEWLINE }}
+  DEFAULTS_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.manifests.defaults.subPath'
+    value: ${{ steps.load.outputs.DEFAULTS_SUB_PATH }}
+  DOCKERFILE_NO_CACHE:
+    description: 'KaptainPM.yaml value at spec.main.docker.dockerfile.noCache'
+    value: ${{ steps.load.outputs.DOCKERFILE_NO_CACHE }}
+  DOCKERFILE_SQUASH:
+    description: 'KaptainPM.yaml value at spec.main.docker.dockerfile.squash'
+    value: ${{ steps.load.outputs.DOCKERFILE_SQUASH }}
+  DOCKERFILE_SUBSTITUTION_FILES:
+    description: 'KaptainPM.yaml value at spec.main.docker.dockerfile.substitutionFiles'
+    value: ${{ steps.load.outputs.DOCKERFILE_SUBSTITUTION_FILES }}
+  DOCKERFILE_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.docker.dockerfile.subPath'
+    value: ${{ steps.load.outputs.DOCKERFILE_SUB_PATH }}
+  DOCKERFILE_SUB_PATH_LINUX_AMD64:
+    description: 'KaptainPM.yaml value at spec.main.docker.dockerfile.subPathLinuxAmd64'
+    value: ${{ steps.load.outputs.DOCKERFILE_SUB_PATH_LINUX_AMD64 }}
+  DOCKERFILE_SUB_PATH_LINUX_ARM64:
+    description: 'KaptainPM.yaml value at spec.main.docker.dockerfile.subPathLinuxArm64'
+    value: ${{ steps.load.outputs.DOCKERFILE_SUB_PATH_LINUX_ARM64 }}
+  DOCKER_IMAGE_NAME_OVERRIDE:
+    description: 'KaptainPM.yaml value at spec.main.externalImage.name'
+    value: ${{ steps.load.outputs.DOCKER_IMAGE_NAME_OVERRIDE }}
+  DOCKER_PLATFORM:
+    description: 'KaptainPM.yaml value at spec.main.docker.platform'
+    value: ${{ steps.load.outputs.DOCKER_PLATFORM }}
+  DOCKER_PUSH_IMAGE_LIST_FILE:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.DOCKER_PUSH_IMAGE_LIST_FILE }}
+  DOCKER_PUSH_TARGETS:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.DOCKER_PUSH_TARGETS }}
+  DOCKER_QEMU_SETUP_NEEDED:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.DOCKER_QEMU_SETUP_NEEDED }}
+  DOCKER_REGISTRY_LOGINS:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.DOCKER_REGISTRY_LOGINS }}
+  DOCKER_SOURCE_IMAGE_NAME:
+    description: 'KaptainPM.yaml value at spec.main.docker.retag.sourceImageName'
+    value: ${{ steps.load.outputs.DOCKER_SOURCE_IMAGE_NAME }}
+  DOCKER_SOURCE_NAMESPACE:
+    description: 'KaptainPM.yaml value at spec.main.docker.retag.sourceNamespace'
+    value: ${{ steps.load.outputs.DOCKER_SOURCE_NAMESPACE }}
+  DOCKER_SOURCE_REGISTRY:
+    description: 'KaptainPM.yaml value at spec.main.docker.retag.sourceRegistry'
+    value: ${{ steps.load.outputs.DOCKER_SOURCE_REGISTRY }}
+  DOCKER_SOURCE_TAG:
+    description: 'KaptainPM.yaml value at spec.main.docker.retag.sourceTag'
+    value: ${{ steps.load.outputs.DOCKER_SOURCE_TAG }}
+  DOCKER_TAG_OVERRIDE:
+    description: 'KaptainPM.yaml value at spec.main.externalImage.tag'
+    value: ${{ steps.load.outputs.DOCKER_TAG_OVERRIDE }}
+  DOCKER_TARGET_NAMESPACE:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.DOCKER_TARGET_NAMESPACE }}
+  DOCKER_TARGET_REGISTRY:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.DOCKER_TARGET_REGISTRY }}
+  ENV_ALLOW_LOCAL_MANIFESTS_OVERRIDE:
+    description: 'KaptainPM.yaml value at spec.main.environment.allowLocalManifestsOverride'
+    value: ${{ steps.load.outputs.ENV_ALLOW_LOCAL_MANIFESTS_OVERRIDE }}
+  ENV_AUTO_GENERATE_IMAGE_PULL_SECRETS:
+    description: 'KaptainPM.yaml value at spec.main.environment.autoGenerateImagePullSecrets'
+    value: ${{ steps.load.outputs.ENV_AUTO_GENERATE_IMAGE_PULL_SECRETS }}
+  ENV_CHECKSUM_SECRETS_TIMING:
+    description: 'KaptainPM.yaml value at spec.main.environment.checksumSecretsTiming'
+    value: ${{ steps.load.outputs.ENV_CHECKSUM_SECRETS_TIMING }}
+  ENV_CLEAN_UP:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.ENV_CLEAN_UP }}
+  ENV_CLUSTER_SCOPED_DELEGATION:
+    description: 'KaptainPM.yaml value at spec.main.environment.clusterScopedDelegation'
+    value: ${{ steps.load.outputs.ENV_CLUSTER_SCOPED_DELEGATION }}
+  ENV_DEPLOY_MODE:
+    description: 'KaptainPM.yaml value at spec.main.environment.deployMode'
+    value: ${{ steps.load.outputs.ENV_DEPLOY_MODE }}
+  ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_FAMILY:
+    description: 'KaptainPM.yaml value at spec.main.environment.environmentDeployBaseImage.family'
+    value: ${{ steps.load.outputs.ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_FAMILY }}
+  ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_INCLUDE_NAMESPACE:
+    description: 'KaptainPM.yaml value at spec.main.environment.environmentDeployBaseImage.includeNamespace'
+    value: ${{ steps.load.outputs.ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_INCLUDE_NAMESPACE }}
+  ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_NAMESPACE:
+    description: 'KaptainPM.yaml value at spec.main.environment.environmentDeployBaseImage.namespace'
+    value: ${{ steps.load.outputs.ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_NAMESPACE }}
+  ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_REGISTRY:
+    description: 'KaptainPM.yaml value at spec.main.environment.environmentDeployBaseImage.registry'
+    value: ${{ steps.load.outputs.ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_REGISTRY }}
+  ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_VERSION:
+    description: 'KaptainPM.yaml value at spec.main.environment.environmentDeployBaseImage.version'
+    value: ${{ steps.load.outputs.ENV_ENVIRONMENT_DEPLOY_BASE_IMAGE_VERSION }}
+  ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH:
+    description: 'KaptainPM.yaml value at spec.main.environment.environmentDeploySourceBasePath'
+    value: ${{ steps.load.outputs.ENV_ENVIRONMENT_DEPLOY_SOURCE_BASE_PATH }}
+  ENV_FAIL_ON_UNREFERENCED_CONFIG_OR_SECRETS:
+    description: 'KaptainPM.yaml value at spec.main.environment.failOnUnreferencedConfigOrSecrets'
+    value: ${{ steps.load.outputs.ENV_FAIL_ON_UNREFERENCED_CONFIG_OR_SECRETS }}
+  ENV_GENERATE_IDEAL_ENVIRONMENT_DEPLOY_MANIFESTS:
+    description: 'KaptainPM.yaml value at spec.main.environment.generateIdealEnvironmentDeployManifests'
+    value: ${{ steps.load.outputs.ENV_GENERATE_IDEAL_ENVIRONMENT_DEPLOY_MANIFESTS }}
+  ENV_IMAGE_AUTO_UPDATE_FIELD_MANAGER_STRATEGY:
+    description: 'KaptainPM.yaml value at spec.main.environment.imageAutoUpdateFieldManagerStrategy'
+    value: ${{ steps.load.outputs.ENV_IMAGE_AUTO_UPDATE_FIELD_MANAGER_STRATEGY }}
+  ENV_IMAGE_AUTO_UPDATE_POLICY:
+    description: 'KaptainPM.yaml value at spec.main.environment.imageAutoUpdatePolicy'
+    value: ${{ steps.load.outputs.ENV_IMAGE_AUTO_UPDATE_POLICY }}
+  ENV_IMAGE_AUTO_UPDATE_POLL_SCHEDULE:
+    description: 'KaptainPM.yaml value at spec.main.environment.imageAutoUpdatePollSchedule'
+    value: ${{ steps.load.outputs.ENV_IMAGE_AUTO_UPDATE_POLL_SCHEDULE }}
+  ENV_IMAGE_AUTO_UPDATE_PROVIDER:
+    description: 'KaptainPM.yaml value at spec.main.environment.imageAutoUpdateProvider'
+    value: ${{ steps.load.outputs.ENV_IMAGE_AUTO_UPDATE_PROVIDER }}
+  ENV_IMAGE_AUTO_UPDATE_TRIGGER:
+    description: 'KaptainPM.yaml value at spec.main.environment.imageAutoUpdateTrigger'
+    value: ${{ steps.load.outputs.ENV_IMAGE_AUTO_UPDATE_TRIGGER }}
+  ENV_IMAGE_DEPLOY_MANIFESTS_APPLY_MODE:
+    description: 'KaptainPM.yaml value at spec.main.environment.imageDeployManifestsApplyMode'
+    value: ${{ steps.load.outputs.ENV_IMAGE_DEPLOY_MANIFESTS_APPLY_MODE }}
+  ENV_IMAGE_PULL_SECRETS:
+    description: 'KaptainPM.yaml value at spec.main.environment.imagePullSecrets'
+    value: ${{ steps.load.outputs.ENV_IMAGE_PULL_SECRETS }}
+  ENV_JOB_POST_DEPLOY_SLEEP_AFTER_FAILURE:
+    description: 'KaptainPM.yaml value at spec.main.environment.jobPostDeploySleepAfterFailure'
+    value: ${{ steps.load.outputs.ENV_JOB_POST_DEPLOY_SLEEP_AFTER_FAILURE }}
+  ENV_JOB_POST_DEPLOY_SLEEP_AFTER_SUCCESS:
+    description: 'KaptainPM.yaml value at spec.main.environment.jobPostDeploySleepAfterSuccess'
+    value: ${{ steps.load.outputs.ENV_JOB_POST_DEPLOY_SLEEP_AFTER_SUCCESS }}
+  ENV_NAMESPACE_ADDITIONAL_ANNOTATIONS:
+    description: 'KaptainPM.yaml value at spec.main.environment.namespace.additionalAnnotations'
+    value: ${{ steps.load.outputs.ENV_NAMESPACE_ADDITIONAL_ANNOTATIONS }}
+  ENV_NAMESPACE_ADDITIONAL_LABELS:
+    description: 'KaptainPM.yaml value at spec.main.environment.namespace.additionalLabels'
+    value: ${{ steps.load.outputs.ENV_NAMESPACE_ADDITIONAL_LABELS }}
+  GITHUB_RELEASE_ADD_VERSION_TO_FILENAMES:
+    description: 'KaptainPM.yaml value at spec.platform.githubActions.release.addVersionToFilenames'
+    value: ${{ steps.load.outputs.GITHUB_RELEASE_ADD_VERSION_TO_FILENAMES }}
+  GITHUB_RELEASE_CONSUMER_REFERENCE_FORMS:
+    description: 'KaptainPM.yaml value at spec.platform.githubActions.release.consumerReferenceForms'
+    value: ${{ steps.load.outputs.GITHUB_RELEASE_CONSUMER_REFERENCE_FORMS }}
+  GITHUB_RELEASE_ENABLED:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.GITHUB_RELEASE_ENABLED }}
+  GITHUB_RELEASE_NOTES:
+    description: 'KaptainPM.yaml value at spec.platform.githubActions.release.notes'
+    value: ${{ steps.load.outputs.GITHUB_RELEASE_NOTES }}
+  GITHUB_RELEASE_NOTES_FILE:
+    description: 'KaptainPM.yaml value at spec.platform.githubActions.release.notesFile'
+    value: ${{ steps.load.outputs.GITHUB_RELEASE_NOTES_FILE }}
+  GITHUB_RELEASE_RAW_FILES:
+    description: 'KaptainPM.yaml value at spec.platform.githubActions.release.rawFiles'
+    value: ${{ steps.load.outputs.GITHUB_RELEASE_RAW_FILES }}
+  GITHUB_RELEASE_SUBSTITUTED_FILES:
+    description: 'KaptainPM.yaml value at spec.platform.githubActions.release.substitutedFiles'
+    value: ${{ steps.load.outputs.GITHUB_RELEASE_SUBSTITUTED_FILES }}
+  GITHUB_RELEASE_VERBATIM_FILES:
+    description: 'KaptainPM.yaml value at spec.platform.githubActions.release.verbatimFiles'
+    value: ${{ steps.load.outputs.GITHUB_RELEASE_VERBATIM_FILES }}
+  HOOK_POST_BUILD_SCRIPT_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.hooks.postBuild'
+    value: ${{ steps.load.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH }}
+  HOOK_POST_DOCKER_TESTS_SCRIPT_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.hooks.postDockerTests'
+    value: ${{ steps.load.outputs.HOOK_POST_DOCKER_TESTS_SCRIPT_SUB_PATH }}
+  HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.hooks.postPackageTests'
+    value: ${{ steps.load.outputs.HOOK_POST_PACKAGE_TESTS_SCRIPT_SUB_PATH }}
+  HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.hooks.postVersionsAndNaming'
+    value: ${{ steps.load.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH }}
+  HOOK_PRE_BUILD_SCRIPT_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.hooks.preBuild'
+    value: ${{ steps.load.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH }}
+  HOOK_PRE_DOCKER_PREPARE_SCRIPT_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.hooks.preDockerPrepare'
+    value: ${{ steps.load.outputs.HOOK_PRE_DOCKER_PREPARE_SCRIPT_SUB_PATH }}
+  HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.hooks.prePackagePrepare'
+    value: ${{ steps.load.outputs.HOOK_PRE_PACKAGE_PREPARE_SCRIPT_SUB_PATH }}
+  HOOK_PRE_PUBLISH_SCRIPT_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.hooks.prePublish'
+    value: ${{ steps.load.outputs.HOOK_PRE_PUBLISH_SCRIPT_SUB_PATH }}
+  HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.hooks.preTaggingTests'
+    value: ${{ steps.load.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH }}
+  IMAGE_BUILD_COMMAND:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.IMAGE_BUILD_COMMAND }}
+  KUBERNETES_CONFIGMAP_ADDITIONAL_ANNOTATIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.configmap.additionalAnnotations'
+    value: ${{ steps.load.outputs.KUBERNETES_CONFIGMAP_ADDITIONAL_ANNOTATIONS }}
+  KUBERNETES_CONFIGMAP_ADDITIONAL_LABELS:
+    description: 'KaptainPM.yaml value at spec.main.generators.configmap.additionalLabels'
+    value: ${{ steps.load.outputs.KUBERNETES_CONFIGMAP_ADDITIONAL_LABELS }}
+  KUBERNETES_CONFIGMAP_COMBINED_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.configmap.combinedSubPath'
+    value: ${{ steps.load.outputs.KUBERNETES_CONFIGMAP_COMBINED_SUB_PATH }}
+  KUBERNETES_CONFIGMAP_NAME_CHECKSUM_INJECTION:
+    description: 'KaptainPM.yaml value at spec.main.generators.configmap.nameChecksumInjection'
+    value: ${{ steps.load.outputs.KUBERNETES_CONFIGMAP_NAME_CHECKSUM_INJECTION }}
+  KUBERNETES_CONFIGMAP_NAME_SUFFIX:
+    description: 'KaptainPM.yaml value at spec.main.generators.configmap.nameSuffix'
+    value: ${{ steps.load.outputs.KUBERNETES_CONFIGMAP_NAME_SUFFIX }}
+  KUBERNETES_CONFIGMAP_SUB_PATH:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.KUBERNETES_CONFIGMAP_SUB_PATH }}
+  KUBERNETES_CRONJOB_ACTIVE_DEADLINE_SECONDS:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.activeDeadlineSeconds'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_ACTIVE_DEADLINE_SECONDS }}
+  KUBERNETES_CRONJOB_ADDITIONAL_ANNOTATIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.additionalAnnotations'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_ADDITIONAL_ANNOTATIONS }}
+  KUBERNETES_CRONJOB_ADDITIONAL_LABELS:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.additionalLabels'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_ADDITIONAL_LABELS }}
+  KUBERNETES_CRONJOB_BACKOFF_LIMIT:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.backoffLimit'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_BACKOFF_LIMIT }}
+  KUBERNETES_CRONJOB_COMBINED_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.combinedSubPath'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_COMBINED_SUB_PATH }}
+  KUBERNETES_CRONJOB_COMPLETIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.completions'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_COMPLETIONS }}
+  KUBERNETES_CRONJOB_CONCURRENCY_POLICY:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.concurrencyPolicy'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_CONCURRENCY_POLICY }}
+  KUBERNETES_CRONJOB_ENV_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.envSubPath'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_ENV_SUB_PATH }}
+  KUBERNETES_CRONJOB_FAILED_JOBS_HISTORY_LIMIT:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.failedJobsHistoryLimit'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_FAILED_JOBS_HISTORY_LIMIT }}
+  KUBERNETES_CRONJOB_LIVENESS_PROBE_ENABLED:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.probes.livenessEnabled'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_LIVENESS_PROBE_ENABLED }}
+  KUBERNETES_CRONJOB_NAME_SUFFIX:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.nameSuffix'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_NAME_SUFFIX }}
+  KUBERNETES_CRONJOB_PARALLELISM:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.parallelism'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_PARALLELISM }}
+  KUBERNETES_CRONJOB_PORTS_ENABLED:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.portsEnabled'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_PORTS_ENABLED }}
+  KUBERNETES_CRONJOB_READINESS_PROBE_ENABLED:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.probes.readinessEnabled'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_READINESS_PROBE_ENABLED }}
+  KUBERNETES_CRONJOB_RESTART_POLICY:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.restartPolicy'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_RESTART_POLICY }}
+  KUBERNETES_CRONJOB_STARTING_DEADLINE_SECONDS:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.startingDeadlineSeconds'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_STARTING_DEADLINE_SECONDS }}
+  KUBERNETES_CRONJOB_STARTUP_PROBE_ENABLED:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.probes.startupEnabled'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_STARTUP_PROBE_ENABLED }}
+  KUBERNETES_CRONJOB_SUCCESSFUL_JOBS_HISTORY_LIMIT:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.successfulJobsHistoryLimit'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_SUCCESSFUL_JOBS_HISTORY_LIMIT }}
+  KUBERNETES_CRONJOB_TTL_SECONDS_AFTER_FINISHED:
+    description: 'KaptainPM.yaml value at spec.main.generators.cronjob.ttlSecondsAfterFinished'
+    value: ${{ steps.load.outputs.KUBERNETES_CRONJOB_TTL_SECONDS_AFTER_FINISHED }}
+  KUBERNETES_DAEMONSET_ADDITIONAL_ANNOTATIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.daemonset.additionalAnnotations'
+    value: ${{ steps.load.outputs.KUBERNETES_DAEMONSET_ADDITIONAL_ANNOTATIONS }}
+  KUBERNETES_DAEMONSET_ADDITIONAL_LABELS:
+    description: 'KaptainPM.yaml value at spec.main.generators.daemonset.additionalLabels'
+    value: ${{ steps.load.outputs.KUBERNETES_DAEMONSET_ADDITIONAL_LABELS }}
+  KUBERNETES_DAEMONSET_DNS_POLICY:
+    description: 'KaptainPM.yaml value at spec.main.generators.daemonset.dnsPolicy'
+    value: ${{ steps.load.outputs.KUBERNETES_DAEMONSET_DNS_POLICY }}
+  KUBERNETES_DAEMONSET_ENV_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.daemonset.envSubPath'
+    value: ${{ steps.load.outputs.KUBERNETES_DAEMONSET_ENV_SUB_PATH }}
+  KUBERNETES_DAEMONSET_HOST_IPC:
+    description: 'KaptainPM.yaml value at spec.main.generators.daemonset.hostIpc'
+    value: ${{ steps.load.outputs.KUBERNETES_DAEMONSET_HOST_IPC }}
+  KUBERNETES_DAEMONSET_HOST_NETWORK:
+    description: 'KaptainPM.yaml value at spec.main.generators.daemonset.hostNetwork'
+    value: ${{ steps.load.outputs.KUBERNETES_DAEMONSET_HOST_NETWORK }}
+  KUBERNETES_DAEMONSET_HOST_PID:
+    description: 'KaptainPM.yaml value at spec.main.generators.daemonset.hostPid'
+    value: ${{ steps.load.outputs.KUBERNETES_DAEMONSET_HOST_PID }}
+  KUBERNETES_DAEMONSET_MAX_UNAVAILABLE:
+    description: 'KaptainPM.yaml value at spec.main.generators.daemonset.updateStrategy.maxUnavailable'
+    value: ${{ steps.load.outputs.KUBERNETES_DAEMONSET_MAX_UNAVAILABLE }}
+  KUBERNETES_DAEMONSET_NODE_SELECTOR:
+    description: 'KaptainPM.yaml value at spec.main.generators.daemonset.nodeSelector'
+    value: ${{ steps.load.outputs.KUBERNETES_DAEMONSET_NODE_SELECTOR }}
+  KUBERNETES_DAEMONSET_PRIVILEGED:
+    description: 'KaptainPM.yaml value at spec.main.generators.daemonset.privileged'
+    value: ${{ steps.load.outputs.KUBERNETES_DAEMONSET_PRIVILEGED }}
+  KUBERNETES_DAEMONSET_RUN_AS_NON_ROOT:
+    description: 'KaptainPM.yaml value at spec.main.generators.daemonset.runAsNonRoot'
+    value: ${{ steps.load.outputs.KUBERNETES_DAEMONSET_RUN_AS_NON_ROOT }}
+  KUBERNETES_DAEMONSET_TOLERATIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.daemonset.tolerations'
+    value: ${{ steps.load.outputs.KUBERNETES_DAEMONSET_TOLERATIONS }}
+  KUBERNETES_DAEMONSET_UPDATE_STRATEGY_TYPE:
+    description: 'KaptainPM.yaml value at spec.main.generators.daemonset.updateStrategy.type'
+    value: ${{ steps.load.outputs.KUBERNETES_DAEMONSET_UPDATE_STRATEGY_TYPE }}
+  KUBERNETES_DEPLOYMENT_ADDITIONAL_ANNOTATIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.deployment.additionalAnnotations'
+    value: ${{ steps.load.outputs.KUBERNETES_DEPLOYMENT_ADDITIONAL_ANNOTATIONS }}
+  KUBERNETES_DEPLOYMENT_ADDITIONAL_LABELS:
+    description: 'KaptainPM.yaml value at spec.main.generators.deployment.additionalLabels'
+    value: ${{ steps.load.outputs.KUBERNETES_DEPLOYMENT_ADDITIONAL_LABELS }}
+  KUBERNETES_DEPLOYMENT_ENV_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.deployment.envSubPath'
+    value: ${{ steps.load.outputs.KUBERNETES_DEPLOYMENT_ENV_SUB_PATH }}
+  KUBERNETES_DEPLOYMENT_MAX_SURGE:
+    description: 'KaptainPM.yaml value at spec.main.generators.deployment.rollingUpdate.maxSurge'
+    value: ${{ steps.load.outputs.KUBERNETES_DEPLOYMENT_MAX_SURGE }}
+  KUBERNETES_DEPLOYMENT_MAX_UNAVAILABLE:
+    description: 'KaptainPM.yaml value at spec.main.generators.deployment.rollingUpdate.maxUnavailable'
+    value: ${{ steps.load.outputs.KUBERNETES_DEPLOYMENT_MAX_UNAVAILABLE }}
+  KUBERNETES_DEPLOYMENT_PORTS_ENABLED:
+    description: 'KaptainPM.yaml value at spec.main.generators.deployment.portsEnabled'
+    value: ${{ steps.load.outputs.KUBERNETES_DEPLOYMENT_PORTS_ENABLED }}
+  KUBERNETES_GLOBAL_ADDITIONAL_ANNOTATIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.common.additionalAnnotations'
+    value: ${{ steps.load.outputs.KUBERNETES_GLOBAL_ADDITIONAL_ANNOTATIONS }}
+  KUBERNETES_GLOBAL_ADDITIONAL_LABELS:
+    description: 'KaptainPM.yaml value at spec.main.generators.common.additionalLabels'
+    value: ${{ steps.load.outputs.KUBERNETES_GLOBAL_ADDITIONAL_LABELS }}
+  KUBERNETES_JOB_ACTIVE_DEADLINE_SECONDS:
+    description: 'KaptainPM.yaml value at spec.main.generators.job.activeDeadlineSeconds'
+    value: ${{ steps.load.outputs.KUBERNETES_JOB_ACTIVE_DEADLINE_SECONDS }}
+  KUBERNETES_JOB_ADDITIONAL_ANNOTATIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.job.additionalAnnotations'
+    value: ${{ steps.load.outputs.KUBERNETES_JOB_ADDITIONAL_ANNOTATIONS }}
+  KUBERNETES_JOB_ADDITIONAL_LABELS:
+    description: 'KaptainPM.yaml value at spec.main.generators.job.additionalLabels'
+    value: ${{ steps.load.outputs.KUBERNETES_JOB_ADDITIONAL_LABELS }}
+  KUBERNETES_JOB_BACKOFF_LIMIT:
+    description: 'KaptainPM.yaml value at spec.main.generators.job.backoffLimit'
+    value: ${{ steps.load.outputs.KUBERNETES_JOB_BACKOFF_LIMIT }}
+  KUBERNETES_JOB_COMBINED_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.job.combinedSubPath'
+    value: ${{ steps.load.outputs.KUBERNETES_JOB_COMBINED_SUB_PATH }}
+  KUBERNETES_JOB_COMPLETIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.job.completions'
+    value: ${{ steps.load.outputs.KUBERNETES_JOB_COMPLETIONS }}
+  KUBERNETES_JOB_ENV_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.job.envSubPath'
+    value: ${{ steps.load.outputs.KUBERNETES_JOB_ENV_SUB_PATH }}
+  KUBERNETES_JOB_LIVENESS_PROBE_ENABLED:
+    description: 'KaptainPM.yaml value at spec.main.generators.job.probes.livenessEnabled'
+    value: ${{ steps.load.outputs.KUBERNETES_JOB_LIVENESS_PROBE_ENABLED }}
+  KUBERNETES_JOB_NAME_SUFFIX:
+    description: 'KaptainPM.yaml value at spec.main.generators.job.nameSuffix'
+    value: ${{ steps.load.outputs.KUBERNETES_JOB_NAME_SUFFIX }}
+  KUBERNETES_JOB_PARALLELISM:
+    description: 'KaptainPM.yaml value at spec.main.generators.job.parallelism'
+    value: ${{ steps.load.outputs.KUBERNETES_JOB_PARALLELISM }}
+  KUBERNETES_JOB_PORTS_ENABLED:
+    description: 'KaptainPM.yaml value at spec.main.generators.job.portsEnabled'
+    value: ${{ steps.load.outputs.KUBERNETES_JOB_PORTS_ENABLED }}
+  KUBERNETES_JOB_READINESS_PROBE_ENABLED:
+    description: 'KaptainPM.yaml value at spec.main.generators.job.probes.readinessEnabled'
+    value: ${{ steps.load.outputs.KUBERNETES_JOB_READINESS_PROBE_ENABLED }}
+  KUBERNETES_JOB_RESTART_POLICY:
+    description: 'KaptainPM.yaml value at spec.main.generators.job.restartPolicy'
+    value: ${{ steps.load.outputs.KUBERNETES_JOB_RESTART_POLICY }}
+  KUBERNETES_JOB_STARTUP_PROBE_ENABLED:
+    description: 'KaptainPM.yaml value at spec.main.generators.job.probes.startupEnabled'
+    value: ${{ steps.load.outputs.KUBERNETES_JOB_STARTUP_PROBE_ENABLED }}
+  KUBERNETES_JOB_TTL_SECONDS_AFTER_FINISHED:
+    description: 'KaptainPM.yaml value at spec.main.generators.job.ttlSecondsAfterFinished'
+    value: ${{ steps.load.outputs.KUBERNETES_JOB_TTL_SECONDS_AFTER_FINISHED }}
+  KUBERNETES_NAMESPACE_ADDITIONAL_ANNOTATIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.namespace.additionalAnnotations'
+    value: ${{ steps.load.outputs.KUBERNETES_NAMESPACE_ADDITIONAL_ANNOTATIONS }}
+  KUBERNETES_NAMESPACE_ADDITIONAL_LABELS:
+    description: 'KaptainPM.yaml value at spec.main.generators.namespace.additionalLabels'
+    value: ${{ steps.load.outputs.KUBERNETES_NAMESPACE_ADDITIONAL_LABELS }}
+  KUBERNETES_NAMESPACE_COMBINED_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.namespace.combinedSubPath'
+    value: ${{ steps.load.outputs.KUBERNETES_NAMESPACE_COMBINED_SUB_PATH }}
+  KUBERNETES_NAMESPACE_GENERATION_ENABLED:
+    description: 'KaptainPM.yaml value at spec.main.generators.namespace.enabled'
+    value: ${{ steps.load.outputs.KUBERNETES_NAMESPACE_GENERATION_ENABLED }}
+  KUBERNETES_NAMESPACE_NAME:
+    description: 'KaptainPM.yaml value at spec.main.generators.namespace.name'
+    value: ${{ steps.load.outputs.KUBERNETES_NAMESPACE_NAME }}
+  KUBERNETES_PODDISRUPTIONBUDGET_ADDITIONAL_ANNOTATIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.podDisruptionBudget.additionalAnnotations'
+    value: ${{ steps.load.outputs.KUBERNETES_PODDISRUPTIONBUDGET_ADDITIONAL_ANNOTATIONS }}
+  KUBERNETES_PODDISRUPTIONBUDGET_ADDITIONAL_LABELS:
+    description: 'KaptainPM.yaml value at spec.main.generators.podDisruptionBudget.additionalLabels'
+    value: ${{ steps.load.outputs.KUBERNETES_PODDISRUPTIONBUDGET_ADDITIONAL_LABELS }}
+  KUBERNETES_PODDISRUPTIONBUDGET_COMBINED_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.podDisruptionBudget.combinedSubPath'
+    value: ${{ steps.load.outputs.KUBERNETES_PODDISRUPTIONBUDGET_COMBINED_SUB_PATH }}
+  KUBERNETES_PODDISRUPTIONBUDGET_GENERATION_ENABLED:
+    description: 'KaptainPM.yaml value at spec.main.generators.podDisruptionBudget.enabled'
+    value: ${{ steps.load.outputs.KUBERNETES_PODDISRUPTIONBUDGET_GENERATION_ENABLED }}
+  KUBERNETES_PODDISRUPTIONBUDGET_NAME_SUFFIX:
+    description: 'KaptainPM.yaml value at spec.main.generators.podDisruptionBudget.nameSuffix'
+    value: ${{ steps.load.outputs.KUBERNETES_PODDISRUPTIONBUDGET_NAME_SUFFIX }}
+  KUBERNETES_PODDISRUPTIONBUDGET_STRATEGY:
+    description: 'KaptainPM.yaml value at spec.main.generators.podDisruptionBudget.strategy'
+    value: ${{ steps.load.outputs.KUBERNETES_PODDISRUPTIONBUDGET_STRATEGY }}
+  KUBERNETES_PODDISRUPTIONBUDGET_VALUE:
+    description: 'KaptainPM.yaml value at spec.main.generators.podDisruptionBudget.value'
+    value: ${{ steps.load.outputs.KUBERNETES_PODDISRUPTIONBUDGET_VALUE }}
+  KUBERNETES_SECRET_TEMPLATE_ADDITIONAL_ANNOTATIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.secretTemplate.additionalAnnotations'
+    value: ${{ steps.load.outputs.KUBERNETES_SECRET_TEMPLATE_ADDITIONAL_ANNOTATIONS }}
+  KUBERNETES_SECRET_TEMPLATE_ADDITIONAL_LABELS:
+    description: 'KaptainPM.yaml value at spec.main.generators.secretTemplate.additionalLabels'
+    value: ${{ steps.load.outputs.KUBERNETES_SECRET_TEMPLATE_ADDITIONAL_LABELS }}
+  KUBERNETES_SECRET_TEMPLATE_COMBINED_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.secretTemplate.combinedSubPath'
+    value: ${{ steps.load.outputs.KUBERNETES_SECRET_TEMPLATE_COMBINED_SUB_PATH }}
+  KUBERNETES_SECRET_TEMPLATE_NAME_CHECKSUM_INJECTION:
+    description: 'KaptainPM.yaml value at spec.main.generators.secretTemplate.nameChecksumInjection'
+    value: ${{ steps.load.outputs.KUBERNETES_SECRET_TEMPLATE_NAME_CHECKSUM_INJECTION }}
+  KUBERNETES_SECRET_TEMPLATE_NAME_SUFFIX:
+    description: 'KaptainPM.yaml value at spec.main.generators.secretTemplate.nameSuffix'
+    value: ${{ steps.load.outputs.KUBERNETES_SECRET_TEMPLATE_NAME_SUFFIX }}
+  KUBERNETES_SECRET_TEMPLATE_SUB_PATH:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.KUBERNETES_SECRET_TEMPLATE_SUB_PATH }}
+  KUBERNETES_SERVICEACCOUNT_ADDITIONAL_ANNOTATIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.serviceAccount.additionalAnnotations'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICEACCOUNT_ADDITIONAL_ANNOTATIONS }}
+  KUBERNETES_SERVICEACCOUNT_ADDITIONAL_LABELS:
+    description: 'KaptainPM.yaml value at spec.main.generators.serviceAccount.additionalLabels'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICEACCOUNT_ADDITIONAL_LABELS }}
+  KUBERNETES_SERVICEACCOUNT_COMBINED_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.serviceAccount.combinedSubPath'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICEACCOUNT_COMBINED_SUB_PATH }}
+  KUBERNETES_SERVICEACCOUNT_GENERATION_ENABLED:
+    description: 'KaptainPM.yaml value at spec.main.generators.serviceAccount.enabled'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICEACCOUNT_GENERATION_ENABLED }}
+  KUBERNETES_SERVICEACCOUNT_NAME_SUFFIX:
+    description: 'KaptainPM.yaml value at spec.main.generators.serviceAccount.nameSuffix'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICEACCOUNT_NAME_SUFFIX }}
+  KUBERNETES_SERVICE_ADDITIONAL_ANNOTATIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.service.additionalAnnotations'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICE_ADDITIONAL_ANNOTATIONS }}
+  KUBERNETES_SERVICE_ADDITIONAL_LABELS:
+    description: 'KaptainPM.yaml value at spec.main.generators.service.additionalLabels'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICE_ADDITIONAL_LABELS }}
+  KUBERNETES_SERVICE_COMBINED_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.service.combinedSubPath'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICE_COMBINED_SUB_PATH }}
+  KUBERNETES_SERVICE_EXTERNAL_NAME:
+    description: 'KaptainPM.yaml value at spec.main.generators.service.externalName'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICE_EXTERNAL_NAME }}
+  KUBERNETES_SERVICE_EXTERNAL_TRAFFIC_POLICY:
+    description: 'KaptainPM.yaml value at spec.main.generators.service.externalTrafficPolicy'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICE_EXTERNAL_TRAFFIC_POLICY }}
+  KUBERNETES_SERVICE_GENERATION_ENABLED:
+    description: 'KaptainPM.yaml value at spec.main.generators.service.enabled'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICE_GENERATION_ENABLED }}
+  KUBERNETES_SERVICE_NAME_SUFFIX:
+    description: 'KaptainPM.yaml value at spec.main.generators.service.nameSuffix'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICE_NAME_SUFFIX }}
+  KUBERNETES_SERVICE_NODE_PORT:
+    description: 'KaptainPM.yaml value at spec.main.generators.service.nodePort'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICE_NODE_PORT }}
+  KUBERNETES_SERVICE_PORT:
+    description: 'KaptainPM.yaml value at spec.main.generators.service.port'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICE_PORT }}
+  KUBERNETES_SERVICE_PORT_NAME:
+    description: 'KaptainPM.yaml value at spec.main.generators.service.portName'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICE_PORT_NAME }}
+  KUBERNETES_SERVICE_PROTOCOL:
+    description: 'KaptainPM.yaml value at spec.main.generators.service.protocol'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICE_PROTOCOL }}
+  KUBERNETES_SERVICE_TARGET_PORT:
+    description: 'KaptainPM.yaml value at spec.main.generators.service.targetPort'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICE_TARGET_PORT }}
+  KUBERNETES_SERVICE_TYPE:
+    description: 'KaptainPM.yaml value at spec.main.generators.service.type'
+    value: ${{ steps.load.outputs.KUBERNETES_SERVICE_TYPE }}
+  KUBERNETES_STATEFULSET_ADDITIONAL_ANNOTATIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.statefulset.additionalAnnotations'
+    value: ${{ steps.load.outputs.KUBERNETES_STATEFULSET_ADDITIONAL_ANNOTATIONS }}
+  KUBERNETES_STATEFULSET_ADDITIONAL_LABELS:
+    description: 'KaptainPM.yaml value at spec.main.generators.statefulset.additionalLabels'
+    value: ${{ steps.load.outputs.KUBERNETES_STATEFULSET_ADDITIONAL_LABELS }}
+  KUBERNETES_STATEFULSET_ALLOW_UNRELIABLE_POD_MANAGEMENT_POLICY:
+    description: 'KaptainPM.yaml value at spec.main.generators.statefulset.allowUnreliablePodManagementPolicy'
+    value: ${{ steps.load.outputs.KUBERNETES_STATEFULSET_ALLOW_UNRELIABLE_POD_MANAGEMENT_POLICY }}
+  KUBERNETES_STATEFULSET_ENV_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.statefulset.envSubPath'
+    value: ${{ steps.load.outputs.KUBERNETES_STATEFULSET_ENV_SUB_PATH }}
+  KUBERNETES_STATEFULSET_POD_MANAGEMENT_POLICY:
+    description: 'KaptainPM.yaml value at spec.main.generators.statefulset.podManagementPolicy'
+    value: ${{ steps.load.outputs.KUBERNETES_STATEFULSET_POD_MANAGEMENT_POLICY }}
+  KUBERNETES_STATEFULSET_PVC_ACCESS_MODE:
+    description: 'KaptainPM.yaml value at spec.main.generators.statefulset.pvc.accessModes'
+    value: ${{ steps.load.outputs.KUBERNETES_STATEFULSET_PVC_ACCESS_MODE }}
+  KUBERNETES_STATEFULSET_PVC_ENABLED:
+    description: 'KaptainPM.yaml value at spec.main.generators.statefulset.pvc.enabled'
+    value: ${{ steps.load.outputs.KUBERNETES_STATEFULSET_PVC_ENABLED }}
+  KUBERNETES_STATEFULSET_PVC_MOUNT_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.statefulset.pvc.mountPath'
+    value: ${{ steps.load.outputs.KUBERNETES_STATEFULSET_PVC_MOUNT_PATH }}
+  KUBERNETES_STATEFULSET_PVC_STORAGE_CLASS:
+    description: 'KaptainPM.yaml value at spec.main.generators.statefulset.pvc.storageClassName'
+    value: ${{ steps.load.outputs.KUBERNETES_STATEFULSET_PVC_STORAGE_CLASS }}
+  KUBERNETES_STATEFULSET_PVC_STORAGE_SIZE:
+    description: 'KaptainPM.yaml value at spec.main.generators.statefulset.pvc.storageSize'
+    value: ${{ steps.load.outputs.KUBERNETES_STATEFULSET_PVC_STORAGE_SIZE }}
+  KUBERNETES_STATEFULSET_PVC_VOLUME_NAME:
+    description: 'KaptainPM.yaml value at spec.main.generators.statefulset.pvc.volumeName'
+    value: ${{ steps.load.outputs.KUBERNETES_STATEFULSET_PVC_VOLUME_NAME }}
+  KUBERNETES_STATEFULSET_SERVICE_NAME:
+    description: 'KaptainPM.yaml value at spec.main.generators.statefulset.serviceName'
+    value: ${{ steps.load.outputs.KUBERNETES_STATEFULSET_SERVICE_NAME }}
+  KUBERNETES_STATEFULSET_UPDATE_STRATEGY_PARTITION:
+    description: 'KaptainPM.yaml value at spec.main.generators.statefulset.updateStrategy.partition'
+    value: ${{ steps.load.outputs.KUBERNETES_STATEFULSET_UPDATE_STRATEGY_PARTITION }}
+  KUBERNETES_STATEFULSET_UPDATE_STRATEGY_TYPE:
+    description: 'KaptainPM.yaml value at spec.main.generators.statefulset.updateStrategy.type'
+    value: ${{ steps.load.outputs.KUBERNETES_STATEFULSET_UPDATE_STRATEGY_TYPE }}
+  KUBERNETES_WORKLOAD_ADDITIONAL_ANNOTATIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.additionalAnnotations'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_ADDITIONAL_ANNOTATIONS }}
+  KUBERNETES_WORKLOAD_ADDITIONAL_LABELS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.additionalLabels'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_ADDITIONAL_LABELS }}
+  KUBERNETES_WORKLOAD_AFFINITY_STRATEGY:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.scheduling.affinityStrategy'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_AFFINITY_STRATEGY }}
+  KUBERNETES_WORKLOAD_AUTOMOUNT_SERVICE_ACCOUNT_TOKEN:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.security.automountServiceAccountToken'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_AUTOMOUNT_SERVICE_ACCOUNT_TOKEN }}
+  KUBERNETES_WORKLOAD_COMBINED_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.combinedSubPath'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_COMBINED_SUB_PATH }}
+  KUBERNETES_WORKLOAD_CONFIGMAP_KEYS_FOR_ENV:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.container.mounts.configmap.keysForEnv'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_CONFIGMAP_KEYS_FOR_ENV }}
+  KUBERNETES_WORKLOAD_CONFIGMAP_MOUNT_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.container.mounts.configmap.path'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_CONFIGMAP_MOUNT_PATH }}
+  KUBERNETES_WORKLOAD_CONTAINER_ARGS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.container.args'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_CONTAINER_ARGS }}
+  KUBERNETES_WORKLOAD_CONTAINER_COMMAND:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.container.command'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_CONTAINER_COMMAND }}
+  KUBERNETES_WORKLOAD_CONTAINER_PORT:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.container.port'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_CONTAINER_PORT }}
+  KUBERNETES_WORKLOAD_DNS_POLICY:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.scheduling.dnsPolicy'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_DNS_POLICY }}
+  KUBERNETES_WORKLOAD_ENV_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.envSubPath'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_ENV_SUB_PATH }}
+  KUBERNETES_WORKLOAD_IMAGE_PULL_SECRETS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.security.imagePullSecrets'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_IMAGE_PULL_SECRETS }}
+  KUBERNETES_WORKLOAD_IMAGE_REFERENCE_STYLE:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.container.imageReferenceStyle'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_IMAGE_REFERENCE_STYLE }}
+  KUBERNETES_WORKLOAD_MIN_READY_SECONDS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.minReadySeconds'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_MIN_READY_SECONDS }}
+  KUBERNETES_WORKLOAD_NAME_SUFFIX:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.nameSuffix'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_NAME_SUFFIX }}
+  KUBERNETES_WORKLOAD_NODE_SELECTOR:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.scheduling.nodeSelector'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_NODE_SELECTOR }}
+  KUBERNETES_WORKLOAD_PRESTOP_COMMAND:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.prestopCommand'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PRESTOP_COMMAND }}
+  KUBERNETES_WORKLOAD_PRIORITY_CLASS_NAME:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.scheduling.priorityClassName'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PRIORITY_CLASS_NAME }}
+  KUBERNETES_WORKLOAD_PROBE_LIVENESS_CHECK_TYPE:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.liveness.checkType'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_CHECK_TYPE }}
+  KUBERNETES_WORKLOAD_PROBE_LIVENESS_EXEC_COMMAND:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.liveness.execCommand'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_EXEC_COMMAND }}
+  KUBERNETES_WORKLOAD_PROBE_LIVENESS_FAILURE_THRESHOLD:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.liveness.failureThreshold'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_FAILURE_THRESHOLD }}
+  KUBERNETES_WORKLOAD_PROBE_LIVENESS_GRPC_PORT:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.liveness.grpcPort'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_GRPC_PORT }}
+  KUBERNETES_WORKLOAD_PROBE_LIVENESS_GRPC_SERVICE:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.liveness.grpcService'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_GRPC_SERVICE }}
+  KUBERNETES_WORKLOAD_PROBE_LIVENESS_HTTP_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.liveness.httpPath'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_HTTP_PATH }}
+  KUBERNETES_WORKLOAD_PROBE_LIVENESS_HTTP_SCHEME:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.liveness.httpScheme'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_HTTP_SCHEME }}
+  KUBERNETES_WORKLOAD_PROBE_LIVENESS_INITIAL_DELAY_SECONDS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.liveness.initialDelaySeconds'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_INITIAL_DELAY_SECONDS }}
+  KUBERNETES_WORKLOAD_PROBE_LIVENESS_PERIOD_SECONDS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.liveness.periodSeconds'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_PERIOD_SECONDS }}
+  KUBERNETES_WORKLOAD_PROBE_LIVENESS_TCP_PORT:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.liveness.tcpPort'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_TCP_PORT }}
+  KUBERNETES_WORKLOAD_PROBE_LIVENESS_TERMINATION_GRACE_PERIOD_SECONDS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.liveness.terminationGracePeriodSeconds'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_TERMINATION_GRACE_PERIOD_SECONDS }}
+  KUBERNETES_WORKLOAD_PROBE_LIVENESS_TIMEOUT_SECONDS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.liveness.timeoutSeconds'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_LIVENESS_TIMEOUT_SECONDS }}
+  KUBERNETES_WORKLOAD_PROBE_READINESS_CHECK_TYPE:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.readiness.checkType'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_CHECK_TYPE }}
+  KUBERNETES_WORKLOAD_PROBE_READINESS_EXEC_COMMAND:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.readiness.execCommand'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_EXEC_COMMAND }}
+  KUBERNETES_WORKLOAD_PROBE_READINESS_FAILURE_THRESHOLD:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.readiness.failureThreshold'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_FAILURE_THRESHOLD }}
+  KUBERNETES_WORKLOAD_PROBE_READINESS_GRPC_PORT:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.readiness.grpcPort'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_GRPC_PORT }}
+  KUBERNETES_WORKLOAD_PROBE_READINESS_GRPC_SERVICE:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.readiness.grpcService'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_GRPC_SERVICE }}
+  KUBERNETES_WORKLOAD_PROBE_READINESS_HTTP_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.readiness.httpPath'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_HTTP_PATH }}
+  KUBERNETES_WORKLOAD_PROBE_READINESS_HTTP_SCHEME:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.readiness.httpScheme'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_HTTP_SCHEME }}
+  KUBERNETES_WORKLOAD_PROBE_READINESS_INITIAL_DELAY_SECONDS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.readiness.initialDelaySeconds'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_INITIAL_DELAY_SECONDS }}
+  KUBERNETES_WORKLOAD_PROBE_READINESS_PERIOD_SECONDS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.readiness.periodSeconds'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_PERIOD_SECONDS }}
+  KUBERNETES_WORKLOAD_PROBE_READINESS_SUCCESS_THRESHOLD:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.readiness.successThreshold'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_SUCCESS_THRESHOLD }}
+  KUBERNETES_WORKLOAD_PROBE_READINESS_TCP_PORT:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.readiness.tcpPort'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_TCP_PORT }}
+  KUBERNETES_WORKLOAD_PROBE_READINESS_TIMEOUT_SECONDS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.readiness.timeoutSeconds'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_READINESS_TIMEOUT_SECONDS }}
+  KUBERNETES_WORKLOAD_PROBE_STARTUP_CHECK_TYPE:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.startup.checkType'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_CHECK_TYPE }}
+  KUBERNETES_WORKLOAD_PROBE_STARTUP_EXEC_COMMAND:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.startup.execCommand'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_EXEC_COMMAND }}
+  KUBERNETES_WORKLOAD_PROBE_STARTUP_FAILURE_THRESHOLD:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.startup.failureThreshold'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_FAILURE_THRESHOLD }}
+  KUBERNETES_WORKLOAD_PROBE_STARTUP_GRPC_PORT:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.startup.grpcPort'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_GRPC_PORT }}
+  KUBERNETES_WORKLOAD_PROBE_STARTUP_GRPC_SERVICE:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.startup.grpcService'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_GRPC_SERVICE }}
+  KUBERNETES_WORKLOAD_PROBE_STARTUP_HTTP_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.startup.httpPath'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_HTTP_PATH }}
+  KUBERNETES_WORKLOAD_PROBE_STARTUP_HTTP_SCHEME:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.startup.httpScheme'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_HTTP_SCHEME }}
+  KUBERNETES_WORKLOAD_PROBE_STARTUP_INITIAL_DELAY_SECONDS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.startup.initialDelaySeconds'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_INITIAL_DELAY_SECONDS }}
+  KUBERNETES_WORKLOAD_PROBE_STARTUP_PERIOD_SECONDS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.startup.periodSeconds'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_PERIOD_SECONDS }}
+  KUBERNETES_WORKLOAD_PROBE_STARTUP_TCP_PORT:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.startup.tcpPort'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_TCP_PORT }}
+  KUBERNETES_WORKLOAD_PROBE_STARTUP_TERMINATION_GRACE_PERIOD_SECONDS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.startup.terminationGracePeriodSeconds'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_TERMINATION_GRACE_PERIOD_SECONDS }}
+  KUBERNETES_WORKLOAD_PROBE_STARTUP_TIMEOUT_SECONDS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.probes.startup.timeoutSeconds'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_PROBE_STARTUP_TIMEOUT_SECONDS }}
+  KUBERNETES_WORKLOAD_READONLY_ROOT_FILESYSTEM:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.container.readonlyRootFilesystem'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_READONLY_ROOT_FILESYSTEM }}
+  KUBERNETES_WORKLOAD_REPLICAS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.replicas'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_REPLICAS }}
+  KUBERNETES_WORKLOAD_RESOURCES_CPU_LIMIT:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.container.resources.cpuLimit'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_RESOURCES_CPU_LIMIT }}
+  KUBERNETES_WORKLOAD_RESOURCES_CPU_REQUEST:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.container.resources.cpuRequest'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_RESOURCES_CPU_REQUEST }}
+  KUBERNETES_WORKLOAD_RESOURCES_EPHEMERAL_STORAGE:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.container.resources.ephemeralStorage'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_RESOURCES_EPHEMERAL_STORAGE }}
+  KUBERNETES_WORKLOAD_RESOURCES_MEMORY:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.container.resources.memory'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_RESOURCES_MEMORY }}
+  KUBERNETES_WORKLOAD_REVISION_HISTORY_LIMIT:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.revisionHistoryLimit'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_REVISION_HISTORY_LIMIT }}
+  KUBERNETES_WORKLOAD_SECCOMP_PROFILE:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.security.seccompProfile'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_SECCOMP_PROFILE }}
+  KUBERNETES_WORKLOAD_SECRET_KEYS_FOR_ENV:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.container.mounts.secret.keysForEnv'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_SECRET_KEYS_FOR_ENV }}
+  KUBERNETES_WORKLOAD_SECRET_MOUNT_PATH:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.container.mounts.secret.path'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_SECRET_MOUNT_PATH }}
+  KUBERNETES_WORKLOAD_TERMINATION_GRACE_PERIOD_SECONDS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.terminationGracePeriodSeconds'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_TERMINATION_GRACE_PERIOD_SECONDS }}
+  KUBERNETES_WORKLOAD_TOLERATIONS:
+    description: 'KaptainPM.yaml value at spec.main.generators.workload.scheduling.tolerations'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_TOLERATIONS }}
+  KUBERNETES_WORKLOAD_TYPE:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.KUBERNETES_WORKLOAD_TYPE }}
+  LAYER_PACKAGING_BASE_IMAGE:
+    description: 'KaptainPM.yaml value at spec.main.layer.packagingBaseImage'
+    value: ${{ steps.load.outputs.LAYER_PACKAGING_BASE_IMAGE }}
+  LAYER_TOKEN_SUBSTITUTION:
+    description: 'KaptainPM.yaml value at spec.main.layer.tokenSubstitution'
+    value: ${{ steps.load.outputs.LAYER_TOKEN_SUBSTITUTION }}
+  MANIFESTS_CHECKSUM_ORDER_FILE:
+    description: 'KaptainPM.yaml value at spec.main.environment.checksumOrderFile'
+    value: ${{ steps.load.outputs.MANIFESTS_CHECKSUM_ORDER_FILE }}
+  MANIFESTS_CLUSTER_SCOPED_KINDS_FILE:
+    description: 'KaptainPM.yaml value at spec.main.environment.clusterScopedKindsFile'
+    value: ${{ steps.load.outputs.MANIFESTS_CLUSTER_SCOPED_KINDS_FILE }}
+  MANIFESTS_PACKAGING_BASE_IMAGE:
+    description: 'KaptainPM.yaml value at spec.main.manifests.repoProvider.packagingBaseImage'
+    value: ${{ steps.load.outputs.MANIFESTS_PACKAGING_BASE_IMAGE }}
+  MANIFESTS_REPO_PROVIDER_TYPE:
+    description: 'KaptainPM.yaml value at spec.main.manifests.repoProvider.type'
+    value: ${{ steps.load.outputs.MANIFESTS_REPO_PROVIDER_TYPE }}
+  MANIFESTS_SIGNOFFS_KINDS_FILE:
+    description: 'KaptainPM.yaml value at spec.main.environment.signoffsKindsFile'
+    value: ${{ steps.load.outputs.MANIFESTS_SIGNOFFS_KINDS_FILE }}
+  MANIFESTS_SIGNOFFS_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.environment.signoffsSubPath'
+    value: ${{ steps.load.outputs.MANIFESTS_SIGNOFFS_SUB_PATH }}
+  MANIFESTS_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.main.manifests.subPath'
+    value: ${{ steps.load.outputs.MANIFESTS_SUB_PATH }}
+  MANIFESTS_TRUSTED_CONTRIBUTORS_ONLY:
+    description: 'KaptainPM.yaml value at spec.main.environment.trustedContributorsOnly'
+    value: ${{ steps.load.outputs.MANIFESTS_TRUSTED_CONTRIBUTORS_ONLY }}
+  METADATA_DESCRIPTION:
+    description: 'KaptainPM.yaml value at metadata.description'
+    value: ${{ steps.load.outputs.METADATA_DESCRIPTION }}
+  OUTPUT_SUB_PATH:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.OUTPUT_SUB_PATH }}
+  QC_BLOCK_CONVENTIONAL_COMMITS:
+    description: 'KaptainPM.yaml value at spec.main.quality.commits.blockConventional'
+    value: ${{ steps.load.outputs.QC_BLOCK_CONVENTIONAL_COMMITS }}
+  QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES:
+    description: 'KaptainPM.yaml value at spec.main.quality.branches.blockDoubleHyphens'
+    value: ${{ steps.load.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
+  QC_BLOCK_DUPLICATE_COMMIT_MESSAGES:
+    description: 'KaptainPM.yaml value at spec.main.quality.commits.blockDuplicateMessages'
+    value: ${{ steps.load.outputs.QC_BLOCK_DUPLICATE_COMMIT_MESSAGES }}
+  QC_BLOCK_SLASH_CONTAINING_BRANCHES:
+    description: 'KaptainPM.yaml value at spec.main.quality.branches.blockSlashes'
+    value: ${{ steps.load.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
+  QC_REQUIRE_CONVENTIONAL_BRANCHES:
+    description: 'KaptainPM.yaml value at spec.main.quality.branches.requireConventional'
+    value: ${{ steps.load.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
+  QC_REQUIRE_CONVENTIONAL_COMMITS:
+    description: 'KaptainPM.yaml value at spec.main.quality.commits.requireConventional'
+    value: ${{ steps.load.outputs.QC_REQUIRE_CONVENTIONAL_COMMITS }}
+  RELEASE_BRANCH:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.RELEASE_BRANCH }}
+  RESOURCE_CHECKSUM_LENGTH:
+    description: 'KaptainPM.yaml value at spec.main.environment.checksumLength'
+    value: ${{ steps.load.outputs.RESOURCE_CHECKSUM_LENGTH }}
+  SECRETS_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.global.secretsSubPath'
+    value: ${{ steps.load.outputs.SECRETS_SUB_PATH }}
+  SPEC_JSON_SCHEMA_URL:
+    description: 'KaptainPM.yaml value at spec.main.specBuild.jsonSchemaUrl'
+    value: ${{ steps.load.outputs.SPEC_JSON_SCHEMA_URL }}
+  SPEC_PACKAGING_BASE_IMAGE:
+    description: 'KaptainPM.yaml value at spec.main.specBuild.packagingBaseImage'
+    value: ${{ steps.load.outputs.SPEC_PACKAGING_BASE_IMAGE }}
+  SPEC_TYPE:
+    description: 'KaptainPM.yaml value at spec.main.specBuild.type'
+    value: ${{ steps.load.outputs.SPEC_TYPE }}
+  STRIP_REPOSITORY_NAME_PREFIX:
+    description: 'KaptainPM.yaml value at spec.global.projectName.stripRepositoryNamePrefix'
+    value: ${{ steps.load.outputs.STRIP_REPOSITORY_NAME_PREFIX }}
+  TAG_VERSION_CALCULATION_STRATEGY:
+    description: 'KaptainPM.yaml value at spec.global.release.versioning.strategy'
+    value: ${{ steps.load.outputs.TAG_VERSION_CALCULATION_STRATEGY }}
+  TAG_VERSION_MAX_PARTS:
+    description: 'KaptainPM.yaml value at spec.global.release.versioning.maxParts'
+    value: ${{ steps.load.outputs.TAG_VERSION_MAX_PARTS }}
+  TAG_VERSION_PATTERN_TYPE:
+    description: 'KaptainPM.yaml value at spec.global.release.versioning.patternType'
+    value: ${{ steps.load.outputs.TAG_VERSION_PATTERN_TYPE }}
+  TAG_VERSION_PREFIX_PARTS:
+    description: 'KaptainPM.yaml value at spec.global.release.versioning.source.prefixParts'
+    value: ${{ steps.load.outputs.TAG_VERSION_PREFIX_PARTS }}
+  TAG_VERSION_SOURCE_CUSTOM_PATTERN:
+    description: 'KaptainPM.yaml value at spec.global.release.versioning.source.pattern'
+    value: ${{ steps.load.outputs.TAG_VERSION_SOURCE_CUSTOM_PATTERN }}
+  TAG_VERSION_SOURCE_FILE_NAME:
+    description: 'KaptainPM.yaml value at spec.global.release.versioning.source.fileName'
+    value: ${{ steps.load.outputs.TAG_VERSION_SOURCE_FILE_NAME }}
+  TAG_VERSION_SOURCE_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.global.release.versioning.source.subPath'
+    value: ${{ steps.load.outputs.TAG_VERSION_SOURCE_SUB_PATH }}
+  TAG_VERSION_SOURCE_TWO_FILE_NAME:
+    description: 'KaptainPM.yaml value at spec.global.release.versioning.sourceTwo.fileName'
+    value: ${{ steps.load.outputs.TAG_VERSION_SOURCE_TWO_FILE_NAME }}
+  TAG_VERSION_SOURCE_TWO_PATTERN:
+    description: 'KaptainPM.yaml value at spec.global.release.versioning.sourceTwo.pattern'
+    value: ${{ steps.load.outputs.TAG_VERSION_SOURCE_TWO_PATTERN }}
+  TAG_VERSION_SOURCE_TWO_PREFIX_PARTS:
+    description: 'KaptainPM.yaml value at spec.global.release.versioning.sourceTwo.prefixParts'
+    value: ${{ steps.load.outputs.TAG_VERSION_SOURCE_TWO_PREFIX_PARTS }}
+  TAG_VERSION_SOURCE_TWO_SUB_PATH:
+    description: 'KaptainPM.yaml value at spec.global.release.versioning.sourceTwo.subPath'
+    value: ${{ steps.load.outputs.TAG_VERSION_SOURCE_TWO_SUB_PATH }}
+  TAG_VERSION_USE_SOURCE_VERSION_EXACT:
+    description: 'KaptainPM.yaml value at spec.global.release.versioning.useSourceVersionExact'
+    value: ${{ steps.load.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
+  TEMPLATES_LAYOUT:
+    description: 'KaptainPM.yaml value at spec.main.manifests.templatesLayout'
+    value: ${{ steps.load.outputs.TEMPLATES_LAYOUT }}
+  TOKEN_BUILTIN_MODE:
+    description: 'KaptainPM.yaml value at spec.global.tokens.builtinMode'
+    value: ${{ steps.load.outputs.TOKEN_BUILTIN_MODE }}
+  TOKEN_DELIMITER_STYLE:
+    description: 'KaptainPM.yaml value at spec.global.tokens.delimiterStyle'
+    value: ${{ steps.load.outputs.TOKEN_DELIMITER_STYLE }}
+  TOKEN_NAME_STYLE:
+    description: 'KaptainPM.yaml value at spec.global.tokens.nameStyle'
+    value: ${{ steps.load.outputs.TOKEN_NAME_STYLE }}
+  TOKEN_NAME_VALIDATION:
+    description: 'KaptainPM.yaml value at spec.global.tokens.nameValidation'
+    value: ${{ steps.load.outputs.TOKEN_NAME_VALIDATION }}
+  TOKEN_SUBSTITUTION_PASSES:
+    description: 'KaptainPM.yaml value at spec.global.tokens.substitutionPasses'
+    value: ${{ steps.load.outputs.TOKEN_SUBSTITUTION_PASSES }}
+  VENDOR_HELM_RENDERED_CHART_NAME:
+    description: 'KaptainPM.yaml value at spec.main.vendorHelmRendered.chartName'
+    value: ${{ steps.load.outputs.VENDOR_HELM_RENDERED_CHART_NAME }}
+  VENDOR_HELM_RENDERED_IMAGE_RETAGS:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.VENDOR_HELM_RENDERED_IMAGE_RETAGS }}
+  VENDOR_HELM_RENDERED_MOVE_FILES:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.VENDOR_HELM_RENDERED_MOVE_FILES }}
+  VENDOR_HELM_RENDERED_OCI_CHART:
+    description: 'KaptainPM.yaml value at spec.main.vendorHelmRendered.ociChart'
+    value: ${{ steps.load.outputs.VENDOR_HELM_RENDERED_OCI_CHART }}
+  VENDOR_HELM_RENDERED_REPO_URL:
+    description: 'KaptainPM.yaml value at spec.main.vendorHelmRendered.repoUrl'
+    value: ${{ steps.load.outputs.VENDOR_HELM_RENDERED_REPO_URL }}
+  VENDOR_HELM_RENDERED_SED_REPLACE:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.VENDOR_HELM_RENDERED_SED_REPLACE }}
+  VENDOR_HELM_RENDERED_USE_PROJECT_NAME_AS_FULLNAME_OVERRIDE:
+    description: 'KaptainPM.yaml value at spec.main.vendorHelmRendered.useProjectNameAsFullnameOverride'
+    value: ${{ steps.load.outputs.VENDOR_HELM_RENDERED_USE_PROJECT_NAME_AS_FULLNAME_OVERRIDE }}
+  VENDOR_HELM_RENDERED_YQ_TRANSFORM:
+    description: 'Computed by load-final-kaptainpm-yaml'
+    value: ${{ steps.load.outputs.VENDOR_HELM_RENDERED_YQ_TRANSFORM }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Load final KaptainPM YAML
+      id: load
+      shell: bash
+      env:
+        BUILD_MODE: build_server
+        BUILD_PLATFORM: github-actions
+        BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        BUILD_KIND: ${{ inputs.build-kind }}
+        IMAGE_BUILD_COMMAND: ${{ inputs.image-build-command }}
+        DOCKER_TARGET_REGISTRY: ${{ inputs.docker-target-registry }}
+        DOCKER_TARGET_NAMESPACE: ${{ inputs.docker-target-namespace }}
+      run: "${GITHUB_ACTION_PATH}/../../scripts/main/load-final-kaptainpm-yaml"

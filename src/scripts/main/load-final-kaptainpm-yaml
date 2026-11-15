@@ -134,6 +134,12 @@ fi
 
 # Mapping from YAML path to env var name
 # Format: "yaml.path:ENV_VAR_NAME"
+#
+# Build platform wrappers read this table as text, along with the name in
+# each output_var call further down, to learn every name this script can
+# export (a GitHub composite action has to declare each one). Keep one entry
+# per line in exactly this format, and give every other output_var call a
+# literal, quoted name.
 MAPPINGS=(
   # Metadata
   "metadata.description:METADATA_DESCRIPTION"
