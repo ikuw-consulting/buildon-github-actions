@@ -2737,6 +2737,7 @@ jobs:
           BUILD_MODE: build_server
           BUILD_PLATFORM: github-actions
           BUILD_PLATFORM_LOG_PROVIDER: github-actions
+          BUILD_SCRIPTS_REPO_ROOT: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
           USER_NOTES: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES }}
           USER_NOTES_FILE: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES_FILE }}
           VERSION: ${{ steps.versions.outputs.version }}
@@ -2753,7 +2754,7 @@ jobs:
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          display_name=$(./.github/buildon-github-actions/src/scripts/util/format-project-title "${PROJECT_NAME}")
+          display_name=$("${BUILD_SCRIPTS_REPO_ROOT}/src/scripts/util/format-project-title" "${PROJECT_NAME}")
           echo "title=${VERSION} — ${display_name}" >> "${GITHUB_OUTPUT}"
 
           if [[ -n "${USER_NOTES_FILE}" ]]; then
@@ -2772,8 +2773,8 @@ jobs:
             {
               echo "notes<<NOTES_EOF"
               echo "Automatic Kube Product release for version ${VERSION} of ${PROJECT_NAME} by Kaptain build script. This release page has the manifests zip (with every bundle's manifests nested under the product) and the contract zip attached, alongside the manifests docker image with both inside for automatic consumption."
-              ./.github/buildon-github-actions/src/scripts/util/format-release-sections consume "${PROJECT_NAME}" "${VERSION}" "${TARGET_REGISTRY}" "${TARGET_NAMESPACE}" "${CONSUMER_REFERENCE_FORMS}"
-              ./.github/buildon-github-actions/src/scripts/util/format-release-sections list "Contents" "${PRODUCT_CONTENTS_FILE}"
+              "${BUILD_SCRIPTS_REPO_ROOT}/src/scripts/util/format-release-sections" consume "${PROJECT_NAME}" "${VERSION}" "${TARGET_REGISTRY}" "${TARGET_NAMESPACE}" "${CONSUMER_REFERENCE_FORMS}"
+              "${BUILD_SCRIPTS_REPO_ROOT}/src/scripts/util/format-release-sections" list "Contents" "${PRODUCT_CONTENTS_FILE}"
               echo ""
               echo "### Release Assets"
               echo "* Kube Manifests: [${MANIFESTS_ZIP_FILE_NAME}](${release_url}/${MANIFESTS_ZIP_FILE_NAME})"
@@ -2781,7 +2782,7 @@ jobs:
               echo "* Manifests Image: [${MANIFESTS_URI}](https://${MANIFESTS_URI})"
               echo "* Release Change Data: [release-change-data-${VERSION}.yaml](${release_url}/release-change-data-${VERSION}.yaml)"
               echo "* Release Change Data Image: [${RELEASE_CHANGE_DATA_URI}](https://${RELEASE_CHANGE_DATA_URI})"
-              ./.github/buildon-github-actions/src/scripts/util/format-release-image-list "${OUTPUT_SUB_PATH}" "${VERSION}"
+              "${BUILD_SCRIPTS_REPO_ROOT}/src/scripts/util/format-release-image-list" "${OUTPUT_SUB_PATH}" "${VERSION}"
               echo "NOTES_EOF"
             } >> "${GITHUB_OUTPUT}"
           fi

@@ -1684,7 +1684,8 @@ jobs:
           SPEC_PACKAGING_BASE_IMAGE: ${{ steps.kpm.outputs.SPEC_PACKAGING_BASE_IMAGE }}
           BUILD_PLATFORM: github-actions
           BUILD_PLATFORM_LOG_PROVIDER: github-actions
-        run: ./.github/buildon-github-actions/src/scripts/main/spec-package-prepare
+          BUILD_SCRIPTS_REPO_ROOT: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
+        run: "${BUILD_SCRIPTS_REPO_ROOT}/src/scripts/main/spec-package-prepare"
       - name: Pass check - Spec Package Prepare
         if: success() && steps.check-spec-prepare.outputs.check-run-id != ''
         continue-on-error: true
@@ -1781,7 +1782,8 @@ jobs:
           SCHEMA_VALIDATION_COMMAND: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
           BUILD_PLATFORM: github-actions
           BUILD_PLATFORM_LOG_PROVIDER: github-actions
-        run: ./.github/buildon-github-actions/src/scripts/main/spec-validate
+          BUILD_SCRIPTS_REPO_ROOT: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
+        run: "${BUILD_SCRIPTS_REPO_ROOT}/src/scripts/main/spec-validate"
       - name: Pass check - Spec Validate
         if: success() && steps.check-spec-validate.outputs.check-run-id != ''
         continue-on-error: true
@@ -2575,6 +2577,7 @@ jobs:
           BUILD_MODE: build_server
           BUILD_PLATFORM: github-actions
           BUILD_PLATFORM_LOG_PROVIDER: github-actions
+          BUILD_SCRIPTS_REPO_ROOT: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
           USER_NOTES: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES }}
           USER_NOTES_FILE: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES_FILE }}
           VERSION: ${{ steps.versions.outputs.version }}
@@ -2586,7 +2589,7 @@ jobs:
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          display_name=$(./.github/buildon-github-actions/src/scripts/util/format-project-title "${PROJECT_NAME}")
+          display_name=$("${BUILD_SCRIPTS_REPO_ROOT}/src/scripts/util/format-project-title" "${PROJECT_NAME}")
           echo "title=${VERSION} — ${display_name}" >> "${GITHUB_OUTPUT}"
 
           if [[ -n "${USER_NOTES_FILE}" ]]; then
@@ -2619,7 +2622,7 @@ jobs:
               echo "* Docker Image: [${DOCKER_URI}](https://${DOCKER_URI})"
               echo "* Release Change Data: [release-change-data-${VERSION}.yaml](${release_url}/release-change-data-${VERSION}.yaml)"
               echo "* Release Change Data Image: [${RELEASE_CHANGE_DATA_URI}](https://${RELEASE_CHANGE_DATA_URI})"
-              ./.github/buildon-github-actions/src/scripts/util/format-release-image-list "${OUTPUT_SUB_PATH}" "${VERSION}"
+              "${BUILD_SCRIPTS_REPO_ROOT}/src/scripts/util/format-release-image-list" "${OUTPUT_SUB_PATH}" "${VERSION}"
               echo "NOTES_EOF"
             } >> "${GITHUB_OUTPUT}"
           fi

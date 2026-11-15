@@ -3111,6 +3111,7 @@ jobs:
           BUILD_MODE: build_server
           BUILD_PLATFORM: github-actions
           BUILD_PLATFORM_LOG_PROVIDER: github-actions
+          BUILD_SCRIPTS_REPO_ROOT: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
           USER_NOTES: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES }}
           USER_NOTES_FILE: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES_FILE }}
           VERSION: ${{ steps.versions.outputs.version }}
@@ -3128,7 +3129,7 @@ jobs:
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          display_name=$(./.github/buildon-github-actions/src/scripts/util/format-project-title "${PROJECT_NAME}")
+          display_name=$("${BUILD_SCRIPTS_REPO_ROOT}/src/scripts/util/format-project-title" "${PROJECT_NAME}")
           echo "title=${VERSION} — ${display_name}" >> "${GITHUB_OUTPUT}"
 
           if [[ -n "${USER_NOTES_FILE}" ]]; then
@@ -3167,7 +3168,7 @@ jobs:
               echo "* Artifacts Image: [${RUN_ARTIFACTS_IMAGE_URI}](https://${RUN_ARTIFACTS_IMAGE_URI})"
               echo "* Release Change Data: [release-change-data-${VERSION}.yaml](${release_url}/release-change-data-${VERSION}.yaml)"
               echo "* Release Change Data Image: [${RELEASE_CHANGE_DATA_URI}](https://${RELEASE_CHANGE_DATA_URI})"
-              ./.github/buildon-github-actions/src/scripts/util/format-release-image-list "${OUTPUT_SUB_PATH}" "${VERSION}"
+              "${BUILD_SCRIPTS_REPO_ROOT}/src/scripts/util/format-release-image-list" "${OUTPUT_SUB_PATH}" "${VERSION}"
               echo "NOTES_EOF"
             } >> "${GITHUB_OUTPUT}"
           fi
