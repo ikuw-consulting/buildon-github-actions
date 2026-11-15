@@ -850,7 +850,6 @@ validate_reserved_env_vars() {
   local allowed_vars="
     GITHUB_REPOSITORY
     GITHUB_SERVER_URL
-    GITHUB_WORKFLOW_REF
   "
 
   local reserved allowed
@@ -929,7 +928,6 @@ validate_build_context_env_vars() {
 
   # Files that have an env block but only use inline bash, not kaptain scripts
   local inline_env_files=(
-    "parse-workflow-ref-and-checkout.yaml"
     "github-release-prepare-spec.yaml"
   )
 

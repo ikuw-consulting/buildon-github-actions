@@ -10,7 +10,7 @@ permissions: {}
 
 jobs:
   build:
-    uses: ./.github/workflows/basic-quality-and-versioning.yaml
+    uses: $/.github/workflows/basic-quality-and-versioning.yaml
     permissions:
       contents: write  # Push the tag and change-source note, create the GitHub release.
       packages: write  # Push images to GHCR and pull private layers and images from it.

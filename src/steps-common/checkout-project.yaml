@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+# The credentials are left in place on purpose: git-push-tag and
+# change-source-note-write push with them.
+- name: Checkout  # zizmor: ignore[artipacked]
+  uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
+  with:
+    fetch-depth: 0
+    fetch-tags: true
+    ref: ${{ github.event.pull_request.head.sha }}

@@ -100,7 +100,7 @@ jobs:
       run-deploy-image-uri: ${{ steps.run-package.outputs.run-deploy-image-uri }}
       run-artifacts-image-uri: ${{ steps.run-package.outputs.run-artifacts-image-uri }}
     steps:
-      # INJECT: parse-workflow-ref-and-checkout
+      # INJECT: checkout-project
 
       # === Validate Tooling ===
       # INJECT: github-check-start(name="Validate Tooling", id="check-validate-tooling")
