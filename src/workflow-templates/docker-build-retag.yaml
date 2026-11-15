@@ -94,6 +94,8 @@ jobs:
       docker-target-image-full-uri: ${{ steps.docker-build.outputs.docker-target-image-full-uri }}
       images-pushed: ${{ steps.docker-push-all.outputs.images-pushed }}
     steps:
+      # INJECT: check-trigger
+
       # INJECT: checkout-project
 
       # === Validate Tooling ===

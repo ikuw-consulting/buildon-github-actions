@@ -100,6 +100,8 @@ jobs:
       run-deploy-image-uri: ${{ steps.run-package.outputs.run-deploy-image-uri }}
       run-artifacts-image-uri: ${{ steps.run-package.outputs.run-artifacts-image-uri }}
     steps:
+      # INJECT: check-trigger
+
       # INJECT: checkout-project
 
       # === Validate Tooling ===

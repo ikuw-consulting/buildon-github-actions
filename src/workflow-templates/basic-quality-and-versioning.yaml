@@ -81,6 +81,8 @@ jobs:
       project-name: ${{ steps.versions.outputs.project-name }}
       images-pushed: ${{ steps.docker-push-all.outputs.images-pushed }}
     steps:
+      # INJECT: check-trigger
+
       # INJECT: checkout-project
 
       # === Validate Tooling ===

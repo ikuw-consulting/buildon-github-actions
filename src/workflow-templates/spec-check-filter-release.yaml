@@ -88,6 +88,8 @@ jobs:
       images-pushed: ${{ steps.docker-push-all.outputs.images-pushed }}
       docker-context-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}/docker/substituted
     steps:
+      # INJECT: check-trigger
+
       # INJECT: checkout-project
 
       # === Validate Tooling ===

@@ -189,6 +189,33 @@ pass `with: runner: <your-runner-label>` in the calling workflow. Each
 example `build.yaml` includes a commented-out `with: runner:` block showing
 the syntax.
 
+### Triggers
+
+Every workflow checks, before anything is checked out, which event started
+the calling workflow, and fails the build if it is not one of these:
+
+| Trigger | Typical use |
+|---------|-------------|
+| `push` | A merge or push to a release branch |
+| `pull_request` | A feature branch proposed against a release branch |
+| `create` | A branch or tag being created |
+| `workflow_dispatch` | The "Run workflow" button, or the same through the API |
+| `schedule` | A build on a timer |
+| `workflow_run` | A build that follows another workflow in the same repository |
+| `repository_dispatch` | A build started from outside, such as by another repository's build |
+| `issue_comment` | A build started by a comment on an issue or pull request |
+
+Listing a trigger here only means a build started that way is not refused.
+What starts a build is the `on:` block of your own workflow file.
+
+`pull_request_target` is refused. It runs with the base repository's write
+token and secrets, and the build would then check out the pull request's
+head, which can come from a fork.
+
+Only `pull_request` builds run the quality checks. Every other trigger builds
+the branch it runs on, and when that is a release branch the build is a
+release build.
+
 ### Secrets
 
 <!-- SECRETS-START -->

@@ -271,3 +271,21 @@ verify_step_wires() {
   [[ "${failures}" -eq 0 ]]
 }
 
+# The trigger check only protects a build if it runs before any code is
+# fetched, so it has to be the first step and the checkout the second.
+@test "every workflow checks the trigger before it checks out the project" {
+  local workflow steps first second checked=0 failures=0
+  for workflow in "$PROJECT_ROOT"/src/workflow-templates/*.yaml; do
+    checked=$((checked + 1))
+    steps=$(sed -n -E 's/^[[:space:]]*# INJECT: ([a-z0-9-]+).*$/\1/p' "${workflow}")
+    first=$(printf '%s\n' "${steps}" | sed -n '1p')
+    second=$(printf '%s\n' "${steps}" | sed -n '2p')
+    if [[ "${first}" != "check-trigger" ]] || [[ "${second}" != "checkout-project" ]]; then
+      echo "${workflow##*/}: starts with ${first:-nothing}, ${second:-nothing}" >&3
+      failures=$((failures + 1))
+    fi
+  done
+  [ "${checked}" -ge 16 ]
+  [[ "${failures}" -eq 0 ]]
+}
+

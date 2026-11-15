@@ -100,6 +100,8 @@ jobs:
       manifests-zip-file-name: ${{ steps.manifest-package.outputs.manifests-zip-file-name }}
       manifests-uri: ${{ steps.manifest-repo-provider-publish.outputs.manifests-uri }}
     steps:
+      # INJECT: check-trigger
+
       # INJECT: checkout-project
 
       # === Validate Tooling ===

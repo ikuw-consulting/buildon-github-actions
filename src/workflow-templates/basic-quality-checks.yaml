@@ -25,6 +25,8 @@ jobs:
       contents: read  # Check out the repo and fetch the target branch.
       checks: write   # Report each stage as a check run on the commit.
     steps:
+      # INJECT: check-trigger
+
       # INJECT: checkout-project
 
       # === Validate Tooling ===
