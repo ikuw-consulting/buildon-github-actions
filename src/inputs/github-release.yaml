@@ -18,7 +18,7 @@ github-release-verbatim-files:
   type: string
   default: ''
 github-release-raw-files:
-  description: 'Files already versioned, copied as-is with no renaming (comma/space-separated, filenames must end with -VERSION.ext)'
+  description: 'Files copied as-is under their own names (comma/space-separated); each name must contain `-VERSION.` and only the last word VERSION is replaced with the release version'
   required: false
   type: string
   default: ''
