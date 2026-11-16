@@ -64,6 +64,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Enforce quality standards
       id: check
       shell: bash

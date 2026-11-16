@@ -24,6 +24,8 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Generate workload manifest
       id: generate
       shell: bash

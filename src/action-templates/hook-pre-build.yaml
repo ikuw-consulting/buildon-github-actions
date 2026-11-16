@@ -59,6 +59,8 @@ inputs:
 runs:
   using: composite
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Run pre-build hook
       shell: bash
       env:

@@ -20,6 +20,8 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Substitute deploy-manifests
       id: substitute
       shell: bash

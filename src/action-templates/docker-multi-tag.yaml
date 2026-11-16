@@ -20,6 +20,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Tag images
       id: tag
       shell: bash

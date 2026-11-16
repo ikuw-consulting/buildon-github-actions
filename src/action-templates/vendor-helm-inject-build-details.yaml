@@ -10,6 +10,8 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Inject build details into combined manifests
       id: inject-build-details
       shell: bash

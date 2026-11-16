@@ -27,6 +27,8 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Generate deploy-manifests lineage data ConfigMap
       id: lineage-data
       shell: bash

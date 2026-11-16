@@ -52,6 +52,8 @@ inputs:
 runs:
   using: composite
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Run post-versions-and-naming hook
       shell: bash
       env:

@@ -27,6 +27,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Load final KaptainPM YAML
       id: load
       shell: bash

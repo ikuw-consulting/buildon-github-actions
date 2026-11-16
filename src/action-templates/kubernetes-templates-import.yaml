@@ -32,6 +32,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Import templates
       id: templates-import
       shell: bash

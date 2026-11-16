@@ -58,6 +58,8 @@ inputs:
 runs:
   using: composite
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Run pre-package prepare hook
       shell: bash
       env:

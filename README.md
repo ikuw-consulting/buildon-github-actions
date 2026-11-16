@@ -106,6 +106,10 @@ See [`examples/`](examples/) for more usage patterns.
 
 ### Actions
 
+These composite actions are internal to the workflows above. They pass their
+state to each other through one job's workspace, so each refuses to run
+unless the workflow running it lives in this repository.
+
 <!-- ACTIONS-START -->
 | Action | Description |
 |--------|-------------|

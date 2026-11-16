@@ -22,6 +22,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Push all images
       id: push
       shell: bash

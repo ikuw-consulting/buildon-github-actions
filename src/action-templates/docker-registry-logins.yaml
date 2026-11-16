@@ -32,6 +32,8 @@ outputs:
 runs:
   using: composite
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Build config with GHCR default
       id: config
       shell: bash

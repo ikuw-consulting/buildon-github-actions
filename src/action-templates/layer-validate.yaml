@@ -31,6 +31,8 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Validate layer
       id: validate
       shell: bash

@@ -289,3 +289,20 @@ verify_step_wires() {
   [[ "${failures}" -eq 0 ]]
 }
 
+# The actions share one job's workspace, so each refuses to run unless the
+# workflow running it lives in the same repository. That check only protects
+# an action if it is the first step.
+@test "every action checks the workflow repository before anything else" {
+  local template first checked=0 failures=0
+  for template in "$ACTION_TEMPLATES_DIR"/*.yaml; do
+    checked=$((checked + 1))
+    first=$(awk '/^  steps:$/ { getline; print; exit }' "${template}")
+    if [[ "${first}" != "    # INJECT: check-workflow-repository" ]]; then
+      echo "${template##*/}: steps start with '${first}'" >&3
+      failures=$((failures + 1))
+    fi
+  done
+  [ "${checked}" -ge 60 ]
+  [[ "${failures}" -eq 0 ]]
+}
+

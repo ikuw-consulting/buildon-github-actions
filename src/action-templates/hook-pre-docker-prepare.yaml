@@ -52,6 +52,8 @@ inputs:
 runs:
   using: composite
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Run pre-docker prepare hook
       shell: bash
       env:

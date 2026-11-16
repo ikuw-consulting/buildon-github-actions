@@ -48,6 +48,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Aggregate run contents
       id: run-aggregate
       shell: bash

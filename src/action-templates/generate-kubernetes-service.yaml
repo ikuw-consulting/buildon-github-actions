@@ -30,6 +30,8 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Generate Service manifest
       id: generate
       shell: bash

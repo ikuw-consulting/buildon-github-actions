@@ -33,6 +33,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Finalise run workload tree
       id: run-finalise
       shell: bash

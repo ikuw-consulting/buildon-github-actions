@@ -423,6 +423,26 @@ process_action_template() {
 
       result+="${indent}${indented_chunk}"
       echo "  Injected outputs: $(echo "$chunk" | grep -c '^[A-Z0-9_]*:$') from $script_name (step id: $step_id)"
+    # Step injection: # INJECT: name, the same marker workflow templates use
+    elif [[ "$line" =~ ^([[:space:]]*)#\ INJECT:\ ([a-zA-Z0-9_-]+)$ ]]; then
+      local indent="${BASH_REMATCH[1]}"
+      local chunk_name="${BASH_REMATCH[2]}"
+      local chunk_file="$STEPS_DIR/${chunk_name}.yaml"
+
+      if [[ ! -f "$chunk_file" ]]; then
+        echo "  ERROR: Chunk not found: $chunk_file" >&2
+        exit 1
+      fi
+
+      # Read chunk, strip SPDX header, append success() to conditions, and apply indentation
+      local chunk
+      chunk=$(cat "$chunk_file" | strip_spdx_header | append_success_to_conditions)
+
+      local indented_chunk
+      indented_chunk=$(echo "$chunk" | indent_chunk "$indent")
+
+      result+="${indent}${indented_chunk}"
+      echo "  Injected: $chunk_name (indent: ${#indent} spaces)"
     else
       result+="$line"
     fi
@@ -928,6 +948,7 @@ validate_build_context_env_vars() {
 
   # Files that have an env block but only use inline bash, not kaptain scripts
   local inline_env_files=(
+    "check-workflow-repository.yaml"
     "github-release-prepare-spec.yaml"
   )
 

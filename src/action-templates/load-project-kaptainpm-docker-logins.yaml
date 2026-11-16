@@ -12,6 +12,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Load project KaptainPM docker logins
       id: load
       shell: bash

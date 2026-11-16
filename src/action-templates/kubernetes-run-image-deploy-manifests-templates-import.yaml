@@ -33,6 +33,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Import deploy-manifests templates
       id: templates-import
       shell: bash

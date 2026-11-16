@@ -44,6 +44,20 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # The actions pass their state to each other through one job's workspace, so
+    # each refuses to run unless the workflow running it lives in this repository.
+    - name: Check workflow repository
+      if: job.workflow_repository != github.action_repository && success()
+      shell: bash
+      env:
+        WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+        ACTION_REPOSITORY: ${{ github.action_repository }}
+      run: |
+        echo "::error::This action is part of the Kaptain BuildOn GitHub Actions repo or a fork thereof. It is not intended tbe used in a standalone fashion as part of any adhoc workflow elsewhere."
+        echo "::error::This action is internal to ${ACTION_REPOSITORY} and only runs from that repository's own workflows. It was run by a workflow in ${WORKFLOW_REPOSITORY:-an unknown repository}."
+        echo "::error::Documentation on how to use the upstream Kaptain buildon-github-actions workflows can be found here: https://github.com/kube-kaptain/buildon-github-actions/tree/main/examples"
+        exit 1
+
     - name: Tag images
       id: tag
       shell: bash

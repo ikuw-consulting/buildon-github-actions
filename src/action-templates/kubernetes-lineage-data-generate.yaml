@@ -46,6 +46,8 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Generate lineage data ConfigMap
       id: lineage-data
       shell: bash

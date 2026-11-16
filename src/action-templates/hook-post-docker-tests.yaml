@@ -58,6 +58,8 @@ inputs:
 runs:
   using: composite
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Run post-docker tests hook
       shell: bash
       env:

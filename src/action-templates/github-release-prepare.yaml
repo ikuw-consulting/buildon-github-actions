@@ -45,6 +45,8 @@ inputs:
 runs:
   using: composite
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Prepare release files
       shell: bash
       env:

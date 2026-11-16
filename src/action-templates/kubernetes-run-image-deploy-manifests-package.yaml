@@ -27,6 +27,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Package deploy-manifests
       id: package
       shell: bash

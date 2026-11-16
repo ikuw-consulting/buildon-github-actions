@@ -51,6 +51,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Prepare manifests
       id: prepare
       shell: bash

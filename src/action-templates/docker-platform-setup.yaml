@@ -11,6 +11,8 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Docker platform setup
       id: docker-platform-setup
       shell: bash
