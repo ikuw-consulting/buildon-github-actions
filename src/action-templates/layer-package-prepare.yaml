@@ -70,6 +70,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Prepare layer package
       id: prepare
       shell: bash

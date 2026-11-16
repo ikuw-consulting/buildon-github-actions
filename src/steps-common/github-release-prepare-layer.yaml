@@ -25,7 +25,7 @@
 - name: Prepare release files
   id: github-release-prepare
   if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true'
-  uses: ./.github/buildon-github-actions/src/actions/github-release-prepare
+  uses: $/src/actions/github-release-prepare
   with:
     github-release-substituted-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_SUBSTITUTED_FILES }}
     github-release-verbatim-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_VERBATIM_FILES }}

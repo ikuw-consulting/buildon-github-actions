@@ -79,6 +79,26 @@ jobs:
       project-name: ${{ steps.versions.outputs.project-name }}
       images-pushed: ${{ steps.docker-push-all.outputs.images-pushed }}
     steps:
+      # Runs before the checkout, so a build started by an unsupported trigger never
+      # gets as far as fetching code. The event is the calling workflow's: a reusable
+      # workflow sees its caller's github context.
+      #
+      # pull_request_target is left out on purpose. It runs with the base
+      # repository's write token and secrets, and the checkout that follows would
+      # fetch the pull request's head, which can come from a fork.
+      - name: Check trigger
+        shell: bash
+        run: |
+          case "${GITHUB_EVENT_NAME}" in
+            push|pull_request|create|workflow_dispatch|schedule|workflow_run|repository_dispatch|issue_comment)
+              echo "Supported trigger: ${GITHUB_EVENT_NAME}"
+              ;;
+            *)
+              echo "::error::Unsupported trigger '${GITHUB_EVENT_NAME}'. Supported triggers: push, pull_request, create, workflow_dispatch, schedule, workflow_run, repository_dispatch, issue_comment."
+              exit 1
+              ;;
+          esac
+
       # The credentials are left in place on purpose: git-push-tag and
       # change-source-note-write push with them.
       - name: Checkout  # zizmor: ignore[artipacked]
@@ -88,83 +108,27 @@ jobs:
           fetch-tags: true
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Parse workflow ref
-        id: parse
-        run: |
-          # Extract caller's workflow file path from github.workflow_ref
-          # Format: owner/repo/.github/workflows/file.yaml@ref
-          workflow_path="${GITHUB_WORKFLOW_REF%%@*}"
-          workflow_file=".github/workflows/${workflow_path##*/}"
-
-          echo "Resolving ref for reusable workflow: basic-quality-and-versioning.yaml"
-          echo "Caller workflow: $workflow_file"
-
-          # Check for local call (dogfooding) - uses: ./.github/workflows/...
-          if grep -q 'uses:[[:space:]]*\./.github/workflows/basic-quality-and-versioning\.yaml[[:space:]]*$' "$workflow_file" || \
-             grep -q 'uses:[[:space:]]*\./.github/workflows/basic-quality-and-versioning\.yaml[[:space:]]*#' "$workflow_file"; then
-            echo "Local workflow call detected (dogfooding)"
-            echo "ref=LOCAL" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Find all uses lines that call this workflow and extract refs
-          refs=$(grep -o 'buildon-github-actions/.github/workflows/basic-quality-and-versioning\.yaml@[^[:space:]"'"'"']*' "$workflow_file" | sed 's/.*@//')
-
-          if [ -z "$refs" ]; then
-            echo "::error::Could not find buildon-github-actions ref in $workflow_file"
-            exit 1
-          fi
-
-          # Check all refs are identical
-          unique_refs=$(echo "$refs" | sort -u)
-          ref_count=$(echo "$unique_refs" | wc -l | tr -d ' ')
-          echo "Found $ref_count unique ref(s): $(echo "$unique_refs" | tr '\n' ' ')"
-
-          if [ "$ref_count" -gt 1 ]; then
-            echo "::error::Multiple different refs found in $workflow_file: $(echo "$unique_refs" | tr '\n' ' ')"
-            exit 1
-          fi
-
-          echo "Resolved ref: $unique_refs"
-          echo "ref=$unique_refs" >> "$GITHUB_OUTPUT"
-        env:
-          GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
-
-      - name: Checkout actions
-        if: steps.parse.outputs.ref != 'LOCAL' && success()
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
-        with:
-          repository: kube-kaptain/buildon-github-actions
-          ref: ${{ steps.parse.outputs.ref }}
-          path: .github/buildon-github-actions
-
-      - name: Link local actions
-        if: steps.parse.outputs.ref == 'LOCAL' && success()
-        run: |
-          echo "Linking local actions for dogfooding"
-          ln -s "$(pwd)" .github/buildon-github-actions
-
       # === Validate Tooling ===
       - name: Start check - Validate Tooling
         id: check-validate-tooling
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Validate Tooling'
       - name: Validate tooling
         id: validate-tooling
-        uses: ./.github/buildon-github-actions/src/actions/validate-tooling
+        uses: $/src/actions/validate-tooling
       - name: Pass check - Validate Tooling
         if: success() && steps.check-validate-tooling.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-validate-tooling.outputs.check-run-id }}
       - name: Fail check - Validate Tooling
         if: failure() && steps.check-validate-tooling.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-validate-tooling.outputs.check-run-id }}
@@ -173,28 +137,23 @@ jobs:
       - name: Start check - Load Project KaptainPM Docker Logins
         id: check-load-project-kpm
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Load Project KaptainPM Docker Logins'
       - name: Load project KaptainPM docker logins
         id: load-project-kpm
-        shell: bash
-        env:
-          BUILD_MODE: build_server
-          BUILD_PLATFORM: github-actions
-          BUILD_PLATFORM_LOG_PROVIDER: github-actions
-        run: ./.github/buildon-github-actions/src/scripts/main/load-project-kaptainpm-docker-logins
+        uses: $/src/actions/load-project-kaptainpm-docker-logins
       - name: Pass check - Load Project KaptainPM Docker Logins
         if: success() && steps.check-load-project-kpm.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-load-project-kpm.outputs.check-run-id }}
       - name: Fail check - Load Project KaptainPM Docker Logins
         if: failure() && steps.check-load-project-kpm.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-load-project-kpm.outputs.check-run-id }}
@@ -203,7 +162,7 @@ jobs:
       - name: Start check - Pre-Init Docker Registry Logins
         id: check-docker-registry-logins-pre-init
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Pre-Init Docker Registry Logins'
@@ -212,7 +171,7 @@ jobs:
       # GHCR merge handled by the action internally
       - name: Docker registry logins (pre-init)
         id: docker-registry-logins-pre-init
-        uses: ./.github/buildon-github-actions/src/actions/docker-registry-logins
+        uses: $/src/actions/docker-registry-logins
         with:
           config: ${{ steps.load-project-kpm.outputs.DOCKER_REGISTRY_LOGINS }}
           secrets-json: ${{ secrets.docker-registry-logins-secrets }}
@@ -221,13 +180,13 @@ jobs:
       - name: Pass check - Pre-Init Docker Registry Logins
         if: success() && steps.check-docker-registry-logins-pre-init.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-docker-registry-logins-pre-init.outputs.check-run-id }}
       - name: Fail check - Pre-Init Docker Registry Logins
         if: failure() && steps.check-docker-registry-logins-pre-init.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-docker-registry-logins-pre-init.outputs.check-run-id }}
@@ -236,7 +195,7 @@ jobs:
       - name: Start check - Kaptain Init
         id: check-kaptain-init
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Kaptain Init'
@@ -258,26 +217,22 @@ jobs:
 
       - name: Kaptain init
         id: kaptain-init
-        shell: bash
-        env:
-          BUILD_MODE: build_server
-          BUILD_PLATFORM: github-actions
-          BUILD_PLATFORM_LOG_PROVIDER: github-actions
-          IMAGE_BUILD_COMMAND: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
-          SCHEMA_VALIDATION_COMMAND: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
-          DOCKER_TARGET_REGISTRY: ${{ steps.registry-defaults.outputs.registry }}
-          DOCKER_TARGET_NAMESPACE: ${{ steps.registry-defaults.outputs.namespace }}
-        run: ./.github/buildon-github-actions/src/scripts/main/kaptain-init
+        uses: $/src/actions/kaptain-init
+        with:
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
+          docker-target-registry: ${{ steps.registry-defaults.outputs.registry }}
+          docker-target-namespace: ${{ steps.registry-defaults.outputs.namespace }}
       - name: Pass check - Kaptain Init
         if: success() && steps.check-kaptain-init.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-kaptain-init.outputs.check-run-id }}
       - name: Fail check - Kaptain Init
         if: failure() && steps.check-kaptain-init.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-kaptain-init.outputs.check-run-id }}
@@ -286,36 +241,32 @@ jobs:
       - name: Start check - Load Final KaptainPM YAML
         id: check-load-final-kpm
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Load Final KaptainPM YAML'
       - name: Load final KaptainPM YAML
         id: kpm
-        shell: bash
-        env:
-          BUILD_MODE: build_server
-          BUILD_PLATFORM: github-actions
-          BUILD_PLATFORM_LOG_PROVIDER: github-actions
-          BUILD_KIND: basic-quality-and-versioning
-          IMAGE_BUILD_COMMAND: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+        uses: $/src/actions/load-final-kaptainpm-yaml
+        with:
+          build-kind: basic-quality-and-versioning
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
           # Platform registry/namespace defaults (spec values win inside the script;
           # targetIncludeNamespace=false disregards the namespace entirely). The
           # DOCKER_TARGET_* outputs of this step are authoritative for the whole
           # workflow - there is no later resolution step.
-          DOCKER_TARGET_REGISTRY: ${{ steps.registry-defaults.outputs.registry }}
-          DOCKER_TARGET_NAMESPACE: ${{ steps.registry-defaults.outputs.namespace }}
-        run: ./.github/buildon-github-actions/src/scripts/main/load-final-kaptainpm-yaml
+          docker-target-registry: ${{ steps.registry-defaults.outputs.registry }}
+          docker-target-namespace: ${{ steps.registry-defaults.outputs.namespace }}
       - name: Pass check - Load Final KaptainPM YAML
         if: success() && steps.check-load-final-kpm.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-load-final-kpm.outputs.check-run-id }}
       - name: Fail check - Load Final KaptainPM YAML
         if: failure() && steps.check-load-final-kpm.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-load-final-kpm.outputs.check-run-id }}
@@ -325,14 +276,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && success()
         id: check-pre-build
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Pre-Build'
       - name: Run pre-build
         if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && success()
         id: pre-build
-        uses: ./.github/buildon-github-actions/src/actions/hook-pre-build
+        uses: $/src/actions/hook-pre-build
         with:
           build-kind: basic-quality-and-versioning
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -550,7 +501,6 @@ jobs:
           tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
 
           # Quality check options
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -579,13 +529,13 @@ jobs:
       - name: Pass check - Pre-Build
         if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && success() && steps.check-pre-build.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-pre-build.outputs.check-run-id }}
       - name: Fail check - Pre-Build
         if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && failure() && steps.check-pre-build.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-pre-build.outputs.check-run-id }}
@@ -595,18 +545,17 @@ jobs:
         if: github.event_name == 'pull_request' && success()
         id: check-basic-quality
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Basic Quality Checks'
       - name: Basic quality checks
         if: github.event_name == 'pull_request' && success()
         id: quality
-        uses: ./.github/buildon-github-actions/src/actions/basic-quality-checks
+        uses: $/src/actions/basic-quality-checks
         with:
           release-branch: ${{ steps.kpm.outputs.RELEASE_BRANCH }}
           additional-release-branches: ${{ steps.kpm.outputs.ADDITIONAL_RELEASE_BRANCHES }}
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -617,13 +566,13 @@ jobs:
       - name: Pass check - Basic Quality Checks
         if: github.event_name == 'pull_request' && success() && steps.check-basic-quality.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-basic-quality.outputs.check-run-id }}
       - name: Fail check - Basic Quality Checks
         if: github.event_name == 'pull_request' && failure() && steps.check-basic-quality.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-basic-quality.outputs.check-run-id }}
@@ -633,7 +582,7 @@ jobs:
         if: steps.kpm.outputs.DOCKER_TARGET_REGISTRY != '' && success()
         id: check-docker-registry-logins
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Docker Registry Logins'
@@ -641,7 +590,7 @@ jobs:
       - name: Docker registry logins
         id: docker-registry-logins
         if: steps.kpm.outputs.DOCKER_TARGET_REGISTRY != '' && success()
-        uses: ./.github/buildon-github-actions/src/actions/docker-registry-logins
+        uses: $/src/actions/docker-registry-logins
         with:
           config: ${{ steps.kpm.outputs.DOCKER_REGISTRY_LOGINS }}
           secrets-json: ${{ secrets.docker-registry-logins-secrets }}
@@ -651,13 +600,13 @@ jobs:
       - name: Pass check - Docker Registry Logins
         if: steps.kpm.outputs.DOCKER_TARGET_REGISTRY != '' && success() && steps.check-docker-registry-logins.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-docker-registry-logins.outputs.check-run-id }}
       - name: Fail check - Docker Registry Logins
         if: steps.kpm.outputs.DOCKER_TARGET_REGISTRY != '' && failure() && steps.check-docker-registry-logins.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-docker-registry-logins.outputs.check-run-id }}
@@ -667,27 +616,27 @@ jobs:
         if: steps.kpm.outputs.DOCKER_QEMU_SETUP_NEEDED == 'true' && success()
         id: check-docker-platform-setup
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Docker Platform Setup'
       - name: Docker platform setup
         if: steps.kpm.outputs.DOCKER_QEMU_SETUP_NEEDED == 'true' && success()
         id: docker-platform-setup
-        uses: ./.github/buildon-github-actions/src/actions/docker-platform-setup
+        uses: $/src/actions/docker-platform-setup
         with:
           docker-platform: ${{ steps.kpm.outputs.DOCKER_PLATFORM }}
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
       - name: Pass check - Docker Platform Setup
         if: steps.kpm.outputs.DOCKER_QEMU_SETUP_NEEDED == 'true' && success() && steps.check-docker-platform-setup.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-docker-platform-setup.outputs.check-run-id }}
       - name: Fail check - Docker Platform Setup
         if: steps.kpm.outputs.DOCKER_QEMU_SETUP_NEEDED == 'true' && failure() && steps.check-docker-platform-setup.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-docker-platform-setup.outputs.check-run-id }}
@@ -697,14 +646,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH != '' && success()
         id: check-pre-tagging
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Pre-tagging Tests'
       - name: Run pre-tagging tests
         if: steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH != '' && success()
         id: pre-tagging-tests
-        uses: ./.github/buildon-github-actions/src/actions/hook-pre-tagging-tests
+        uses: $/src/actions/hook-pre-tagging-tests
         with:
           build-kind: basic-quality-and-versioning
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -922,7 +871,6 @@ jobs:
           tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
 
           # Quality check options
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -951,13 +899,13 @@ jobs:
       - name: Pass check - Pre-tagging Tests
         if: steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH != '' && success() && steps.check-pre-tagging.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-pre-tagging.outputs.check-run-id }}
       - name: Fail check - Pre-tagging Tests
         if: steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH != '' && failure() && steps.check-pre-tagging.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-pre-tagging.outputs.check-run-id }}
@@ -966,13 +914,13 @@ jobs:
       - name: Start check - Versions & Naming
         id: check-versions
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Versions & Naming'
       - name: Generate versions and naming
         id: versions
-        uses: ./.github/buildon-github-actions/src/actions/versions-and-naming
+        uses: $/src/actions/versions-and-naming
         with:
           token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
           output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
@@ -995,13 +943,13 @@ jobs:
       - name: Pass check - Versions & Naming
         if: success() && steps.check-versions.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-versions.outputs.check-run-id }}
       - name: Fail check - Versions & Naming
         if: failure() && steps.check-versions.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-versions.outputs.check-run-id }}
@@ -1011,14 +959,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH != '' && success()
         id: check-post-versions-and-naming
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Post-Versions-and-Naming'
       - name: Run post-versions-and-naming
         if: steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH != '' && success()
         id: post-versions-and-naming
-        uses: ./.github/buildon-github-actions/src/actions/hook-post-versions-and-naming
+        uses: $/src/actions/hook-post-versions-and-naming
         with:
           build-kind: basic-quality-and-versioning
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -1235,7 +1183,6 @@ jobs:
           tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
 
           # Quality check options
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -1283,13 +1230,13 @@ jobs:
       - name: Pass check - Post-Versions-and-Naming
         if: steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH != '' && success() && steps.check-post-versions-and-naming.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-post-versions-and-naming.outputs.check-run-id }}
       - name: Fail check - Post-Versions-and-Naming
         if: steps.kpm.outputs.HOOK_POST_VERSIONS_AND_NAMING_SCRIPT_SUB_PATH != '' && failure() && steps.check-post-versions-and-naming.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-post-versions-and-naming.outputs.check-run-id }}
@@ -1299,24 +1246,24 @@ jobs:
         if: steps.versions.outputs.is-release != 'true' && steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED == 'true' && success()
         id: check-change-source-note
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Change Source Note'
       - name: Write change source note
         id: change-source-note-write
         if: steps.versions.outputs.is-release != 'true' && steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED == 'true' && success()
-        uses: ./.github/buildon-github-actions/src/actions/change-source-note-write
+        uses: $/src/actions/change-source-note-write
       - name: Pass check - Change Source Note
         if: steps.versions.outputs.is-release != 'true' && steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED == 'true' && success() && steps.check-change-source-note.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-change-source-note.outputs.check-run-id }}
       - name: Fail check - Change Source Note
         if: steps.versions.outputs.is-release != 'true' && steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED == 'true' && failure() && steps.check-change-source-note.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-change-source-note.outputs.check-run-id }}
@@ -1325,13 +1272,13 @@ jobs:
       - name: Start check - Release Change Data Generate
         id: check-release-change-data-generate
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Release Change Data Generate'
       - name: Generate release change data
         id: release-change-data-generate
-        uses: ./.github/buildon-github-actions/src/actions/release-change-data-generate
+        uses: $/src/actions/release-change-data-generate
         with:
           version: ${{ steps.versions.outputs.version }}
           project-name: ${{ steps.versions.outputs.project-name }}
@@ -1342,13 +1289,13 @@ jobs:
       - name: Pass check - Release Change Data Generate
         if: success() && steps.check-release-change-data-generate.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-release-change-data-generate.outputs.check-run-id }}
       - name: Fail check - Release Change Data Generate
         if: failure() && steps.check-release-change-data-generate.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-release-change-data-generate.outputs.check-run-id }}
@@ -1357,13 +1304,13 @@ jobs:
       - name: Start check - Release Change Data OCI Package
         id: check-release-change-data-oci-package
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Release Change Data OCI Package'
       - name: Package release change data as OCI image
         id: release-change-data-oci-package
-        uses: ./.github/buildon-github-actions/src/actions/release-change-data-oci-package
+        uses: $/src/actions/release-change-data-oci-package
         with:
           version: ${{ steps.versions.outputs.version }}
           docker-tag: ${{ steps.versions.outputs.docker-tag }}
@@ -1378,13 +1325,13 @@ jobs:
       - name: Pass check - Release Change Data OCI Package
         if: success() && steps.check-release-change-data-oci-package.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-release-change-data-oci-package.outputs.check-run-id }}
       - name: Fail check - Release Change Data OCI Package
         if: failure() && steps.check-release-change-data-oci-package.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-release-change-data-oci-package.outputs.check-run-id }}
@@ -1394,14 +1341,14 @@ jobs:
         if: steps.kpm.outputs.DOCKER_PUSH_TARGETS != '' && success()
         id: check-docker-multi-tag
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Docker Multi-Tag'
       - name: Tag images for additional registries
         id: docker-multi-tag
         if: steps.kpm.outputs.DOCKER_PUSH_TARGETS != '' && success()
-        uses: ./.github/buildon-github-actions/src/actions/docker-multi-tag
+        uses: $/src/actions/docker-multi-tag
         with:
           docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
           docker-push-targets: ${{ steps.kpm.outputs.DOCKER_PUSH_TARGETS }}
@@ -1411,13 +1358,13 @@ jobs:
       - name: Pass check - Docker Multi-Tag
         if: steps.kpm.outputs.DOCKER_PUSH_TARGETS != '' && success() && steps.check-docker-multi-tag.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-docker-multi-tag.outputs.check-run-id }}
       - name: Fail check - Docker Multi-Tag
         if: steps.kpm.outputs.DOCKER_PUSH_TARGETS != '' && failure() && steps.check-docker-multi-tag.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-docker-multi-tag.outputs.check-run-id }}
@@ -1427,14 +1374,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_PRE_PUBLISH_SCRIPT_SUB_PATH != '' && success()
         id: check-pre-publish
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Pre-Publish'
       - name: Run pre-publish
         if: steps.kpm.outputs.HOOK_PRE_PUBLISH_SCRIPT_SUB_PATH != '' && success()
         id: pre-publish
-        uses: ./.github/buildon-github-actions/src/actions/hook-pre-publish
+        uses: $/src/actions/hook-pre-publish
         with:
           build-kind: basic-quality-and-versioning
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -1651,7 +1598,6 @@ jobs:
           tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
 
           # Quality check options
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -1699,13 +1645,13 @@ jobs:
       - name: Pass check - Pre-Publish
         if: steps.kpm.outputs.HOOK_PRE_PUBLISH_SCRIPT_SUB_PATH != '' && success() && steps.check-pre-publish.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-pre-publish.outputs.check-run-id }}
       - name: Fail check - Pre-Publish
         if: steps.kpm.outputs.HOOK_PRE_PUBLISH_SCRIPT_SUB_PATH != '' && failure() && steps.check-pre-publish.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-pre-publish.outputs.check-run-id }}
@@ -1715,7 +1661,7 @@ jobs:
         if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && success()
         id: check-github-release-prepare
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → GitHub Release Prepare'
@@ -1731,7 +1677,7 @@ jobs:
       - name: Prepare release files
         id: github-release-prepare
         if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && success()
-        uses: ./.github/buildon-github-actions/src/actions/github-release-prepare
+        uses: $/src/actions/github-release-prepare
         with:
           github-release-substituted-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_SUBSTITUTED_FILES }}
           github-release-verbatim-files: ${{ steps.kpm.outputs.GITHUB_RELEASE_VERBATIM_FILES }}
@@ -1768,13 +1714,13 @@ jobs:
       - name: Pass check - GitHub Release Prepare
         if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && success() && steps.check-github-release-prepare.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-github-release-prepare.outputs.check-run-id }}
       - name: Fail check - GitHub Release Prepare
         if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && failure() && steps.check-github-release-prepare.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-github-release-prepare.outputs.check-run-id }}
@@ -1784,26 +1730,26 @@ jobs:
         if: steps.versions.outputs.is-release == 'true' && success()
         id: check-git-push-tag
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Git Tag Push'
       - name: Push git tag
         if: steps.versions.outputs.is-release == 'true' && success()
-        uses: ./.github/buildon-github-actions/src/actions/git-push-tag
+        uses: $/src/actions/git-push-tag
         with:
           git-tag: ${{ steps.versions.outputs.git-tag }}
           is-release: ${{ steps.versions.outputs.is-release }}
       - name: Pass check - Git Tag Push
         if: steps.versions.outputs.is-release == 'true' && success() && steps.check-git-push-tag.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-git-push-tag.outputs.check-run-id }}
       - name: Fail check - Git Tag Push
         if: steps.versions.outputs.is-release == 'true' && failure() && steps.check-git-push-tag.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-git-push-tag.outputs.check-run-id }}
@@ -1813,14 +1759,14 @@ jobs:
         if: steps.versions.outputs.is-release == 'true' && success()
         id: check-docker-push-all
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Docker Push All'
       - name: Push all images
         id: docker-push-all
         if: steps.versions.outputs.is-release == 'true' && success()
-        uses: ./.github/buildon-github-actions/src/actions/docker-push-all
+        uses: $/src/actions/docker-push-all
         with:
           docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
           is-release: ${{ steps.versions.outputs.is-release }}
@@ -1829,13 +1775,13 @@ jobs:
       - name: Pass check - Docker Push All
         if: steps.versions.outputs.is-release == 'true' && success() && steps.check-docker-push-all.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-docker-push-all.outputs.check-run-id }}
       - name: Fail check - Docker Push All
         if: steps.versions.outputs.is-release == 'true' && failure() && steps.check-docker-push-all.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-docker-push-all.outputs.check-run-id }}
@@ -1845,7 +1791,7 @@ jobs:
         if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true' && success()
         id: check-github-release
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → GitHub Release'
@@ -1857,6 +1803,7 @@ jobs:
           BUILD_MODE: build_server
           BUILD_PLATFORM: github-actions
           BUILD_PLATFORM_LOG_PROVIDER: github-actions
+          BUILD_SCRIPTS_REPO_ROOT: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
           USER_NOTES: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES }}
           USER_NOTES_FILE: ${{ steps.kpm.outputs.GITHUB_RELEASE_NOTES_FILE }}
           VERSION: ${{ steps.versions.outputs.version }}
@@ -1866,7 +1813,7 @@ jobs:
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          display_name=$(./.github/buildon-github-actions/src/scripts/util/format-project-title "${PROJECT_NAME}")
+          display_name=$("${BUILD_SCRIPTS_REPO_ROOT}/src/scripts/util/format-project-title" "${PROJECT_NAME}")
           echo "title=${VERSION} — ${display_name}" >> "${GITHUB_OUTPUT}"
 
           if [[ -n "${USER_NOTES_FILE}" ]]; then
@@ -1889,14 +1836,14 @@ jobs:
               echo "### Release Assets"
               echo "* Release Change Data: [release-change-data-${VERSION}.yaml](${release_url}/release-change-data-${VERSION}.yaml)"
               echo "* Release Change Data Image: [${RELEASE_CHANGE_DATA_URI}](https://${RELEASE_CHANGE_DATA_URI})"
-              ./.github/buildon-github-actions/src/scripts/util/format-release-image-list "${OUTPUT_SUB_PATH}" "${VERSION}"
+              "${BUILD_SCRIPTS_REPO_ROOT}/src/scripts/util/format-release-image-list" "${OUTPUT_SUB_PATH}" "${VERSION}"
               echo "NOTES_EOF"
             } >> "${GITHUB_OUTPUT}"
           fi
 
       - name: GitHub Release
         if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true' && success()
-        uses: ./.github/buildon-github-actions/src/actions/github-release
+        uses: $/src/actions/github-release
         with:
           github-release-enabled: ${{ steps.kpm.outputs.GITHUB_RELEASE_ENABLED }}
           output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}
@@ -1907,13 +1854,13 @@ jobs:
       - name: Pass check - GitHub Release
         if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true' && success() && steps.check-github-release.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-github-release.outputs.check-run-id }}
       - name: Fail check - GitHub Release
         if: steps.kpm.outputs.GITHUB_RELEASE_ENABLED == 'true' && steps.versions.outputs.is-release == 'true' && failure() && steps.check-github-release.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-github-release.outputs.check-run-id }}
@@ -1923,14 +1870,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && success()
         id: check-post-build
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Versions & Naming → Post-Build'
       - name: Run post-build
         if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && success()
         id: post-build
-        uses: ./.github/buildon-github-actions/src/actions/hook-post-build
+        uses: $/src/actions/hook-post-build
         with:
           build-kind: basic-quality-and-versioning
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -2147,7 +2094,6 @@ jobs:
           tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
 
           # Quality check options
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -2195,13 +2141,13 @@ jobs:
       - name: Pass check - Post-Build
         if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && success() && steps.check-post-build.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-post-build.outputs.check-run-id }}
       - name: Fail check - Post-Build
         if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && failure() && steps.check-post-build.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-post-build.outputs.check-run-id }}

@@ -64,6 +64,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Enforce quality standards
       id: check
       shell: bash
@@ -77,7 +79,6 @@ runs:
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         TARGET_BRANCH: ${{ github.base_ref }}
         MERGE_CANDIDATE_CREATOR: ${{ github.event.pull_request.user.login }}
-        BLOCK_SLASHES: ${{ inputs.block-slashes }}
         QC_BLOCK_SLASH_CONTAINING_BRANCHES: ${{ inputs.qc-block-slash-containing-branches }}
         QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES: ${{ inputs.qc-block-double-hyphen-containing-branches }}
         QC_REQUIRE_CONVENTIONAL_BRANCHES: ${{ inputs.qc-require-conventional-branches }}

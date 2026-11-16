@@ -20,6 +20,8 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Stage deploy-image manifests
       id: run-image-deploy-manifests
       shell: bash

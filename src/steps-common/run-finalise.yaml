@@ -3,7 +3,7 @@
 
 - name: Finalise run workload tree
   id: run-finalise
-  uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-finalise
+  uses: $/src/actions/kubernetes-run-finalise
   with:
     project-name: ${{ steps.versions.outputs.project-name }}
     build-kind: ${{ steps.kpm.outputs.BUILD_KIND }}

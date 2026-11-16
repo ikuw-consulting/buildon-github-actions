@@ -26,6 +26,8 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Generate PodDisruptionBudget manifest
       id: generate
       shell: bash

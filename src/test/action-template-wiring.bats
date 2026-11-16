@@ -125,6 +125,28 @@ verify_step_wires() {
   fi
 }
 
+@test "kaptain-init wires the container runtime, schema validator and registry defaults" {
+  run verify_step_wires \
+    "$ACTION_TEMPLATES_DIR/kaptain-init.yaml" \
+    "$PROJECT_ROOT/src/steps-common/kaptain-init.yaml" \
+    IMAGE_BUILD_COMMAND SCHEMA_VALIDATION_COMMAND DOCKER_TARGET_REGISTRY DOCKER_TARGET_NAMESPACE
+  if [[ "$status" -ne 0 ]]; then
+    echo "$output" >&3
+    return 1
+  fi
+}
+
+@test "load-final-kaptainpm-yaml wires the build kind, container runtime and registry defaults" {
+  run verify_step_wires \
+    "$ACTION_TEMPLATES_DIR/load-final-kaptainpm-yaml.yaml" \
+    "$PROJECT_ROOT/src/steps-common/load-final-kaptainpm-yaml.yaml" \
+    BUILD_KIND IMAGE_BUILD_COMMAND DOCKER_TARGET_REGISTRY DOCKER_TARGET_NAMESPACE
+  if [[ "$status" -ne 0 ]]; then
+    echo "$output" >&3
+    return 1
+  fi
+}
+
 @test "kubernetes-run-aggregate wires the schema validator" {
   run verify_step_wires \
     "$ACTION_TEMPLATES_DIR/kubernetes-run-aggregate.yaml" \
@@ -195,6 +217,92 @@ verify_step_wires() {
       fi
     done
   done
+  [[ "${failures}" -eq 0 ]]
+}
+
+# A composite action passes on only the outputs it declares. A name read from
+# an action-backed step but declared by no action behind that step id arrives
+# empty on a runner, with no error.
+@test "every output read from an action-backed step is declared by an action behind that id" {
+  local sources pairs ids id action declared generated_from names name checked=0 failures=0
+  sources="$PROJECT_ROOT/src/steps-common/*.yaml $PROJECT_ROOT/src/workflow-templates/*.yaml"
+
+  # One "<step id> <action>" line per step that has both an id and a uses.
+  # shellcheck disable=SC2086 # the globs must expand
+  pairs=$(awk '
+    function flush() { if (id != "" && action != "") print id, action; id = ""; action = "" }
+    FNR == 1 { flush() }
+    /^[[:space:]]*- / { flush() }
+    /^[[:space:]]*(- )?id: / { id = $NF }
+    /uses: .*\/src\/actions\// { count = split($NF, parts, "/"); action = parts[count] }
+    END { flush() }
+  ' ${sources} | sort -u)
+
+  ids=$(printf '%s\n' "${pairs}" | cut -d' ' -f1 | sort -u)
+  for id in ${ids}; do
+    checked=$((checked + 1))
+    declared=""
+    for action in $(printf '%s\n' "${pairs}" | awk -v id="${id}" '$1 == id { print $2 }'); do
+      declared="${declared} $(awk '
+        /^outputs:/ { inside = 1; next }
+        /^[a-z]/ { inside = 0 }
+        inside && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ { sub(/:.*/, "", $1); print $1 }
+      ' "$ACTION_TEMPLATES_DIR/${action}.yaml" | tr '\n' ' ')"
+      # A template can take its outputs from a script instead of listing them
+      # (# INJECT-OUTPUTS: <script> <step id>). The assembler then declares
+      # every name in that script's MAPPINGS table and literal output_var calls.
+      generated_from=$(sed -n -E 's/^[[:space:]]*# INJECT-OUTPUTS: ([a-z0-9-]+) [a-z0-9-]+$/\1/p' "$ACTION_TEMPLATES_DIR/${action}.yaml")
+      if [[ -n "${generated_from}" ]]; then
+        declared="${declared} $(sed -n -E 's/^[[:space:]]*"[^":]+:([A-Z0-9_]+)"[[:space:]]*$/\1/p' "$SCRIPTS_DIR/${generated_from}" | tr '\n' ' ')"
+        declared="${declared} $(grep -vE '^[[:space:]]*#' "$SCRIPTS_DIR/${generated_from}" | grep -oE 'output_var "[A-Z0-9_]+"' | sed -E 's/output_var "(.*)"/\1/' | tr '\n' ' ')"
+      fi
+    done
+    # shellcheck disable=SC2086 # the globs must expand
+    names=$(grep -hoE "steps\.${id}\.outputs\.[A-Za-z0-9_-]+" ${sources} | sed -E 's/.*\.outputs\.//' | sort -u)
+    for name in ${names}; do
+      if [[ " ${declared} " != *" ${name} "* ]]; then
+        echo "steps.${id}.outputs.${name} is read, but no action behind id ${id} declares it" >&3
+        failures=$((failures + 1))
+      fi
+    done
+  done
+
+  [ "${checked}" -ge 50 ]
+  [[ "${failures}" -eq 0 ]]
+}
+
+# The trigger check only protects a build if it runs before any code is
+# fetched, so it has to be the first step and the checkout the second.
+@test "every workflow checks the trigger before it checks out the project" {
+  local workflow steps first second checked=0 failures=0
+  for workflow in "$PROJECT_ROOT"/src/workflow-templates/*.yaml; do
+    checked=$((checked + 1))
+    steps=$(sed -n -E 's/^[[:space:]]*# INJECT: ([a-z0-9-]+).*$/\1/p' "${workflow}")
+    first=$(printf '%s\n' "${steps}" | sed -n '1p')
+    second=$(printf '%s\n' "${steps}" | sed -n '2p')
+    if [[ "${first}" != "check-trigger" ]] || [[ "${second}" != "checkout-project" ]]; then
+      echo "${workflow##*/}: starts with ${first:-nothing}, ${second:-nothing}" >&3
+      failures=$((failures + 1))
+    fi
+  done
+  [ "${checked}" -ge 16 ]
+  [[ "${failures}" -eq 0 ]]
+}
+
+# The actions share one job's workspace, so each refuses to run unless the
+# workflow running it lives in the same repository. That check only protects
+# an action if it is the first step.
+@test "every action checks the workflow repository before anything else" {
+  local template first checked=0 failures=0
+  for template in "$ACTION_TEMPLATES_DIR"/*.yaml; do
+    checked=$((checked + 1))
+    first=$(awk '/^  steps:$/ { getline; print; exit }' "${template}")
+    if [[ "${first}" != "    # INJECT: check-workflow-repository" ]]; then
+      echo "${template##*/}: steps start with '${first}'" >&3
+      failures=$((failures + 1))
+    fi
+  done
+  [ "${checked}" -ge 60 ]
   [[ "${failures}" -eq 0 ]]
 }
 

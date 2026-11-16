@@ -67,6 +67,8 @@ inputs:
 runs:
   using: composite
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Run post-package tests hook
       shell: bash
       env:
@@ -296,7 +298,6 @@ runs:
         TAG_VERSION_USE_SOURCE_VERSION_EXACT: ${{ inputs.tag-version-use-source-version-exact }}
 
         # Workflow inputs - quality check options
-        BLOCK_SLASHES: ${{ inputs.block-slashes }}
         QC_BLOCK_SLASH_CONTAINING_BRANCHES: ${{ inputs.qc-block-slash-containing-branches }}
         QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES: ${{ inputs.qc-block-double-hyphen-containing-branches }}
         QC_REQUIRE_CONVENTIONAL_BRANCHES: ${{ inputs.qc-require-conventional-branches }}
@@ -346,4 +347,4 @@ runs:
         MANIFESTS_ZIP_FILE_NAME: ${{ inputs.manifests-zip-file-name }}
         # Step outputs - manifest repo provider outputs
         MANIFESTS_URI: ${{ inputs.manifests-uri }}
-      run: .github/buildon-github-actions/src/scripts/main/hook-post-package-tests
+      run: "${GITHUB_ACTION_PATH}/../../scripts/main/hook-post-package-tests"

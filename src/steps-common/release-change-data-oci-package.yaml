@@ -3,7 +3,7 @@
 
 - name: Package release change data as OCI image
   id: release-change-data-oci-package
-  uses: ./.github/buildon-github-actions/src/actions/release-change-data-oci-package
+  uses: $/src/actions/release-change-data-oci-package
   with:
     version: ${{ steps.versions.outputs.version }}
     docker-tag: ${{ steps.versions.outputs.docker-tag }}

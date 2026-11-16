@@ -60,6 +60,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     # ==========================================================================
     # Publish manifests via repo provider
     # All values come from package step - no computation needed

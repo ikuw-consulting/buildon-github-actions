@@ -19,6 +19,8 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Substitute manifests
       id: substitute
       shell: bash

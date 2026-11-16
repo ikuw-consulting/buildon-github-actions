@@ -3,6 +3,6 @@
 
 - name: Vendor helm inject build details
   id: vendor-helm-inject-build-details
-  uses: ./.github/buildon-github-actions/src/actions/vendor-helm-inject-build-details
+  uses: $/src/actions/vendor-helm-inject-build-details
   with:
     output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}

@@ -32,7 +32,9 @@ set -uo pipefail
 SCRIPT_DIR="$(dirname "${0}")"
 
 # Script-specific inputs
-TARGET_BRANCH="${TARGET_BRANCH:?Is required - quality checks only make sense in PR context}"
+# TARGET_BRANCH is required, but only after the release branch check in main:
+# a build of a release branch has no target and gets its own message.
+TARGET_BRANCH="${TARGET_BRANCH:-}"
 MERGE_CANDIDATE_CREATOR="${MERGE_CANDIDATE_CREATOR:-}"
 BUILD_KIND="${BUILD_KIND:?BUILD_KIND is required}"
 
@@ -226,6 +228,25 @@ main() {
   log "Checking quality for branch: ${CURRENT_BRANCH}"
   log "Target branch: ${TARGET_BRANCH}"
 
+  # Check: Block release branch to release branch PRs
+  if is_release_branch "${CURRENT_BRANCH}" && is_release_branch "${TARGET_BRANCH}"; then
+    error ${FLAG_BAD_SETUP} "PR from release branch '${CURRENT_BRANCH}' to release branch '${TARGET_BRANCH}' is not valid. Use cherry-pick to move changes between release branches."
+    exit ${FLAG_BAD_SETUP} # Since we're first just ignore the value out of the error function and keep this clear
+  fi
+
+  # Fail for release branches - a build of one is a post-merge release build
+  # and has no pull request to check
+  if is_release_branch "${CURRENT_BRANCH}"; then
+    log_error "Quality checks should not run on release branches. Check workflow configuration."
+    exit 1
+  fi
+
+  # Not a release branch, but nothing to compare against either
+  if [[ -z "${TARGET_BRANCH}" ]]; then
+    log_error "TARGET_BRANCH: Is required - quality checks only make sense in PR context"
+    exit 1
+  fi
+
   # Local leniency: the target may legitimately not resolve (bootstrap, an
   # unpushed line). Content checks (commit scan, fast-forward) are skipped
   # with a warning naming the remedy; every name-based check still runs.
@@ -235,18 +256,6 @@ main() {
   if [[ "${BUILD_MODE:-}" == "local" ]] && ! target_ref_resolves; then
     target_resolvable=false
     log "WARNING: Target '${TARGET_BRANCH}' does not resolve locally - skipping commit and fast-forward checks. Push the branch or fetch the remote to restore them."
-  fi
-
-  # Check: Block release branch to release branch PRs
-  if is_release_branch "${CURRENT_BRANCH}" && is_release_branch "${TARGET_BRANCH}"; then
-    error ${FLAG_BAD_SETUP} "PR from release branch '${CURRENT_BRANCH}' to release branch '${TARGET_BRANCH}' is not valid. Use cherry-pick to move changes between release branches."
-    exit ${FLAG_BAD_SETUP} # Since we're first just ignore the value out of the error function and keep this clear
-  fi
-
-  # Fail for release branches - shouldn't be running in this context
-  if is_release_branch "${CURRENT_BRANCH}"; then
-    log_error "Quality checks should not run on release branches. Check workflow configuration."
-    exit 1
   fi
 
   # Check 1: Block GitHub default branch names

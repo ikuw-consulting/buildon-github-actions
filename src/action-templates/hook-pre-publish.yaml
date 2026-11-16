@@ -52,6 +52,8 @@ inputs:
 runs:
   using: composite
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Run pre-publish hook
       shell: bash
       env:
@@ -281,7 +283,6 @@ runs:
         TAG_VERSION_USE_SOURCE_VERSION_EXACT: ${{ inputs.tag-version-use-source-version-exact }}
 
         # Workflow inputs - quality check options
-        BLOCK_SLASHES: ${{ inputs.block-slashes }}
         QC_BLOCK_SLASH_CONTAINING_BRANCHES: ${{ inputs.qc-block-slash-containing-branches }}
         QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES: ${{ inputs.qc-block-double-hyphen-containing-branches }}
         QC_REQUIRE_CONVENTIONAL_BRANCHES: ${{ inputs.qc-require-conventional-branches }}
@@ -325,4 +326,4 @@ runs:
         GIT_TAG: ${{ inputs.git-tag }}
         PROJECT_NAME: ${{ inputs.project-name }}
         IS_RELEASE: ${{ inputs.is-release }}
-      run: .github/buildon-github-actions/src/scripts/main/hook-pre-publish
+      run: "${GITHUB_ACTION_PATH}/../../scripts/main/hook-pre-publish"

@@ -4,7 +4,7 @@
 - name: Publish manifests via repo provider
   id: manifest-repo-provider-publish
   if: steps.versions.outputs.is-release == 'true'
-  uses: ./.github/buildon-github-actions/src/actions/kubernetes-manifests-repo-provider-publish
+  uses: $/src/actions/kubernetes-manifests-repo-provider-publish
   with:
     manifests-repo-provider-type: ${{ steps.kpm.outputs.MANIFESTS_REPO_PROVIDER_TYPE }}
     manifests-uri: ${{ steps.manifest-repo-provider-package.outputs.manifests-uri }}

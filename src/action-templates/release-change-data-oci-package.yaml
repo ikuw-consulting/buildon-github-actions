@@ -39,6 +39,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Package release change data as OCI image
       id: package
       shell: bash

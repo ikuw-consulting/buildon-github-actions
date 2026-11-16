@@ -81,6 +81,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Generate release tag
       id: generate
       shell: bash

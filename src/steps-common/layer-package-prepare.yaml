@@ -3,7 +3,7 @@
 
 - name: Prepare layer package
   id: layer-package-prepare
-  uses: ./.github/buildon-github-actions/src/actions/layer-package-prepare
+  uses: $/src/actions/layer-package-prepare
   with:
     project-name: ${{ steps.versions.outputs.project-name }}
     version: ${{ steps.versions.outputs.version }}

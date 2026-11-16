@@ -908,10 +908,6 @@ inputs:
     required: false
     default: 'false'
   # Basic quality checks
-  block-slashes:
-    description: 'DEPRECATED: Use block-slash-containing-branches instead'
-    required: false
-    default: 'false'
   qc-block-slash-containing-branches:
     description: 'Block branch names containing slashes'
     required: false
@@ -993,7 +989,7 @@ inputs:
     required: false
     default: ''
   github-release-raw-files:
-    description: 'Files already versioned, copied as-is with no renaming (comma/space-separated, filenames must end with -VERSION.ext)'
+    description: 'Files copied as-is under their own names (comma/space-separated); each name must contain `-VERSION.` and only the last word VERSION is replaced with the release version'
     required: false
     default: ''
   github-release-notes:
@@ -1076,6 +1072,20 @@ inputs:
 runs:
   using: composite
   steps:
+    # The actions pass their state to each other through one job's workspace, so
+    # each refuses to run unless the workflow running it lives in this repository.
+    - name: Check workflow repository
+      if: job.workflow_repository != github.action_repository && success()
+      shell: bash
+      env:
+        WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+        ACTION_REPOSITORY: ${{ github.action_repository }}
+      run: |
+        echo "::error::This action is part of the Kaptain BuildOn GitHub Actions repo or a fork thereof. It is not intended tbe used in a standalone fashion as part of any adhoc workflow elsewhere."
+        echo "::error::This action is internal to ${ACTION_REPOSITORY} and only runs from that repository's own workflows. It was run by a workflow in ${WORKFLOW_REPOSITORY:-an unknown repository}."
+        echo "::error::Documentation on how to use the upstream Kaptain buildon-github-actions workflows can be found here: https://github.com/kube-kaptain/buildon-github-actions/tree/main/examples"
+        exit 1
+
     - name: Run post-versions-and-naming hook
       shell: bash
       env:
@@ -1305,7 +1315,6 @@ runs:
         TAG_VERSION_USE_SOURCE_VERSION_EXACT: ${{ inputs.tag-version-use-source-version-exact }}
 
         # Workflow inputs - quality check options
-        BLOCK_SLASHES: ${{ inputs.block-slashes }}
         QC_BLOCK_SLASH_CONTAINING_BRANCHES: ${{ inputs.qc-block-slash-containing-branches }}
         QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES: ${{ inputs.qc-block-double-hyphen-containing-branches }}
         QC_REQUIRE_CONVENTIONAL_BRANCHES: ${{ inputs.qc-require-conventional-branches }}
@@ -1349,4 +1358,4 @@ runs:
         GIT_TAG: ${{ inputs.git-tag }}
         PROJECT_NAME: ${{ inputs.project-name }}
         IS_RELEASE: ${{ inputs.is-release }}
-      run: .github/buildon-github-actions/src/scripts/main/hook-post-versions-and-naming
+      run: "${GITHUB_ACTION_PATH}/../../scripts/main/hook-post-versions-and-naming"

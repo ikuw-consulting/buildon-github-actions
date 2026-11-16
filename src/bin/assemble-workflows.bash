@@ -297,6 +297,81 @@ process_template() {
   echo "  Written: $output"
 }
 
+# Generate an action's outputs block from the names a script can export.
+#
+# A composite action passes on only the outputs it declares, and an undeclared
+# one arrives empty with no error. A script such as load-final-kaptainpm-yaml
+# exports hundreds, so the block is generated rather than written by hand.
+#
+# The names come from two places in the script, both plain text: the MAPPINGS
+# table, one "yaml.path:ENV_VAR_NAME" entry per line, and literal
+# output_var "NAME" calls. That format is relied on here, so drift fails
+# loudly: a table line that is not a comment, a blank or an entry is an error,
+# and so is a second output_var call with a computed name (the first is the
+# loop over the table).
+#
+# Usage: generate_script_outputs <script-name> <step-id>
+generate_script_outputs() {
+  local script_name="$1"
+  local step_id="$2"
+  local script="$REPO_ROOT/src/scripts/main/$script_name"
+
+  if [[ ! -f "$script" ]]; then
+    echo "  ERROR: Script not found for INJECT-OUTPUTS: $script" >&2
+    exit 1
+  fi
+
+  local table
+  table=$(awk '/^MAPPINGS=\(/ { inside = 1; next } inside && /^\)/ { inside = 0 } inside' "$script")
+
+  local unparsed
+  unparsed=$(printf '%s\n' "$table" \
+    | grep -vE '^[[:space:]]*(#.*)?$' \
+    | grep -vE '^[[:space:]]*"[^":]+:[A-Z0-9_]+"[[:space:]]*$' || true)
+  if [[ -n "$unparsed" ]]; then
+    echo "  ERROR: $script_name has MAPPINGS lines that are not \"yaml.path:ENV_VAR_NAME\" entries:" >&2
+    printf '%s\n' "$unparsed" >&2
+    exit 1
+  fi
+
+  # Comment lines can mention output_var without being calls
+  local code
+  code=$(grep -vE '^[[:space:]]*#' "$script")
+
+  local computed
+  computed=$(printf '%s\n' "$code" | grep -cE 'output_var "\$' || true)
+  if [[ "$computed" -gt 1 ]]; then
+    echo "  ERROR: $script_name has $computed output_var calls with a computed name; only the MAPPINGS loop may have one" >&2
+    exit 1
+  fi
+
+  # One "NAME yaml.path" line per name; the path is empty for a literal call.
+  # A name that is both in the table and a literal keeps its path.
+  local names
+  names=$(
+    {
+      printf '%s\n' "$table" | sed -n -E 's/^[[:space:]]*"([^":]+):([A-Z0-9_]+)"[[:space:]]*$/\2 \1/p'
+      printf '%s\n' "$code" | grep -oE 'output_var "[A-Z0-9_]+"' | sed -E 's/output_var "(.*)"/\1/'
+    } | LC_ALL=C sort -k1,1 -k2,2r | awk '!seen[$1]++'
+  )
+
+  if [[ -z "$names" ]]; then
+    echo "  ERROR: $script_name exports no outputs that INJECT-OUTPUTS can find" >&2
+    exit 1
+  fi
+
+  local name path
+  while read -r name path; do
+    echo "${name}:"
+    if [[ -n "$path" ]]; then
+      echo "  description: 'KaptainPM.yaml value at ${path}'"
+    else
+      echo "  description: 'Computed by ${script_name}'"
+    fi
+    echo "  value: \${{ steps.${step_id}.outputs.${name} }}"
+  done <<< "$names"
+}
+
 # Process a single action template file
 process_action_template() {
   local template="$1"
@@ -334,6 +409,40 @@ process_action_template() {
 
       result+="${indent}${indented_chunk}"
       echo "  Injected input: $input_name (indent: ${#indent} spaces)"
+    # Output injection: # INJECT-OUTPUTS: script-name step-id
+    elif [[ "$line" =~ ^([[:space:]]*)#\ INJECT-OUTPUTS:\ ([a-z0-9-]+)\ ([a-z0-9-]+)$ ]]; then
+      local indent="${BASH_REMATCH[1]}"
+      local script_name="${BASH_REMATCH[2]}"
+      local step_id="${BASH_REMATCH[3]}"
+
+      local chunk
+      chunk=$(generate_script_outputs "$script_name" "$step_id")
+
+      local indented_chunk
+      indented_chunk=$(echo "$chunk" | indent_chunk "$indent")
+
+      result+="${indent}${indented_chunk}"
+      echo "  Injected outputs: $(echo "$chunk" | grep -c '^[A-Z0-9_]*:$') from $script_name (step id: $step_id)"
+    # Step injection: # INJECT: name, the same marker workflow templates use
+    elif [[ "$line" =~ ^([[:space:]]*)#\ INJECT:\ ([a-zA-Z0-9_-]+)$ ]]; then
+      local indent="${BASH_REMATCH[1]}"
+      local chunk_name="${BASH_REMATCH[2]}"
+      local chunk_file="$STEPS_DIR/${chunk_name}.yaml"
+
+      if [[ ! -f "$chunk_file" ]]; then
+        echo "  ERROR: Chunk not found: $chunk_file" >&2
+        exit 1
+      fi
+
+      # Read chunk, strip SPDX header, append success() to conditions, and apply indentation
+      local chunk
+      chunk=$(cat "$chunk_file" | strip_spdx_header | append_success_to_conditions)
+
+      local indented_chunk
+      indented_chunk=$(echo "$chunk" | indent_chunk "$indent")
+
+      result+="${indent}${indented_chunk}"
+      echo "  Injected: $chunk_name (indent: ${#indent} spaces)"
     else
       result+="$line"
     fi
@@ -761,7 +870,6 @@ validate_reserved_env_vars() {
   local allowed_vars="
     GITHUB_REPOSITORY
     GITHUB_SERVER_URL
-    GITHUB_WORKFLOW_REF
   "
 
   local reserved allowed
@@ -840,8 +948,7 @@ validate_build_context_env_vars() {
 
   # Files that have an env block but only use inline bash, not kaptain scripts
   local inline_env_files=(
-    "parse-workflow-ref-and-checkout.yaml"
-    "github-release-prepare-eks.yaml"
+    "check-workflow-repository.yaml"
     "github-release-prepare-spec.yaml"
   )
 

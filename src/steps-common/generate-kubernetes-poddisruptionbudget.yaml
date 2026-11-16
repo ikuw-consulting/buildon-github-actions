@@ -4,7 +4,7 @@
 - name: Generate PodDisruptionBudget manifest
   id: generate-poddisruptionbudget
   if: steps.kpm.outputs.KUBERNETES_PODDISRUPTIONBUDGET_GENERATION_ENABLED != 'false' && (steps.kpm.outputs.KUBERNETES_PODDISRUPTIONBUDGET_GENERATION_ENABLED == 'true' || steps.kpm.outputs.KUBERNETES_WORKLOAD_TYPE == 'deployment' || steps.kpm.outputs.KUBERNETES_WORKLOAD_TYPE == 'statefulset')
-  uses: ./.github/buildon-github-actions/src/actions/generate-kubernetes-poddisruptionbudget
+  uses: $/src/actions/generate-kubernetes-poddisruptionbudget
   with:
     # PDB settings
     kubernetes-poddisruptionbudget-generation-enabled: ${{ steps.kpm.outputs.KUBERNETES_PODDISRUPTIONBUDGET_GENERATION_ENABLED }}

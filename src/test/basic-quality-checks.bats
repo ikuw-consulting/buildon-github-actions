@@ -49,6 +49,21 @@ teardown() {
   assert_output_contains "should not run on release branches"
 }
 
+# A build server started by a merge or a button has no target branch. On a
+# release branch that must still give the release build message, not the
+# complaint about the missing target.
+@test "fails with the release build message on a release branch with no target" {
+  TEST_REPO=$(clone_fixture "qc-clean")
+  cd "$TEST_REPO"
+
+  export CURRENT_BRANCH=main
+  unset TARGET_BRANCH
+  run "$SCRIPTS_DIR/basic-quality-checks"
+  [ "$status" -eq 1 ]
+  assert_output_contains "should not run on release branches"
+  assert_output_not_contains "Is required"
+}
+
 @test "blocks GitHub default branch names" {
   TEST_REPO=$(clone_fixture "qc-bad-branch-name")
   cd "$TEST_REPO"
@@ -74,7 +89,7 @@ teardown() {
   cd "$TEST_REPO"
 
   export CURRENT_BRANCH=feature/something
-  export BLOCK_SLASHES=true
+  export QC_BLOCK_SLASH_CONTAINING_BRANCHES=true
   run "$SCRIPTS_DIR/basic-quality-checks"
   [ "$status" -eq 2 ]
   assert_output_contains "contains a slash"

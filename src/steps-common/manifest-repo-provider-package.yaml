@@ -3,7 +3,7 @@
 
 - name: Package manifests for repo provider
   id: manifest-repo-provider-package
-  uses: ./.github/buildon-github-actions/src/actions/kubernetes-manifests-repo-provider-package
+  uses: $/src/actions/kubernetes-manifests-repo-provider-package
   with:
     manifests-repo-provider-type: ${{ steps.kpm.outputs.MANIFESTS_REPO_PROVIDER_TYPE }}
     manifests-packaging-base-image: ${{ steps.kpm.outputs.MANIFESTS_PACKAGING_BASE_IMAGE }}

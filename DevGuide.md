@@ -44,3 +44,21 @@ Chunks use zero-based indentation. The generator applies the correct indent base
 ### Placeholders
 
 Chunks support `${WORKFLOW_NAME}` which resolves to the template filename without extension.
+
+### Loading Actions
+
+Workflows call this repo's composite actions with the self-repository syntax:
+
+```yaml
+- name: Validate tooling
+  uses: $/src/actions/validate-tooling
+```
+
+`$/` resolves to the repository and commit of the workflow file itself, so a consumer calling a workflow at a given ref always gets the actions from that same ref. Never write a full `kube-kaptain/buildon-github-actions/...@ref` reference to one of our own actions, and never check this repo out a second time to reach them. Steps that need a path into the rest of the repo take it from `steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT`.
+
+### Checks That Come First
+
+- `check-trigger` is the first step of every workflow, before the checkout. It fails the build unless the event that started it is on the supported list.
+- `check-workflow-repository` is the first step of every action. It fails unless the workflow running the action lives in this repository, because the actions only make sense run in order inside one job.
+
+Both are ordinary chunks in `src/steps-common/`: `# INJECT:` works in action templates as well as workflow templates. `src/test/action-template-wiring.bats` fails if a workflow or action template is missing its check.

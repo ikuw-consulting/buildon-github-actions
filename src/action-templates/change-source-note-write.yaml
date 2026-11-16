@@ -10,6 +10,8 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Write change source note
       id: write
       shell: bash

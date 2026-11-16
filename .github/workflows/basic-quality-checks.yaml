@@ -23,6 +23,26 @@ jobs:
       contents: read  # Check out the repo and fetch the target branch.
       checks: write   # Report each stage as a check run on the commit.
     steps:
+      # Runs before the checkout, so a build started by an unsupported trigger never
+      # gets as far as fetching code. The event is the calling workflow's: a reusable
+      # workflow sees its caller's github context.
+      #
+      # pull_request_target is left out on purpose. It runs with the base
+      # repository's write token and secrets, and the checkout that follows would
+      # fetch the pull request's head, which can come from a fork.
+      - name: Check trigger
+        shell: bash
+        run: |
+          case "${GITHUB_EVENT_NAME}" in
+            push|pull_request|create|workflow_dispatch|schedule|workflow_run|repository_dispatch|issue_comment)
+              echo "Supported trigger: ${GITHUB_EVENT_NAME}"
+              ;;
+            *)
+              echo "::error::Unsupported trigger '${GITHUB_EVENT_NAME}'. Supported triggers: push, pull_request, create, workflow_dispatch, schedule, workflow_run, repository_dispatch, issue_comment."
+              exit 1
+              ;;
+          esac
+
       # The credentials are left in place on purpose: git-push-tag and
       # change-source-note-write push with them.
       - name: Checkout  # zizmor: ignore[artipacked]
@@ -32,83 +52,27 @@ jobs:
           fetch-tags: true
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Parse workflow ref
-        id: parse
-        run: |
-          # Extract caller's workflow file path from github.workflow_ref
-          # Format: owner/repo/.github/workflows/file.yaml@ref
-          workflow_path="${GITHUB_WORKFLOW_REF%%@*}"
-          workflow_file=".github/workflows/${workflow_path##*/}"
-
-          echo "Resolving ref for reusable workflow: basic-quality-checks.yaml"
-          echo "Caller workflow: $workflow_file"
-
-          # Check for local call (dogfooding) - uses: ./.github/workflows/...
-          if grep -q 'uses:[[:space:]]*\./.github/workflows/basic-quality-checks\.yaml[[:space:]]*$' "$workflow_file" || \
-             grep -q 'uses:[[:space:]]*\./.github/workflows/basic-quality-checks\.yaml[[:space:]]*#' "$workflow_file"; then
-            echo "Local workflow call detected (dogfooding)"
-            echo "ref=LOCAL" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Find all uses lines that call this workflow and extract refs
-          refs=$(grep -o 'buildon-github-actions/.github/workflows/basic-quality-checks\.yaml@[^[:space:]"'"'"']*' "$workflow_file" | sed 's/.*@//')
-
-          if [ -z "$refs" ]; then
-            echo "::error::Could not find buildon-github-actions ref in $workflow_file"
-            exit 1
-          fi
-
-          # Check all refs are identical
-          unique_refs=$(echo "$refs" | sort -u)
-          ref_count=$(echo "$unique_refs" | wc -l | tr -d ' ')
-          echo "Found $ref_count unique ref(s): $(echo "$unique_refs" | tr '\n' ' ')"
-
-          if [ "$ref_count" -gt 1 ]; then
-            echo "::error::Multiple different refs found in $workflow_file: $(echo "$unique_refs" | tr '\n' ' ')"
-            exit 1
-          fi
-
-          echo "Resolved ref: $unique_refs"
-          echo "ref=$unique_refs" >> "$GITHUB_OUTPUT"
-        env:
-          GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
-
-      - name: Checkout actions
-        if: steps.parse.outputs.ref != 'LOCAL' && success()
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
-        with:
-          repository: kube-kaptain/buildon-github-actions
-          ref: ${{ steps.parse.outputs.ref }}
-          path: .github/buildon-github-actions
-
-      - name: Link local actions
-        if: steps.parse.outputs.ref == 'LOCAL' && success()
-        run: |
-          echo "Linking local actions for dogfooding"
-          ln -s "$(pwd)" .github/buildon-github-actions
-
       # === Validate Tooling ===
       - name: Start check - Validate Tooling
         id: check-validate-tooling
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Validate Tooling'
       - name: Validate tooling
         id: validate-tooling
-        uses: ./.github/buildon-github-actions/src/actions/validate-tooling
+        uses: $/src/actions/validate-tooling
       - name: Pass check - Validate Tooling
         if: success() && steps.check-validate-tooling.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-validate-tooling.outputs.check-run-id }}
       - name: Fail check - Validate Tooling
         if: failure() && steps.check-validate-tooling.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-validate-tooling.outputs.check-run-id }}
@@ -117,28 +81,23 @@ jobs:
       - name: Start check - Load Project KaptainPM Docker Logins
         id: check-load-project-kpm
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Load Project KaptainPM Docker Logins'
       - name: Load project KaptainPM docker logins
         id: load-project-kpm
-        shell: bash
-        env:
-          BUILD_MODE: build_server
-          BUILD_PLATFORM: github-actions
-          BUILD_PLATFORM_LOG_PROVIDER: github-actions
-        run: ./.github/buildon-github-actions/src/scripts/main/load-project-kaptainpm-docker-logins
+        uses: $/src/actions/load-project-kaptainpm-docker-logins
       - name: Pass check - Load Project KaptainPM Docker Logins
         if: success() && steps.check-load-project-kpm.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-load-project-kpm.outputs.check-run-id }}
       - name: Fail check - Load Project KaptainPM Docker Logins
         if: failure() && steps.check-load-project-kpm.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-load-project-kpm.outputs.check-run-id }}
@@ -147,7 +106,7 @@ jobs:
       - name: Start check - Pre-Init Docker Registry Logins
         id: check-docker-registry-logins-pre-init
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Pre-Init Docker Registry Logins'
@@ -156,7 +115,7 @@ jobs:
       # GHCR merge handled by the action internally
       - name: Docker registry logins (pre-init)
         id: docker-registry-logins-pre-init
-        uses: ./.github/buildon-github-actions/src/actions/docker-registry-logins
+        uses: $/src/actions/docker-registry-logins
         with:
           config: ${{ steps.load-project-kpm.outputs.DOCKER_REGISTRY_LOGINS }}
           secrets-json: ${{ secrets.docker-registry-logins-secrets }}
@@ -165,13 +124,13 @@ jobs:
       - name: Pass check - Pre-Init Docker Registry Logins
         if: success() && steps.check-docker-registry-logins-pre-init.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-docker-registry-logins-pre-init.outputs.check-run-id }}
       - name: Fail check - Pre-Init Docker Registry Logins
         if: failure() && steps.check-docker-registry-logins-pre-init.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-docker-registry-logins-pre-init.outputs.check-run-id }}
@@ -180,7 +139,7 @@ jobs:
       - name: Start check - Kaptain Init
         id: check-kaptain-init
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Kaptain Init'
@@ -202,26 +161,22 @@ jobs:
 
       - name: Kaptain init
         id: kaptain-init
-        shell: bash
-        env:
-          BUILD_MODE: build_server
-          BUILD_PLATFORM: github-actions
-          BUILD_PLATFORM_LOG_PROVIDER: github-actions
-          IMAGE_BUILD_COMMAND: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
-          SCHEMA_VALIDATION_COMMAND: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
-          DOCKER_TARGET_REGISTRY: ${{ steps.registry-defaults.outputs.registry }}
-          DOCKER_TARGET_NAMESPACE: ${{ steps.registry-defaults.outputs.namespace }}
-        run: ./.github/buildon-github-actions/src/scripts/main/kaptain-init
+        uses: $/src/actions/kaptain-init
+        with:
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+          schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
+          docker-target-registry: ${{ steps.registry-defaults.outputs.registry }}
+          docker-target-namespace: ${{ steps.registry-defaults.outputs.namespace }}
       - name: Pass check - Kaptain Init
         if: success() && steps.check-kaptain-init.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-kaptain-init.outputs.check-run-id }}
       - name: Fail check - Kaptain Init
         if: failure() && steps.check-kaptain-init.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-kaptain-init.outputs.check-run-id }}
@@ -230,36 +185,32 @@ jobs:
       - name: Start check - Load Final KaptainPM YAML
         id: check-load-final-kpm
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Load Final KaptainPM YAML'
       - name: Load final KaptainPM YAML
         id: kpm
-        shell: bash
-        env:
-          BUILD_MODE: build_server
-          BUILD_PLATFORM: github-actions
-          BUILD_PLATFORM_LOG_PROVIDER: github-actions
-          BUILD_KIND: basic-quality-checks
-          IMAGE_BUILD_COMMAND: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
+        uses: $/src/actions/load-final-kaptainpm-yaml
+        with:
+          build-kind: basic-quality-checks
+          image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
           # Platform registry/namespace defaults (spec values win inside the script;
           # targetIncludeNamespace=false disregards the namespace entirely). The
           # DOCKER_TARGET_* outputs of this step are authoritative for the whole
           # workflow - there is no later resolution step.
-          DOCKER_TARGET_REGISTRY: ${{ steps.registry-defaults.outputs.registry }}
-          DOCKER_TARGET_NAMESPACE: ${{ steps.registry-defaults.outputs.namespace }}
-        run: ./.github/buildon-github-actions/src/scripts/main/load-final-kaptainpm-yaml
+          docker-target-registry: ${{ steps.registry-defaults.outputs.registry }}
+          docker-target-namespace: ${{ steps.registry-defaults.outputs.namespace }}
       - name: Pass check - Load Final KaptainPM YAML
         if: success() && steps.check-load-final-kpm.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-load-final-kpm.outputs.check-run-id }}
       - name: Fail check - Load Final KaptainPM YAML
         if: failure() && steps.check-load-final-kpm.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-load-final-kpm.outputs.check-run-id }}
@@ -269,14 +220,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && success()
         id: check-pre-build
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Pre-Build'
       - name: Run pre-build
         if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && success()
         id: pre-build
-        uses: ./.github/buildon-github-actions/src/actions/hook-pre-build
+        uses: $/src/actions/hook-pre-build
         with:
           build-kind: basic-quality-checks
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -494,7 +445,6 @@ jobs:
           tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
 
           # Quality check options
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -523,34 +473,35 @@ jobs:
       - name: Pass check - Pre-Build
         if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && success() && steps.check-pre-build.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-pre-build.outputs.check-run-id }}
       - name: Fail check - Pre-Build
         if: steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != '' && failure() && steps.check-pre-build.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-pre-build.outputs.check-run-id }}
 
       # === Basic Quality Checks ===
       - name: Start check - Basic Quality Checks
-        if: github.event_name == 'pull_request' && success()
         id: check-basic-quality
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Basic Quality Checks'
+      # The basic-quality-checks workflow has nothing but these checks, so they run
+      # whatever started the build. Without a pull request the script says why it
+      # has nothing to check, where the other workflows skip the step and carry on
+      # to their release build.
       - name: Basic quality checks
-        if: github.event_name == 'pull_request' && success()
         id: quality
-        uses: ./.github/buildon-github-actions/src/actions/basic-quality-checks
+        uses: $/src/actions/basic-quality-checks
         with:
           release-branch: ${{ steps.kpm.outputs.RELEASE_BRANCH }}
           additional-release-branches: ${{ steps.kpm.outputs.ADDITIONAL_RELEASE_BRANCHES }}
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -559,15 +510,15 @@ jobs:
           qc-block-duplicate-commit-messages: ${{ steps.kpm.outputs.QC_BLOCK_DUPLICATE_COMMIT_MESSAGES }}
           build-kind: basic-quality-checks
       - name: Pass check - Basic Quality Checks
-        if: github.event_name == 'pull_request' && success() && steps.check-basic-quality.outputs.check-run-id != ''
+        if: success() && steps.check-basic-quality.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-basic-quality.outputs.check-run-id }}
       - name: Fail check - Basic Quality Checks
-        if: github.event_name == 'pull_request' && failure() && steps.check-basic-quality.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        if: failure() && steps.check-basic-quality.outputs.check-run-id != ''
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-basic-quality.outputs.check-run-id }}
@@ -577,14 +528,14 @@ jobs:
         if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && success()
         id: check-post-build
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Post-Build'
       - name: Run post-build
         if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && success()
         id: post-build
-        uses: ./.github/buildon-github-actions/src/actions/hook-post-build
+        uses: $/src/actions/hook-post-build
         with:
           build-kind: basic-quality-checks
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -801,7 +752,6 @@ jobs:
           tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
 
           # Quality check options
-          block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
           qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
           qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
           qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
@@ -849,13 +799,13 @@ jobs:
       - name: Pass check - Post-Build
         if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && success() && steps.check-post-build.outputs.check-run-id != ''
         continue-on-error: true
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-post-build.outputs.check-run-id }}
       - name: Fail check - Post-Build
         if: steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != '' && failure() && steps.check-post-build.outputs.check-run-id != ''
-        uses: ./.github/buildon-github-actions/src/actions/github-check-run
+        uses: $/src/actions/github-check-run
         with:
           action: fail
           check-run-id: ${{ steps.check-post-build.outputs.check-run-id }}

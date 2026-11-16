@@ -3,7 +3,7 @@
 
 - name: Override docker image tokens
   id: manifest-package-only-token-override
-  uses: ./.github/buildon-github-actions/src/actions/kubernetes-manifests-package-only-token-override
+  uses: $/src/actions/kubernetes-manifests-package-only-token-override
   with:
     docker-image-name-override: ${{ steps.vendor-helm-render-and-process.outputs.DOCKER_IMAGE_NAME_OVERRIDE || steps.kpm.outputs.DOCKER_IMAGE_NAME_OVERRIDE }}
     docker-tag-override: ${{ steps.kpm.outputs.DOCKER_TAG_OVERRIDE }}

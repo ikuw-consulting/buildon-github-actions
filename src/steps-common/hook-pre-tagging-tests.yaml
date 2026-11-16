@@ -4,7 +4,7 @@
 - name: Run pre-tagging tests
   if: steps.kpm.outputs.HOOK_PRE_TAGGING_TESTS_SCRIPT_SUB_PATH != ''
   id: pre-tagging-tests
-  uses: ./.github/buildon-github-actions/src/actions/hook-pre-tagging-tests
+  uses: $/src/actions/hook-pre-tagging-tests
   with:
     build-kind: ${WORKFLOW_NAME}
     image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
@@ -222,7 +222,6 @@
     tag-version-use-source-version-exact: ${{ steps.kpm.outputs.TAG_VERSION_USE_SOURCE_VERSION_EXACT }}
 
     # Quality check options
-    block-slashes: ${{ steps.kpm.outputs.BLOCK_SLASHES }}
     qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
     qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
     qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}

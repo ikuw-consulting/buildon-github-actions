@@ -18,7 +18,7 @@ inputs:
     required: false
     default: ''
   github-release-raw-files:
-    description: 'Files already versioned, copied as-is with no renaming (comma/space-separated, filenames must end with -VERSION.ext)'
+    description: 'Files copied as-is under their own names (comma/space-separated); each name must contain `-VERSION.` and only the last word VERSION is replaced with the release version'
     required: false
     default: ''
   github-release-notes:
@@ -158,6 +158,20 @@ inputs:
 runs:
   using: composite
   steps:
+    # The actions pass their state to each other through one job's workspace, so
+    # each refuses to run unless the workflow running it lives in this repository.
+    - name: Check workflow repository
+      if: job.workflow_repository != github.action_repository && success()
+      shell: bash
+      env:
+        WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+        ACTION_REPOSITORY: ${{ github.action_repository }}
+      run: |
+        echo "::error::This action is part of the Kaptain BuildOn GitHub Actions repo or a fork thereof. It is not intended tbe used in a standalone fashion as part of any adhoc workflow elsewhere."
+        echo "::error::This action is internal to ${ACTION_REPOSITORY} and only runs from that repository's own workflows. It was run by a workflow in ${WORKFLOW_REPOSITORY:-an unknown repository}."
+        echo "::error::Documentation on how to use the upstream Kaptain buildon-github-actions workflows can be found here: https://github.com/kube-kaptain/buildon-github-actions/tree/main/examples"
+        exit 1
+
     - name: Prepare release files
       shell: bash
       env:
@@ -288,14 +302,32 @@ runs:
           fi
         fi
 
-        ALL_RAW="${GITHUB_RELEASE_RAW_FILES}"
-        if [[ -n "${INTERNAL_RAW_FILES}" ]]; then
-          if [[ -n "${ALL_RAW}" ]]; then
-            ALL_RAW="${ALL_RAW},${INTERNAL_RAW_FILES}"
-          else
-            ALL_RAW="${INTERNAL_RAW_FILES}"
+        # A user raw file names the version with a literal VERSION placeholder,
+        # as in dist/notes-VERSION.tar.gz, because the real version is not
+        # known when KaptainPM.yaml is written. Swap it in here; the loader
+        # passes the setting through untouched. The swap makes the name right
+        # by construction, so only the internal list needs validating.
+        #
+        # Only the last -VERSION. in the file name is the placeholder, and it
+        # needs a name in front of the hyphen and a suffix after the dot.
+        ALL_RAW=""
+        # shellcheck disable=SC2086 # Intentional word splitting
+        for raw_entry in ${GITHUB_RELEASE_RAW_FILES//,/ }; do
+          raw_name="${raw_entry##*/}"
+          raw_stem="${raw_name%-VERSION.*}"
+          raw_suffix="${raw_name##*-VERSION.}"
+          if [[ "${raw_name}" != *-VERSION.* || -z "${raw_stem}" || -z "${raw_suffix}" ]]; then
+            echo "::error::Raw file '${raw_entry}' must be named <name>-VERSION.<suffix>, as in notes-VERSION.md"
+            exit 1
           fi
-        fi
+          ALL_RAW="${ALL_RAW:+${ALL_RAW},}${raw_entry%-VERSION.*}-${VERSION}.${raw_entry##*-VERSION.}"
+        done
+
+        # shellcheck disable=SC2086 # Intentional word splitting
+        for raw_entry in ${INTERNAL_RAW_FILES//,/ }; do
+          validate_raw_filename "${raw_entry}"
+          ALL_RAW="${ALL_RAW:+${ALL_RAW},}${raw_entry}"
+        done
 
         echo "Preparing GitHub release files..."
         echo "  Output: ${RELEASE_OUTPUT_DIR}"
@@ -408,7 +440,7 @@ runs:
           done
         fi
 
-        # Process raw files (copied as-is, no renaming — validate version in filename)
+        # Process raw files (copied as-is, no renaming; names were checked above)
         if [[ -n "${ALL_RAW}" ]]; then
           echo "Processing raw files..."
           # shellcheck disable=SC2086 # Intentional word splitting
@@ -417,8 +449,6 @@ runs:
               echo "::error::Source file not found: ${source_file}"
               exit 1
             fi
-
-            validate_raw_filename "${source_file}"
 
             filename=$(basename "${source_file}")
             target_path="${RELEASE_OUTPUT_DIR}/${filename}"

@@ -3,4 +3,4 @@
 
 - name: Validate tooling
   id: validate-tooling
-  uses: ./.github/buildon-github-actions/src/actions/validate-tooling
+  uses: $/src/actions/validate-tooling

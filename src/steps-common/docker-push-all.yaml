@@ -4,7 +4,7 @@
 - name: Push all images
   id: docker-push-all
   if: steps.versions.outputs.is-release == 'true'
-  uses: ./.github/buildon-github-actions/src/actions/docker-push-all
+  uses: $/src/actions/docker-push-all
   with:
     docker-push-image-list-file: ${{ steps.docker-registry-logins.outputs.docker-push-image-list-file }}
     is-release: ${{ steps.versions.outputs.is-release }}

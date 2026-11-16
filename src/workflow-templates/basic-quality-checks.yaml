@@ -25,7 +25,9 @@ jobs:
       contents: read  # Check out the repo and fetch the target branch.
       checks: write   # Report each stage as a check run on the commit.
     steps:
-      # INJECT: parse-workflow-ref-and-checkout
+      # INJECT: check-trigger
+
+      # INJECT: checkout-project
 
       # === Validate Tooling ===
       # INJECT: github-check-start(name="Validate Tooling", id="check-validate-tooling")
@@ -58,9 +60,9 @@ jobs:
       # INJECT: github-check-end(name="Pre-Build", id="check-pre-build", if="steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != ''")
 
       # === Basic Quality Checks ===
-      # INJECT: github-check-start(name="Basic Quality Checks", id="check-basic-quality", if="github.event_name == 'pull_request'")
-      # INJECT: basic-quality-checks
-      # INJECT: github-check-end(name="Basic Quality Checks", id="check-basic-quality", if="github.event_name == 'pull_request'")
+      # INJECT: github-check-start(name="Basic Quality Checks", id="check-basic-quality")
+      # INJECT: basic-quality-checks-any-trigger
+      # INJECT: github-check-end(name="Basic Quality Checks", id="check-basic-quality")
 
       # === Post-Build ===
       # INJECT: github-check-start(name="Post-Build", id="check-post-build", if="steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != ''")

@@ -59,6 +59,8 @@ inputs:
 runs:
   using: composite
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Run pre-tagging tests hook
       shell: bash
       env:
@@ -289,7 +291,6 @@ runs:
         TAG_VERSION_USE_SOURCE_VERSION_EXACT: ${{ inputs.tag-version-use-source-version-exact }}
 
         # Workflow inputs - quality check options
-        BLOCK_SLASHES: ${{ inputs.block-slashes }}
         QC_BLOCK_SLASH_CONTAINING_BRANCHES: ${{ inputs.qc-block-slash-containing-branches }}
         QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES: ${{ inputs.qc-block-double-hyphen-containing-branches }}
         QC_REQUIRE_CONVENTIONAL_BRANCHES: ${{ inputs.qc-require-conventional-branches }}
@@ -315,4 +316,4 @@ runs:
         GITHUB_RELEASE_NOTES: ${{ inputs.github-release-notes }}
         GITHUB_RELEASE_NOTES_FILE: ${{ inputs.github-release-notes-file }}
         GITHUB_RELEASE_ADD_VERSION_TO_FILENAMES: ${{ inputs.github-release-add-version-to-filenames }}
-      run: .github/buildon-github-actions/src/scripts/main/hook-pre-tagging-tests
+      run: "${GITHUB_ACTION_PATH}/../../scripts/main/hook-pre-tagging-tests"

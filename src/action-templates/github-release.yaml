@@ -20,6 +20,8 @@ inputs:
 runs:
   using: composite
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Create release
       if: inputs.github-release-enabled == 'true'
       shell: bash

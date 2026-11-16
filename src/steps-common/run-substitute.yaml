@@ -3,7 +3,7 @@
 
 - name: Substitute run aggregate
   id: run-substitute
-  uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-substitute
+  uses: $/src/actions/kubernetes-run-substitute
   with:
     project-name: ${{ steps.versions.outputs.project-name }}
     version: ${{ steps.versions.outputs.version }}

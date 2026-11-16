@@ -3,7 +3,7 @@
 
 - name: Generate versions and naming
   id: versions
-  uses: ./.github/buildon-github-actions/src/actions/versions-and-naming
+  uses: $/src/actions/versions-and-naming
   with:
     token-name-style: ${{ steps.kpm.outputs.TOKEN_NAME_STYLE }}
     output-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}

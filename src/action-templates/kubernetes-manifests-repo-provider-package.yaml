@@ -67,6 +67,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     # ==========================================================================
     # Package manifests for repo provider
     # Script computes REPO_PROVIDER_* from docker/project inputs and outputs them

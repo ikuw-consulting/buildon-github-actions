@@ -94,7 +94,9 @@ jobs:
       docker-target-image-full-uri: ${{ steps.docker-build.outputs.docker-target-image-full-uri }}
       images-pushed: ${{ steps.docker-push-all.outputs.images-pushed }}
     steps:
-      # INJECT: parse-workflow-ref-and-checkout
+      # INJECT: check-trigger
+
+      # INJECT: checkout-project
 
       # === Validate Tooling ===
       # INJECT: github-check-start(name="Validate Tooling", id="check-validate-tooling")

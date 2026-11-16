@@ -4,4 +4,4 @@
 - name: Write change source note
   id: change-source-note-write
   if: steps.versions.outputs.is-release != 'true' && steps.kpm.outputs.CHANGE_SOURCE_NOTE_ENABLED == 'true'
-  uses: ./.github/buildon-github-actions/src/actions/change-source-note-write
+  uses: $/src/actions/change-source-note-write

@@ -10,6 +10,8 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Validate helm-rendered manifests match committed files
       id: helm-validate
       shell: bash

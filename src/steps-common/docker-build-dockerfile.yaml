@@ -3,7 +3,7 @@
 
 - name: Build image
   id: docker-build
-  uses: ./.github/buildon-github-actions/src/actions/docker-build-dockerfile
+  uses: $/src/actions/docker-build-dockerfile
   with:
     docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
     docker-target-namespace: ${{ steps.kpm.outputs.DOCKER_TARGET_NAMESPACE }}

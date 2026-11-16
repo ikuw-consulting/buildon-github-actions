@@ -106,6 +106,10 @@ See [`examples/`](examples/) for more usage patterns.
 
 ### Actions
 
+These composite actions are internal to the workflows above. They pass their
+state to each other through one job's workspace, so each refuses to run
+unless the workflow running it lives in this repository.
+
 <!-- ACTIONS-START -->
 | Action | Description |
 |--------|-------------|
@@ -136,6 +140,7 @@ See [`examples/`](examples/) for more usage patterns.
 | `hook-pre-package-prepare` | Runs user's hook script before manifest packaging to generate ConfigMaps, modify manifests, or add files |
 | `hook-pre-publish` | Runs user's hook script after all build and tagging steps, before any release preparation or publishing |
 | `hook-pre-tagging-tests` | Runs user's hook script before tagging/versioning for custom validation or preparation |
+| `kaptain-init` | Resolves KaptainPM layers and writes the final merged KaptainPM.yaml |
 | `kubernetes-lineage-data-generate` | Emits the build's lineage data ConfigMap (presence + lineage record) into the substituted manifests tree. Generic across product, app, bundle, and env/rp builds, dispatched by build-kind (plus env-build-section for env/rp). |
 | `kubernetes-manifests-contract-generate` | Generates a manifests contract file describing token scheme, required config, and compatibility |
 | `kubernetes-manifests-package-only-token-override` | Overrides docker image tokens for manifests-only workflow |
@@ -162,6 +167,8 @@ See [`examples/`](examples/) for more usage patterns.
 | `kubernetes-templates-import` | Resolves spec.templates bundles and imports them into the additional-manifests and additional-defaults drop dirs (flat or hierarchy layout) |
 | `layer-package-prepare` | Prepares layer or layerset for OCI packaging - validates source, injects metadata, generates Dockerfile |
 | `layer-validate` | Validates substituted layer or layerset after docker build |
+| `load-final-kaptainpm-yaml` | Reads the final merged KaptainPM.yaml and exports its settings as outputs |
+| `load-project-kaptainpm-docker-logins` | Reads the registry login config from the project root KaptainPM.yaml |
 | `release-change-data-generate` | Generates structured release change data YAML from commit history |
 | `release-change-data-oci-package` | Packages release change data as OCI image for consolidated push |
 | `validate-tooling` | Validates required tools are available before build |
@@ -185,6 +192,38 @@ All workflows support a custom runner via the `runner` input. The default is
 pass `with: runner: <your-runner-label>` in the calling workflow. Each
 example `build.yaml` includes a commented-out `with: runner:` block showing
 the syntax.
+
+### Triggers
+
+Every workflow checks, before anything is checked out, which event started
+the calling workflow, and fails the build if it is not one of these:
+
+| Trigger | Typical use |
+|---------|-------------|
+| `push` | A merge or push to a release branch |
+| `pull_request` | A feature branch proposed against a release branch |
+| `create` | A branch or tag being created |
+| `workflow_dispatch` | The "Run workflow" button, or the same through the API |
+| `schedule` | A build on a timer |
+| `workflow_run` | A build that follows another workflow in the same repository |
+| `repository_dispatch` | A build started from outside, such as by another repository's build |
+| `issue_comment` | A build started by a comment on an issue or pull request |
+
+Listing a trigger here only means a build started that way is not refused.
+What starts a build is the `on:` block of your own workflow file.
+
+`pull_request_target` is refused. It runs with the base repository's write
+token and secrets, and the build would then check out the pull request's
+head, which can come from a fork.
+
+Only `pull_request` builds run the quality checks. Every other trigger builds
+the branch it runs on, and when that is a release branch the build is a
+release build.
+
+`basic-quality-checks` is the exception: it only checks the workmanship of a
+pull request and makes no version, tag or release. Its quality checks run
+whatever started the build, and fail with a message saying so when the build
+is of a release branch or has no pull request to compare against.
 
 ### Secrets
 

@@ -11,10 +11,12 @@ and control filename versioning.
   values (e.g. version strings) before attaching to the release.
 - **verbatimFiles** - attached to the release exactly as they are in the
   repository, with no token replacement.
-- **rawFiles** - attached to the release exactly as they are and also expected
-  and required to have version already in the file name before the extension.
+- **rawFiles** - attached to the release exactly as they are, under their own
+  names. Write the literal word `VERSION` where the version goes, as in
+  `dist/notes-VERSION.tar.gz`. The build swaps in the release version to find
+  the file, so the file itself must already be named with it.
 
-Both accept comma-separated paths relative to the repository root.
+All three accept comma-separated paths relative to the repository root.
 
 ## Options
 

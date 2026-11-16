@@ -88,7 +88,9 @@ jobs:
       images-pushed: ${{ steps.docker-push-all.outputs.images-pushed }}
       docker-context-sub-path: ${{ steps.kpm.outputs.OUTPUT_SUB_PATH }}/docker/substituted
     steps:
-      # INJECT: parse-workflow-ref-and-checkout
+      # INJECT: check-trigger
+
+      # INJECT: checkout-project
 
       # === Validate Tooling ===
       # INJECT: github-check-start(name="Validate Tooling", id="check-validate-tooling")
@@ -182,14 +184,15 @@ jobs:
           SPEC_PACKAGING_BASE_IMAGE: ${{ steps.kpm.outputs.SPEC_PACKAGING_BASE_IMAGE }}
           BUILD_PLATFORM: github-actions
           BUILD_PLATFORM_LOG_PROVIDER: github-actions
-        run: ./.github/buildon-github-actions/src/scripts/main/spec-package-prepare
+          BUILD_SCRIPTS_REPO_ROOT: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
+        run: "${BUILD_SCRIPTS_REPO_ROOT}/src/scripts/main/spec-package-prepare"
       # INJECT: github-check-end(name="Spec Package Prepare", id="check-spec-prepare")
 
       # === Docker Build ===
       # INJECT: github-check-start(name="Docker Build", id="check-docker-build")
       - name: Build image
         id: docker-build
-        uses: ./.github/buildon-github-actions/src/actions/docker-build-dockerfile
+        uses: $/src/actions/docker-build-dockerfile
         with:
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
           docker-target-registry: ${{ steps.kpm.outputs.DOCKER_TARGET_REGISTRY }}
@@ -243,7 +246,8 @@ jobs:
           SCHEMA_VALIDATION_COMMAND: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
           BUILD_PLATFORM: github-actions
           BUILD_PLATFORM_LOG_PROVIDER: github-actions
-        run: ./.github/buildon-github-actions/src/scripts/main/spec-validate
+          BUILD_SCRIPTS_REPO_ROOT: ${{ steps.kpm.outputs.BUILD_SCRIPTS_REPO_ROOT }}
+        run: "${BUILD_SCRIPTS_REPO_ROOT}/src/scripts/main/spec-validate"
       # INJECT: github-check-end(name="Spec Validate", id="check-spec-validate")
 
       # === Post-docker Tests ===

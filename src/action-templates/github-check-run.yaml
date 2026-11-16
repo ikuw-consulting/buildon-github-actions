@@ -29,6 +29,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Run check operation
       id: run
       shell: bash

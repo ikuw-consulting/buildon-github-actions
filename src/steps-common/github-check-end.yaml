@@ -4,13 +4,13 @@
 - name: Pass check - ${CHECK_NAME}
   if: ${CHECK_PASS_CONDITION}
   continue-on-error: true
-  uses: ./.github/buildon-github-actions/src/actions/github-check-run
+  uses: $/src/actions/github-check-run
   with:
     action: pass
     check-run-id: ${{ steps.${CHECK_ID}.outputs.check-run-id }}
 - name: Fail check - ${CHECK_NAME}
   if: ${CHECK_FAIL_CONDITION}
-  uses: ./.github/buildon-github-actions/src/actions/github-check-run
+  uses: $/src/actions/github-check-run
   with:
     action: fail
     check-run-id: ${{ steps.${CHECK_ID}.outputs.check-run-id }}

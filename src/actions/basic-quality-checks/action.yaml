@@ -18,10 +18,6 @@ inputs:
     required: false
     default: ''
   # Basic quality checks
-  block-slashes:
-    description: 'DEPRECATED: Use block-slash-containing-branches instead'
-    required: false
-    default: 'false'
   qc-block-slash-containing-branches:
     description: 'Block branch names containing slashes'
     required: false
@@ -100,6 +96,20 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # The actions pass their state to each other through one job's workspace, so
+    # each refuses to run unless the workflow running it lives in this repository.
+    - name: Check workflow repository
+      if: job.workflow_repository != github.action_repository && success()
+      shell: bash
+      env:
+        WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+        ACTION_REPOSITORY: ${{ github.action_repository }}
+      run: |
+        echo "::error::This action is part of the Kaptain BuildOn GitHub Actions repo or a fork thereof. It is not intended tbe used in a standalone fashion as part of any adhoc workflow elsewhere."
+        echo "::error::This action is internal to ${ACTION_REPOSITORY} and only runs from that repository's own workflows. It was run by a workflow in ${WORKFLOW_REPOSITORY:-an unknown repository}."
+        echo "::error::Documentation on how to use the upstream Kaptain buildon-github-actions workflows can be found here: https://github.com/kube-kaptain/buildon-github-actions/tree/main/examples"
+        exit 1
+
     - name: Enforce quality standards
       id: check
       shell: bash
@@ -113,7 +123,6 @@ runs:
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         TARGET_BRANCH: ${{ github.base_ref }}
         MERGE_CANDIDATE_CREATOR: ${{ github.event.pull_request.user.login }}
-        BLOCK_SLASHES: ${{ inputs.block-slashes }}
         QC_BLOCK_SLASH_CONTAINING_BRANCHES: ${{ inputs.qc-block-slash-containing-branches }}
         QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES: ${{ inputs.qc-block-double-hyphen-containing-branches }}
         QC_REQUIRE_CONVENTIONAL_BRANCHES: ${{ inputs.qc-require-conventional-branches }}

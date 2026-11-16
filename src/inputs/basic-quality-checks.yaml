@@ -2,11 +2,6 @@
 # Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
 #
 # Basic quality checks
-block-slashes:
-  description: 'DEPRECATED: Use block-slash-containing-branches instead'
-  required: false
-  type: boolean
-  default: false
 qc-block-slash-containing-branches:
   description: 'Block branch names containing slashes'
   required: false

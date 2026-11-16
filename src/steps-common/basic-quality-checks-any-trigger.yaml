@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+# The basic-quality-checks workflow has nothing but these checks, so they run
+# whatever started the build. Without a pull request the script says why it
+# has nothing to check, where the other workflows skip the step and carry on
+# to their release build.
+- name: Basic quality checks
+  id: quality
+  uses: $/src/actions/basic-quality-checks
+  with:
+    release-branch: ${{ steps.kpm.outputs.RELEASE_BRANCH }}
+    additional-release-branches: ${{ steps.kpm.outputs.ADDITIONAL_RELEASE_BRANCHES }}
+    qc-block-slash-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_SLASH_CONTAINING_BRANCHES }}
+    qc-block-double-hyphen-containing-branches: ${{ steps.kpm.outputs.QC_BLOCK_DOUBLE_HYPHEN_CONTAINING_BRANCHES }}
+    qc-require-conventional-branches: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_BRANCHES }}
+    qc-require-conventional-commits: ${{ steps.kpm.outputs.QC_REQUIRE_CONVENTIONAL_COMMITS }}
+    qc-block-conventional-commits: ${{ steps.kpm.outputs.QC_BLOCK_CONVENTIONAL_COMMITS }}
+    qc-block-duplicate-commit-messages: ${{ steps.kpm.outputs.QC_BLOCK_DUPLICATE_COMMIT_MESSAGES }}
+    build-kind: ${WORKFLOW_NAME}

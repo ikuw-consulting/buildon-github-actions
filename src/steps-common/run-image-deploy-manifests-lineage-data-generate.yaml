@@ -3,7 +3,7 @@
 
 - name: Generate deploy-manifests lineage data ConfigMap
   id: run-idm-lineage-data-generate
-  uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-image-deploy-manifests-lineage-data-generate
+  uses: $/src/actions/kubernetes-run-image-deploy-manifests-lineage-data-generate
   with:
     project-name: ${{ steps.versions.outputs.project-name }}
     version: ${{ steps.versions.outputs.version }}

@@ -41,6 +41,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Pull and retag
       id: retag
       shell: bash

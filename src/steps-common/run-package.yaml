@@ -3,7 +3,7 @@
 
 - name: Package run
   id: run-package
-  uses: ./.github/buildon-github-actions/src/actions/kubernetes-run-package
+  uses: $/src/actions/kubernetes-run-package
   with:
     project-name: ${{ steps.versions.outputs.project-name }}
     build-kind: ${{ steps.kpm.outputs.BUILD_KIND }}

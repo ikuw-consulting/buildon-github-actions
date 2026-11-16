@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+name: 'Load Final KaptainPM YAML'
+description: 'Reads the final merged KaptainPM.yaml and exports its settings as outputs'
+
+inputs:
+  build-kind:
+    description: 'Build kind identifier (workflow/reference script name)'
+    required: true
+  # Registry defaults (a KaptainPM.yaml value wins)
+  docker-target-registry:
+    description: 'Default target registry, used when KaptainPM.yaml sets none'
+    required: false
+    default: ''
+  docker-target-namespace:
+    description: 'Default target namespace, used when KaptainPM.yaml sets none'
+    required: false
+    default: ''
+  # INJECT-INPUT: image-build-command
+
+# Every name the script can export, generated from the script itself so the
+# declared set cannot drift from it. An undeclared output would arrive empty.
+outputs:
+  # INJECT-OUTPUTS: load-final-kaptainpm-yaml load
+
+runs:
+  using: 'composite'
+  steps:
+    # INJECT: check-workflow-repository
+
+    - name: Load final KaptainPM YAML
+      id: load
+      shell: bash
+      env:
+        BUILD_MODE: build_server
+        BUILD_PLATFORM: github-actions
+        BUILD_PLATFORM_LOG_PROVIDER: github-actions
+        BUILD_KIND: ${{ inputs.build-kind }}
+        IMAGE_BUILD_COMMAND: ${{ inputs.image-build-command }}
+        DOCKER_TARGET_REGISTRY: ${{ inputs.docker-target-registry }}
+        DOCKER_TARGET_NAMESPACE: ${{ inputs.docker-target-namespace }}
+      run: "${GITHUB_ACTION_PATH}/../../scripts/main/load-final-kaptainpm-yaml"

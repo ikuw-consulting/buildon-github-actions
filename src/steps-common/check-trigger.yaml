@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025-2026 Kaptain contributors (Fred Cooke)
+
+# Runs before the checkout, so a build started by an unsupported trigger never
+# gets as far as fetching code. The event is the calling workflow's: a reusable
+# workflow sees its caller's github context.
+#
+# pull_request_target is left out on purpose. It runs with the base
+# repository's write token and secrets, and the checkout that follows would
+# fetch the pull request's head, which can come from a fork.
+- name: Check trigger
+  shell: bash
+  run: |
+    case "${GITHUB_EVENT_NAME}" in
+      push|pull_request|create|workflow_dispatch|schedule|workflow_run|repository_dispatch|issue_comment)
+        echo "Supported trigger: ${GITHUB_EVENT_NAME}"
+        ;;
+      *)
+        echo "::error::Unsupported trigger '${GITHUB_EVENT_NAME}'. Supported triggers: push, pull_request, create, workflow_dispatch, schedule, workflow_run, repository_dispatch, issue_comment."
+        exit 1
+        ;;
+    esac

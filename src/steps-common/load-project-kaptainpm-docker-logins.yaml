@@ -3,9 +3,4 @@
 
 - name: Load project KaptainPM docker logins
   id: load-project-kpm
-  shell: bash
-  env:
-    BUILD_MODE: build_server
-    BUILD_PLATFORM: github-actions
-    BUILD_PLATFORM_LOG_PROVIDER: github-actions
-  run: ./.github/buildon-github-actions/src/scripts/main/load-project-kaptainpm-docker-logins
+  uses: $/src/actions/load-project-kaptainpm-docker-logins

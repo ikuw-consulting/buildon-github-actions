@@ -523,6 +523,21 @@ EOF
   assert_github_output "TOKEN_DELIMITER_STYLE" "@@"
 }
 
+@test "exports GITHUB_RELEASE_RAW_FILES from yaml" {
+  cat > "${TEST_DIR}/kaptainpm/final/KaptainPM.yaml" << 'EOF'
+apiVersion: kaptain.org/1.10
+kind: test-build
+spec:
+  platform:
+    githubActions:
+      release:
+        rawFiles: dist/notes-VERSION.md,dist/sums-VERSION.txt
+EOF
+  run_script
+  [ "${status}" -eq 0 ]
+  assert_github_output "GITHUB_RELEASE_RAW_FILES" "dist/notes-VERSION.md,dist/sums-VERSION.txt"
+}
+
 @test "exports DOCKER_PLATFORM from yaml" {
   cat > "${TEST_DIR}/kaptainpm/final/KaptainPM.yaml" << 'EOF'
 apiVersion: kaptain.org/1.10

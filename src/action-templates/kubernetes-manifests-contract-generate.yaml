@@ -35,6 +35,8 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # INJECT: check-workflow-repository
+
     - name: Generate manifests contract
       id: contract
       shell: bash
