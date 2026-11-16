@@ -220,6 +220,11 @@ Only `pull_request` builds run the quality checks. Every other trigger builds
 the branch it runs on, and when that is a release branch the build is a
 release build.
 
+`basic-quality-checks` is the exception: it only checks the workmanship of a
+pull request and makes no version, tag or release. Its quality checks run
+whatever started the build, and fail with a message saying so when the build
+is of a release branch or has no pull request to compare against.
+
 ### Secrets
 
 <!-- SECRETS-START -->

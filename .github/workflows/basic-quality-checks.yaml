@@ -486,15 +486,17 @@ jobs:
 
       # === Basic Quality Checks ===
       - name: Start check - Basic Quality Checks
-        if: github.event_name == 'pull_request' && success()
         id: check-basic-quality
         continue-on-error: true
         uses: $/src/actions/github-check-run
         with:
           action: start
           check-name: 'Basic Quality Checks → Basic Quality Checks'
+      # The basic-quality-checks workflow has nothing but these checks, so they run
+      # whatever started the build. Without a pull request the script says why it
+      # has nothing to check, where the other workflows skip the step and carry on
+      # to their release build.
       - name: Basic quality checks
-        if: github.event_name == 'pull_request' && success()
         id: quality
         uses: $/src/actions/basic-quality-checks
         with:
@@ -508,14 +510,14 @@ jobs:
           qc-block-duplicate-commit-messages: ${{ steps.kpm.outputs.QC_BLOCK_DUPLICATE_COMMIT_MESSAGES }}
           build-kind: basic-quality-checks
       - name: Pass check - Basic Quality Checks
-        if: github.event_name == 'pull_request' && success() && steps.check-basic-quality.outputs.check-run-id != ''
+        if: success() && steps.check-basic-quality.outputs.check-run-id != ''
         continue-on-error: true
         uses: $/src/actions/github-check-run
         with:
           action: pass
           check-run-id: ${{ steps.check-basic-quality.outputs.check-run-id }}
       - name: Fail check - Basic Quality Checks
-        if: github.event_name == 'pull_request' && failure() && steps.check-basic-quality.outputs.check-run-id != ''
+        if: failure() && steps.check-basic-quality.outputs.check-run-id != ''
         uses: $/src/actions/github-check-run
         with:
           action: fail

@@ -60,9 +60,9 @@ jobs:
       # INJECT: github-check-end(name="Pre-Build", id="check-pre-build", if="steps.kpm.outputs.HOOK_PRE_BUILD_SCRIPT_SUB_PATH != ''")
 
       # === Basic Quality Checks ===
-      # INJECT: github-check-start(name="Basic Quality Checks", id="check-basic-quality", if="github.event_name == 'pull_request'")
-      # INJECT: basic-quality-checks
-      # INJECT: github-check-end(name="Basic Quality Checks", id="check-basic-quality", if="github.event_name == 'pull_request'")
+      # INJECT: github-check-start(name="Basic Quality Checks", id="check-basic-quality")
+      # INJECT: basic-quality-checks-any-trigger
+      # INJECT: github-check-end(name="Basic Quality Checks", id="check-basic-quality")
 
       # === Post-Build ===
       # INJECT: github-check-start(name="Post-Build", id="check-post-build", if="steps.kpm.outputs.HOOK_POST_BUILD_SCRIPT_SUB_PATH != ''")
