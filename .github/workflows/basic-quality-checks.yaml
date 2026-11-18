@@ -14,6 +14,9 @@ on:
       docker-registry-logins-secrets:
         description: 'JSON object of secrets for docker-registry-logins (e.g., {"DOCKER_USER": "x", "DOCKER_PASS": "y"})'
         required: false
+      vendor-read-token:
+        description: 'Optional read-only token for hook scripts that fetch from private repositories. Exposed to hook scripts as VENDOR_READ_TOKEN; never logged.'
+        required: false
 permissions: {}
 jobs:
   basic-quality-checks:
@@ -229,6 +232,7 @@ jobs:
         id: pre-build
         uses: $/src/actions/hook-pre-build
         with:
+          vendor-read-token: ${{ secrets.vendor-read-token }}
           build-kind: basic-quality-checks
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
           schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
@@ -537,6 +541,7 @@ jobs:
         id: post-build
         uses: $/src/actions/hook-post-build
         with:
+          vendor-read-token: ${{ secrets.vendor-read-token }}
           build-kind: basic-quality-checks
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
           schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}

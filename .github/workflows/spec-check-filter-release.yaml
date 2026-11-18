@@ -14,6 +14,9 @@ on:
       docker-registry-logins-secrets:
         description: 'JSON object of secrets for docker-registry-logins (e.g., {"DOCKER_USER": "x", "DOCKER_PASS": "y"})'
         required: false
+      vendor-read-token:
+        description: 'Optional read-only token for hook scripts that fetch from private repositories. Exposed to hook scripts as VENDOR_READ_TOKEN; never logged.'
+        required: false
     outputs:
       # Version outputs
       version:
@@ -292,6 +295,7 @@ jobs:
         id: pre-build
         uses: $/src/actions/hook-pre-build
         with:
+          vendor-read-token: ${{ secrets.vendor-read-token }}
           build-kind: spec-check-filter-release
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
           schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
@@ -662,6 +666,7 @@ jobs:
         id: pre-tagging-tests
         uses: $/src/actions/hook-pre-tagging-tests
         with:
+          vendor-read-token: ${{ secrets.vendor-read-token }}
           build-kind: spec-check-filter-release
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
           schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
@@ -975,6 +980,7 @@ jobs:
         id: post-versions-and-naming
         uses: $/src/actions/hook-post-versions-and-naming
         with:
+          vendor-read-token: ${{ secrets.vendor-read-token }}
           build-kind: spec-check-filter-release
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
           schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
@@ -1357,6 +1363,7 @@ jobs:
         id: pre-docker-prepare
         uses: $/src/actions/hook-pre-docker-prepare
         with:
+          vendor-read-token: ${{ secrets.vendor-read-token }}
           build-kind: spec-check-filter-release
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
           schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
@@ -1776,6 +1783,7 @@ jobs:
         id: post-docker-tests
         uses: $/src/actions/hook-post-docker-tests
         with:
+          vendor-read-token: ${{ secrets.vendor-read-token }}
           build-kind: spec-check-filter-release
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
           schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
@@ -2098,6 +2106,7 @@ jobs:
         id: pre-publish
         uses: $/src/actions/hook-pre-publish
         with:
+          vendor-read-token: ${{ secrets.vendor-read-token }}
           build-kind: spec-check-filter-release
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
           schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
@@ -2629,6 +2638,7 @@ jobs:
         id: post-build
         uses: $/src/actions/hook-post-build
         with:
+          vendor-read-token: ${{ secrets.vendor-read-token }}
           build-kind: spec-check-filter-release
           image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
           schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}

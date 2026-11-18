@@ -6,6 +6,7 @@
   id: pre-publish
   uses: $/src/actions/hook-pre-publish
   with:
+    vendor-read-token: ${{ secrets.vendor-read-token }}
     build-kind: ${WORKFLOW_NAME}
     image-build-command: ${{ steps.validate-tooling.outputs.IMAGE_BUILD_COMMAND }}
     schema-validation-command: ${{ steps.validate-tooling.outputs.SCHEMA_VALIDATION_COMMAND }}
