@@ -5,6 +5,10 @@ name: Hook - Pre-Tagging Tests
 description: Runs user's hook script before tagging/versioning for custom validation or preparation
 
 inputs:
+  vendor-read-token:
+    description: 'Optional read-only token for hook scripts that fetch from private repositories, exposed to the hook as VENDOR_READ_TOKEN'
+    required: false
+    default: ''
   build-kind:
     description: 'Build kind identifier (workflow/reference script name)'
     required: true
@@ -1046,6 +1050,7 @@ runs:
         # Hooks are user code: gh reads GH_TOKEN, most other tooling reads GITHUB_TOKEN.
         GH_TOKEN: ${{ github.token }}
         GITHUB_TOKEN: ${{ github.token }}
+        VENDOR_READ_TOKEN: ${{ inputs.vendor-read-token }}
         IMAGE_BUILD_COMMAND: ${{ inputs.image-build-command }}
         SCHEMA_VALIDATION_COMMAND: ${{ inputs.schema-validation-command }}
         BUILD_SCRIPTS_REPO_ROOT: ${{ inputs.build-scripts-repo-root }}
